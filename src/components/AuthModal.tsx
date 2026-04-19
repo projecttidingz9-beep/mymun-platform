@@ -77,9 +77,11 @@ export default function AuthModal({ isOpen, onClose, defaultTab = "signin" }: Au
         >
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 bg-white/20 rounded-xl flex items-center justify-center">
-                <span className="text-white font-black text-sm italic">M</span>
-              </div>
+              <img
+                src="/tidingz-logo.png"
+                alt="Tidingz logo"
+                className="w-8 h-8 rounded-xl object-cover border border-white/25"
+              />
               <span className="text-white font-bold">Tidingz</span>
             </div>
             <button

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { useAuth } from "@/lib/auth-context";
 import AuthModal from "./AuthModal";
 
@@ -59,14 +60,15 @@ export default function Navbar({ openAuthModal }: NavbarProps) {
         <div className="max-w-7xl mx-auto px-6 h-[72px] flex items-center justify-between">
           {/* Logo */}
           <Link href="/" className="flex items-center gap-2.5 group">
-            <div
-              className="w-9 h-9 rounded-xl flex items-center justify-center shadow-lg transition-transform group-hover:scale-105"
-              style={{
-                background: "linear-gradient(135deg, #1e40af, #3b82f6)",
-                boxShadow: "0 4px 16px rgba(37,99,235,0.4)",
-              }}
-            >
-              <span className="text-white font-black text-lg italic">M</span>
+            <div className="w-9 h-9 rounded-xl overflow-hidden shadow-lg transition-transform group-hover:scale-105">
+              <Image
+                src="/tidingz-logo.png"
+                alt="Tidingz logo"
+                width={36}
+                height={36}
+                className="w-full h-full object-cover"
+                priority
+              />
             </div>
             <span className="text-lg font-bold tracking-tight" style={{ color: "var(--fg)" }}>
               Tidingz
