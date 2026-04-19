@@ -1,9 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import AuthModal from "@/components/AuthModal";
+import { useAuth } from "@/lib/auth-context";
 
 type WizardStep = 1 | 2 | 3 | 4 | 5;
 
@@ -73,6 +75,8 @@ const TIERS = [
 const STEPS = ["Conference Details", "Committees", "Pricing & Dates", "Review & Submit"];
 
 export default function OrganizersPage() {
+  const router = useRouter();
+  const { isLoggedIn, user, addOrganizerConference } = useAuth();
   const [authOpen, setAuthOpen] = useState(false);
   const [wizardOpen, setWizardOpen] = useState(false);
   const [step, setStep] = useState<WizardStep>(1);
@@ -97,8 +101,44 @@ export default function OrganizersPage() {
   const updateCommittee = (i: number, field: string, val: string) =>
     setCommittees(prev => prev.map((c, idx) => idx === i ? { ...c, [field]: val } : c));
 
+  const openWizard = () => {
+    if (!isLoggedIn) {
+      setAuthOpen(true);
+      return;
+    }
+    setWizardOpen(true);
+  };
+
+  const openDashboard = () => {
+    if (!isLoggedIn) {
+      setAuthOpen(true);
+      return;
+    }
+    router.push("/organizers/dashboard");
+  };
+
   const handleSubmit = async () => {
     await new Promise(r => setTimeout(r, 1200));
+    addOrganizerConference({
+      title: confName,
+      city: confCity,
+      country: confCountry,
+      organizerName: confOrg,
+      level: level as "High School" | "University" | "Open",
+      registrationFee: Number(regFee),
+      capacity: Number(capacity),
+      startDate,
+      endDate,
+      registrationDeadline: deadline,
+      committees: committees
+        .filter((committee) => committee.name && committee.topic)
+        .map((committee, index) => ({
+          id: `cm-${Date.now()}-${index}`,
+          name: committee.name,
+          topic: committee.topic,
+          size: Number(committee.size) || 0,
+        })),
+    });
     setSubmitted(true);
   };
 
@@ -145,7 +185,7 @@ export default function OrganizersPage() {
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <button
-              onClick={() => setWizardOpen(true)}
+              onClick={openWizard}
               className="btn text-base font-bold px-8 py-4 rounded-2xl"
               style={{
                 background: "linear-gradient(135deg, #6366f1, #8b5cf6)",
@@ -157,11 +197,11 @@ export default function OrganizersPage() {
               🚀 Create Your Conference
             </button>
             <button
-              onClick={() => setAuthOpen(true)}
+              onClick={openDashboard}
               className="btn text-base font-bold px-8 py-4"
               style={{ background: "rgba(255,255,255,0.08)", color: "white", border: "1.5px solid rgba(255,255,255,0.2)", borderRadius: "16px" }}
             >
-              Sign In to Dashboard
+              {isLoggedIn ? "Open Organizer Dashboard" : "Sign In to Dashboard"}
             </button>
           </div>
 
@@ -216,14 +256,19 @@ export default function OrganizersPage() {
                   <p style={{ color: "var(--fg-muted)" }}>
                     Our team will review your conference within 48 hours and publish it on the marketplace. You&apos;ll receive a confirmation email at the registered address.
                   </p>
+                  {user && (
+                    <p className="text-sm" style={{ color: "var(--fg-muted)" }}>
+                      Saved to your organizer account: <strong>{user.email}</strong>
+                    </p>
+                  )}
                   <div className="rounded-2xl p-5 text-left space-y-2" style={{ background: "var(--bg-subtle)" }}>
                     <p className="text-sm"><strong>Conference:</strong> {confName}</p>
                     <p className="text-sm"><strong>Location:</strong> {confCity}, {confCountry}</p>
                     <p className="text-sm"><strong>Committees:</strong> {committees.filter(c => c.name).length}</p>
                     <p className="text-sm"><strong>Registration Fee:</strong> ${regFee}</p>
                   </div>
-                  <button onClick={() => { setWizardOpen(false); setSubmitted(false); setStep(1); }} className="btn btn-primary w-full">
-                    Close
+                  <button onClick={() => router.push("/organizers/dashboard")} className="btn btn-primary w-full">
+                    Open Organizer Dashboard
                   </button>
                 </div>
               ) : (
@@ -432,7 +477,7 @@ export default function OrganizersPage() {
                   ))}
                 </div>
                 <button
-                  onClick={() => tier.name === "Enterprise" ? null : setWizardOpen(true)}
+                  onClick={() => tier.name === "Enterprise" ? null : openWizard()}
                   className={`btn w-full text-sm ${tier.highlight ? "btn-primary" : "btn-ghost"}`}
                 >
                   {tier.cta}

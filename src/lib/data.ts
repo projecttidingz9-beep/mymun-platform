@@ -1,4 +1,4 @@
-import { Conference, Committee, User } from "./types";
+import { Conference, Committee, OrganizerConference, User } from "./types";
 
 export const COMMITTEES: Committee[] = [
   { id: "unsc", name: "UN Security Council", abbreviation: "UNSC", topic1: "Cybersecurity Threats to Critical Infrastructure", topic2: "The Crisis in the Taiwan Strait", difficulty: "Advanced", size: 15 },
@@ -336,3 +336,62 @@ export const MOCK_USER: User = {
     },
   ],
 };
+
+export const MOCK_ORGANIZER_CONFERENCES: OrganizerConference[] = [
+  {
+    id: "org-1",
+    title: "Tidingz Youth Diplomacy Summit",
+    city: "Kuala Lumpur",
+    country: "Malaysia",
+    organizerName: "Tidingz Organizing Team",
+    level: "University",
+    registrationFee: 85,
+    capacity: 320,
+    startDate: "2026-09-18",
+    endDate: "2026-09-21",
+    registrationDeadline: "2026-08-20",
+    status: "Published",
+    committees: [
+      { id: "org-cm-1", name: "UNSC", topic: "AI Governance in Conflict Zones", size: 25 },
+      { id: "org-cm-2", name: "WHO", topic: "Pandemic Readiness Financing", size: 50 },
+      { id: "org-cm-3", name: "UNGA", topic: "Digital Sovereignty and Human Rights", size: 120 },
+    ],
+    applicants: [
+      {
+        id: "org-ap-1",
+        name: "Aisha Rahman",
+        school: "University of Malaya",
+        countryPreference: "Japan",
+        committeePreference: "UNSC",
+        status: "Pending",
+        paid: false,
+      },
+      {
+        id: "org-ap-2",
+        name: "Ethan Lim",
+        school: "Taylor's University",
+        countryPreference: "France",
+        committeePreference: "UNGA",
+        status: "Accepted",
+        paid: true,
+      },
+      {
+        id: "org-ap-3",
+        name: "Nadia Azmi",
+        school: "Sunway College",
+        countryPreference: "Brazil",
+        committeePreference: "WHO",
+        status: "Waitlisted",
+        paid: false,
+      },
+    ],
+    announcements: [
+      {
+        id: "org-an-1",
+        title: "Background guides are live",
+        message: "Committee background guides are now available in the delegate portal.",
+        createdAt: "2026-04-10",
+      },
+    ],
+  },
+];

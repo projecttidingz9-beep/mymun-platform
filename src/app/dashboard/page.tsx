@@ -181,7 +181,7 @@ export default function DashboardPage() {
                   {[
                     { icon: "📋", label: "Write a Resolution", href: "/resolution-copilot" },
                     { icon: "🌍", label: "Browse Conferences", href: "/marketplace" },
-                    { icon: "🏢", label: "Organize a Conference", href: "/organizers" },
+                    { icon: "🏢", label: "Organizer Dashboard", href: "/organizers/dashboard" },
                   ].map((action) => (
                     <Link
                       key={action.href}

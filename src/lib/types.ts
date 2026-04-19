@@ -44,6 +44,46 @@ export interface User {
   registeredConferences: Registration[];
 }
 
+export interface OrganizerApplicant {
+  id: string;
+  name: string;
+  school: string;
+  countryPreference: string;
+  committeePreference: string;
+  status: "Pending" | "Accepted" | "Rejected" | "Waitlisted";
+  paid: boolean;
+}
+
+export interface OrganizerAnnouncement {
+  id: string;
+  title: string;
+  message: string;
+  createdAt: string;
+}
+
+export interface OrganizerConference {
+  id: string;
+  title: string;
+  city: string;
+  country: string;
+  organizerName: string;
+  level: "High School" | "University" | "Open";
+  registrationFee: number;
+  capacity: number;
+  startDate: string;
+  endDate: string;
+  registrationDeadline?: string;
+  status: "Draft" | "Review" | "Published";
+  committees: Array<{
+    id: string;
+    name: string;
+    topic: string;
+    size: number;
+  }>;
+  applicants: OrganizerApplicant[];
+  announcements: OrganizerAnnouncement[];
+}
+
 export interface Registration {
   id: string;
   conferenceId: string;
