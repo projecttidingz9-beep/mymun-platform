@@ -8,8 +8,9 @@ import Footer from "@/components/Footer";
 import AuthModal from "@/components/AuthModal";
 import { CONFERENCES } from "@/lib/data";
 import { useAuth } from "@/lib/auth-context";
+import { getCategoryStartingPrice, getActivePhase } from "@/lib/pricing";
 
-type Tab = "overview" | "committees" | "schedule" | "organizer";
+type Tab = "overview" | "committees" | "schedule" | "organizer" | "reviews";
 
 const SCHEDULE = [
   { day: "Day 1", events: ["09:00 — Opening Ceremony & Keynote", "11:00 — Committee Session I (General Speakers' List)", "14:00 — Lunch Break & Networking", "15:30 — Committee Session II (Moderated Caucus)", "19:00 — Welcome Reception & Gala Dinner"] },
@@ -20,11 +21,19 @@ const SCHEDULE = [
 export default function ConferenceDetailPage() {
   const params = useParams();
   const router = useRouter();
-  const { isLoggedIn } = useAuth();
+  const { isLoggedIn, user, organizerConferences, addConferenceReview } = useAuth();
   const [tab, setTab] = useState<Tab>("overview");
   const [authOpen, setAuthOpen] = useState(false);
+  const [reviewDraft, setReviewDraft] = useState({
+    rating: 5,
+    organizationRating: 5,
+    committeeRating: 5,
+    hospitalityRating: 5,
+    comment: "",
+  });
 
   const conference = CONFERENCES.find((c) => c.id === params.id);
+  const organizerConference = organizerConferences.find((event) => event.id === params.id);
 
   if (!conference) {
     return (
@@ -39,9 +48,32 @@ export default function ConferenceDetailPage() {
   }
 
   const c = conference;
-  const pct = Math.round((c.registered / c.capacity) * 100);
-  const seatsLeft = c.capacity - c.registered;
+  const derivedRegistered = organizerConference?.applicants.length ?? c.registered;
+  const derivedCapacity = organizerConference?.capacity ?? c.capacity;
+  const pct = Math.round((derivedRegistered / derivedCapacity) * 100);
+  const seatsLeft = derivedCapacity - derivedRegistered;
   const currencySymbol = c.currency === "USD" ? "$" : c.currency === "EUR" ? "€" : c.currency === "GBP" ? "£" : "$";
+  const dynamicStartingPrice = organizerConference
+    ? organizerConference.registrationCategories.length > 0
+      ? Math.min(
+          ...organizerConference.registrationCategories.map((category) =>
+            getCategoryStartingPrice(category, organizerConference.committees)
+          )
+        )
+      : c.price
+    : c.price;
+  const activeCategoryPhase = organizerConference
+    ? organizerConference.registrationCategories
+        .map((category) => getActivePhase(category.pricingPhases))
+        .find(Boolean)
+    : null;
+  const displayTitle = organizerConference?.title || c.title;
+  const displayOrganizerName = organizerConference?.organizerName || c.organizer;
+  const displayDescription = organizerConference?.description || c.description;
+  const displayLocation = organizerConference?.venue || c.location;
+  const displayOrganizerEmail = c.organizerEmail;
+  const displayWebsite = organizerConference?.socialLinks?.website || c.website;
+  const heroBannerImage = organizerConference?.bannerImageUrl || c.bannerImageUrl;
 
   const handleRegister = () => {
     if (!isLoggedIn) { setAuthOpen(true); return; }
@@ -50,9 +82,10 @@ export default function ConferenceDetailPage() {
 
   const tabs: { key: Tab; label: string }[] = [
     { key: "overview", label: "Overview" },
-    { key: "committees", label: `Committees (${c.committees.length})` },
+    { key: "committees", label: `Committees (${organizerConference?.committees.filter((entry) => entry.isPublic !== false).length || c.committees.length})` },
     { key: "schedule", label: "Schedule" },
     { key: "organizer", label: "Organizer" },
+    { key: "reviews", label: `Reviews (${(organizerConference?.reviews || []).filter((entry) => entry.status === "approved").length})` },
   ];
 
   return (
@@ -61,7 +94,18 @@ export default function ConferenceDetailPage() {
       <AuthModal isOpen={authOpen} onClose={() => setAuthOpen(false)} />
 
       {/* Hero Banner */}
-      <div className={`pt-20 bg-gradient-to-br ${c.color} relative overflow-hidden`}>
+      <div
+        className={`pt-20 ${heroBannerImage ? "" : `bg-gradient-to-br ${c.color}`} relative overflow-hidden`}
+        style={
+          heroBannerImage
+            ? {
+                backgroundImage: `linear-gradient(135deg, rgba(2, 6, 23, 0.72), rgba(15, 23, 42, 0.6)), url("${heroBannerImage}")`,
+                backgroundSize: "cover",
+                backgroundPosition: "center",
+              }
+            : undefined
+        }
+      >
         <div
           className="absolute inset-0 opacity-10"
           style={{
@@ -76,7 +120,7 @@ export default function ConferenceDetailPage() {
             <span>/</span>
             <Link href="/marketplace" className="hover:text-white transition-colors">Marketplace</Link>
             <span>/</span>
-            <span className="text-white">{c.title}</span>
+            <span className="text-white">{displayTitle}</span>
           </div>
 
           <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-8">
@@ -96,11 +140,11 @@ export default function ConferenceDetailPage() {
               </div>
 
               <h1 className="text-4xl md:text-5xl font-black text-white mb-4 leading-tight">
-                {c.title}
+                {displayTitle}
               </h1>
 
               <div className="flex flex-wrap gap-5 text-white/80 text-sm">
-                <span className="flex items-center gap-2">📍 {c.location}</span>
+                <span className="flex items-center gap-2">📍 {displayLocation}</span>
                 <span className="flex items-center gap-2">📅 {c.startDate} – {c.endDate}</span>
                 <span className="flex items-center gap-2">⏰ Deadline: {c.registrationDeadline}</span>
               </div>
@@ -116,10 +160,12 @@ export default function ConferenceDetailPage() {
               }}
             >
               <div className="flex items-baseline gap-1 mb-1">
-                <span className="text-4xl font-black text-white">{currencySymbol}{c.price}</span>
-                <span className="text-white/60 text-sm">/ delegate</span>
+                <span className="text-4xl font-black text-white">{currencySymbol}{dynamicStartingPrice}</span>
+                <span className="text-white/60 text-sm">/ starts from</span>
               </div>
-              <p className="text-white/60 text-xs mb-5">All committee fees included</p>
+              <p className="text-white/60 text-xs mb-5">
+                {activeCategoryPhase ? `${activeCategoryPhase.name} phase is active` : "Base pricing currently active"}
+              </p>
 
               {/* Seats */}
               <div className="mb-4">
@@ -192,7 +238,7 @@ export default function ConferenceDetailPage() {
             <div className="lg:col-span-2 space-y-8">
               <div>
                 <h2 className="text-2xl font-bold mb-4" style={{ color: "var(--fg)" }}>About this Conference</h2>
-                <p className="text-base leading-relaxed" style={{ color: "var(--fg-muted)" }}>{c.description}</p>
+                <p className="text-base leading-relaxed" style={{ color: "var(--fg-muted)" }}>{displayDescription}</p>
               </div>
 
               <div>
@@ -222,9 +268,9 @@ export default function ConferenceDetailPage() {
               <div className="card p-6 rounded-2xl space-y-4">
                 <h3 className="font-bold" style={{ color: "var(--fg)" }}>Conference Stats</h3>
                 {[
-                  { label: "Committees", value: c.committees.length },
-                  { label: "Capacity", value: `${c.capacity} delegates` },
-                  { label: "Registered", value: c.registered },
+                  { label: "Committees", value: organizerConference?.committees.filter((entry) => entry.isPublic !== false).length || c.committees.length },
+                  { label: "Capacity", value: `${derivedCapacity} delegates` },
+                  { label: "Registered", value: derivedRegistered },
                   { label: "Days", value: "3–4 days" },
                   { label: "Level", value: c.level },
                 ].map((stat) => (
@@ -244,6 +290,30 @@ export default function ConferenceDetailPage() {
                   ))}
                 </div>
               </div>
+              {organizerConference && (organizerConference.previousEditions ?? []).length > 0 && (
+                <div className="card p-5 rounded-2xl">
+                  <h3 className="font-bold mb-3 text-sm" style={{ color: "var(--fg)" }}>Previous Editions</h3>
+                  <div className="space-y-2">
+                    {(organizerConference.previousEditions ?? []).map((edition) => (
+                      <p key={edition.id} className="text-xs" style={{ color: "var(--fg-muted)" }}>
+                        {edition.year}: {edition.title} ({edition.delegates} delegates)
+                      </p>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {organizerConference && (organizerConference.awards ?? []).length > 0 && (
+                <div className="card p-5 rounded-2xl">
+                  <h3 className="font-bold mb-3 text-sm" style={{ color: "var(--fg)" }}>Awards</h3>
+                  <div className="space-y-2">
+                    {(organizerConference.awards ?? []).map((award) => (
+                      <p key={award.id} className="text-xs" style={{ color: "var(--fg-muted)" }}>
+                        {award.category}: {award.prizeTitle || "Award"} {award.sponsorName ? `· Sponsored by ${award.sponsorName}` : ""}
+                      </p>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -252,7 +322,24 @@ export default function ConferenceDetailPage() {
           <div>
             <h2 className="text-2xl font-bold mb-6" style={{ color: "var(--fg)" }}>Committees</h2>
             <div className="grid md:grid-cols-2 gap-5">
-              {c.committees.map((cm) => (
+              {(organizerConference?.committees.filter((entry) => entry.isPublic !== false).map((cm) => {
+                const allotted = organizerConference.applicants.filter(
+                  (entry) => entry.status === "Allotted" && entry.assignedCommitteeId === cm.id
+                ).length;
+                const seatsRemaining = cm.seatCount - allotted;
+                return {
+                  id: cm.id,
+                  abbreviation: (cm.type || "Committee").slice(0, 8).toUpperCase(),
+                  name: cm.name,
+                  difficulty: "Intermediate" as const,
+                  topic1: cm.agenda,
+                  topic2: cm.customQuestions?.[0]?.question || "Details shared by organizer",
+                  size: cm.seatCount,
+                  seatsRemaining,
+                  portfolios: cm.portfolios ?? [],
+                  chairName: cm.chairName,
+                };
+              }) ?? c.committees.map((cm) => ({ ...cm, seatsRemaining: cm.size, portfolios: [], chairName: undefined }))).map((cm) => (
                 <div key={cm.id} className="card p-6 rounded-2xl">
                   <div className="flex items-start justify-between mb-4">
                     <div>
@@ -280,8 +367,28 @@ export default function ConferenceDetailPage() {
                     </div>
                     <div className="flex items-center justify-between pt-3" style={{ borderTop: "1px solid var(--border)" }}>
                       <span className="text-xs" style={{ color: "var(--fg-muted)" }}>Committee Size</span>
-                      <span className="badge badge-gray">{cm.size} delegates</span>
+                      <span className="badge badge-gray">{cm.seatsRemaining}/{cm.size} seats left</span>
                     </div>
+                    {(cm.portfolios ?? []).length > 0 && (
+                      <div className="pt-3" style={{ borderTop: "1px solid var(--border)" }}>
+                        <p className="text-[10px] font-black uppercase tracking-widest mb-2" style={{ color: "var(--fg-muted)" }}>
+                          Seat Matrix
+                        </p>
+                        <div className="space-y-1">
+                          {(cm.portfolios ?? []).map((portfolio) => {
+                            const remaining = portfolio.seatCount - portfolio.assignedApplicantIds.length;
+                            return (
+                              <div key={portfolio.id} className="flex items-center justify-between text-xs">
+                                <span style={{ color: "var(--fg-muted)" }}>{portfolio.name}</span>
+                                <span style={{ color: remaining > 0 ? "#16a34a" : "#dc2626" }}>
+                                  {remaining > 0 ? `${remaining} available` : "Filled"}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}
@@ -324,10 +431,10 @@ export default function ConferenceDetailPage() {
                   className="w-16 h-16 rounded-2xl flex items-center justify-center text-white font-bold text-xl"
                   style={{ background: `linear-gradient(135deg, ${c.color.includes("blue") ? "#2563eb" : "#6d28d9"}, #60a5fa)` }}
                 >
-                  {c.organizer[0]}
+                  {displayOrganizerName[0]}
                 </div>
                 <div>
-                  <h3 className="text-xl font-bold" style={{ color: "var(--fg)" }}>{c.organizer}</h3>
+                  <h3 className="text-xl font-bold" style={{ color: "var(--fg)" }}>{displayOrganizerName}</h3>
                   <p className="text-sm" style={{ color: "var(--fg-muted)" }}>Verified Conference Organizer</p>
                   <div className="flex items-center gap-1 mt-1">
                     {[...Array(5)].map((_, i) => <span key={i} className="text-amber-400 text-sm">★</span>)}
@@ -338,14 +445,78 @@ export default function ConferenceDetailPage() {
               <div className="space-y-3">
                 <div className="flex items-center gap-3 text-sm">
                   <span className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: "var(--bg-subtle)" }}>✉️</span>
-                  <a href={`mailto:${c.organizerEmail}`} style={{ color: "var(--blue)" }}>{c.organizerEmail}</a>
+                  <a href={`mailto:${displayOrganizerEmail}`} style={{ color: "var(--blue)" }}>{displayOrganizerEmail}</a>
                 </div>
                 <div className="flex items-center gap-3 text-sm">
                   <span className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: "var(--bg-subtle)" }}>🌐</span>
-                  <a href={c.website} target="_blank" rel="noopener noreferrer" style={{ color: "var(--blue)" }}>{c.website}</a>
+                  <a href={displayWebsite} target="_blank" rel="noopener noreferrer" style={{ color: "var(--blue)" }}>{displayWebsite}</a>
                 </div>
               </div>
               <button className="btn btn-ghost w-full">Contact Organizer</button>
+            </div>
+          </div>
+        )}
+
+        {tab === "reviews" && (
+          <div className="grid lg:grid-cols-3 gap-8">
+            <div className="lg:col-span-2">
+              <h2 className="text-2xl font-bold mb-4" style={{ color: "var(--fg)" }}>Delegate Reviews</h2>
+              <div className="space-y-3">
+                {(organizerConference?.reviews || [])
+                  .filter((entry) => entry.status === "approved")
+                  .map((review) => (
+                    <div key={review.id} className="card p-5 rounded-2xl">
+                      <div className="flex items-center justify-between">
+                        <p className="text-sm font-bold" style={{ color: "var(--fg)" }}>{review.userName}</p>
+                        <span className="badge badge-blue">{review.rating}/5</span>
+                      </div>
+                      <p className="text-sm mt-2" style={{ color: "var(--fg-muted)" }}>{review.comment}</p>
+                      {review.featured && <p className="text-xs mt-2" style={{ color: "var(--blue)" }}>Featured testimonial</p>}
+                    </div>
+                  ))}
+                {(organizerConference?.reviews || []).filter((entry) => entry.status === "approved").length === 0 && (
+                  <p className="text-sm" style={{ color: "var(--fg-muted)" }}>No approved reviews yet.</p>
+                )}
+              </div>
+            </div>
+            <div className="card p-5 rounded-2xl h-fit">
+              <h3 className="font-bold mb-3" style={{ color: "var(--fg)" }}>Share Your Experience</h3>
+              <div className="space-y-2">
+                <input className="input-base text-sm" type="number" min={1} max={5} value={reviewDraft.rating} onChange={(event) => setReviewDraft((prev) => ({ ...prev, rating: Number(event.target.value) }))} placeholder="Overall rating (1-5)" />
+                <input className="input-base text-sm" type="number" min={1} max={5} value={reviewDraft.organizationRating} onChange={(event) => setReviewDraft((prev) => ({ ...prev, organizationRating: Number(event.target.value) }))} placeholder="Organization rating" />
+                <input className="input-base text-sm" type="number" min={1} max={5} value={reviewDraft.committeeRating} onChange={(event) => setReviewDraft((prev) => ({ ...prev, committeeRating: Number(event.target.value) }))} placeholder="Committee rating" />
+                <input className="input-base text-sm" type="number" min={1} max={5} value={reviewDraft.hospitalityRating} onChange={(event) => setReviewDraft((prev) => ({ ...prev, hospitalityRating: Number(event.target.value) }))} placeholder="Hospitality rating" />
+                <textarea className="input-base text-sm" rows={4} value={reviewDraft.comment} onChange={(event) => setReviewDraft((prev) => ({ ...prev, comment: event.target.value }))} placeholder="Write your review..." />
+                <button
+                  className="btn btn-primary w-full text-sm"
+                  onClick={() => {
+                    if (!isLoggedIn || !user) {
+                      setAuthOpen(true);
+                      return;
+                    }
+                    if (!reviewDraft.comment.trim()) return;
+                    addConferenceReview(c.id, {
+                      userId: user.id,
+                      userName: user.name,
+                      rating: reviewDraft.rating,
+                      organizationRating: reviewDraft.organizationRating,
+                      committeeRating: reviewDraft.committeeRating,
+                      hospitalityRating: reviewDraft.hospitalityRating,
+                      comment: reviewDraft.comment.trim(),
+                    });
+                    setReviewDraft({
+                      rating: 5,
+                      organizationRating: 5,
+                      committeeRating: 5,
+                      hospitalityRating: 5,
+                      comment: "",
+                    });
+                  }}
+                >
+                  Submit Review
+                </button>
+                <p className="text-xs" style={{ color: "var(--fg-muted)" }}>Reviews are moderated before public display.</p>
+              </div>
             </div>
           </div>
         )}

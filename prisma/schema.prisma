@@ -1,0 +1,196 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+enum UserRole {
+  DELEGATE
+  ORGANIZER
+  ADMIN
+}
+
+enum RegistrationStatus {
+  PENDING
+  ALLOTTED
+  WAITLISTED
+  REJECTED
+}
+
+enum PassStatus {
+  ISSUED
+  REVOKED
+}
+
+enum CommitteeVisibility {
+  PUBLIC
+  PRIVATE
+}
+
+model User {
+  id            String         @id @default(cuid())
+  email         String         @unique
+  name          String
+  role          UserRole       @default(DELEGATE)
+  registrations Registration[]
+  checkins      Checkin[]      @relation("CheckinBy")
+  notifications Notification[]
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+}
+
+model Event {
+  id            String         @id
+  title         String
+  startDate     DateTime
+  endDate       DateTime
+  organizerConfig OrganizerConferenceConfig?
+  registrations Registration[]
+  passes        DelegatePass[]
+  checkins      Checkin[]
+  notifications Notification[]
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+}
+
+model Registration {
+  id                String             @id
+  userId            String
+  eventId           String
+  categoryName      String
+  committeeName     String?
+  portfolioName     String?
+  amount            Float
+  paid              Boolean            @default(false)
+  status            RegistrationStatus @default(PENDING)
+  allottedAt        DateTime?
+  checkedIn         Boolean            @default(false)
+  checkedInAt       DateTime?
+  user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  event             Event              @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  pass              DelegatePass?
+  checkins          Checkin[]
+  notifications     Notification[]
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+}
+
+model DelegatePass {
+  id             String      @id @default(cuid())
+  registrationId String      @unique
+  eventId        String
+  qrTokenHash    String
+  releaseAt      DateTime
+  issuedAt       DateTime    @default(now())
+  status         PassStatus  @default(ISSUED)
+  registration   Registration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+  event          Event       @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  checkins       Checkin[]
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  @@index([eventId])
+}
+
+model Checkin {
+  id             String       @id @default(cuid())
+  passId         String
+  registrationId String
+  eventId        String
+  checkedInById  String?
+  deviceMeta     String?
+  checkedInAt    DateTime     @default(now())
+  pass           DelegatePass @relation(fields: [passId], references: [id], onDelete: Cascade)
+  registration   Registration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+  event          Event        @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  checkedInBy    User?        @relation("CheckinBy", fields: [checkedInById], references: [id], onDelete: SetNull)
+
+  @@unique([passId, eventId])
+  @@index([registrationId])
+}
+
+model Notification {
+  id             String       @id @default(cuid())
+  userId         String
+  eventId        String
+  registrationId String?
+  title          String
+  message        String
+  type           String
+  read           Boolean      @default(false)
+  createdAt      DateTime     @default(now())
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  event          Event        @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  registration   Registration? @relation(fields: [registrationId], references: [id], onDelete: SetNull)
+
+  @@index([userId, read])
+}
+
+model OrganizerConferenceConfig {
+  id                String            @id @default(cuid())
+  eventId           String            @unique
+  description       String?
+  venue             String?
+  logoImageUrl      String?
+  bannerImageUrl    String?
+  websiteUrl        String?
+  instagramUrl      String?
+  linkedinUrl       String?
+  twitterUrl        String?
+  brandPrimaryColor String?
+  brandSecondaryColor String?
+  event             Event             @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  committees        CommitteeConfig[]
+  pricingPhases     PricingPhaseConfig[]
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+}
+
+model CommitteeConfig {
+  id                String               @id @default(cuid())
+  organizerConfigId String
+  name              String
+  agenda            String
+  type              String?
+  chairName         String?
+  chairEmail        String?
+  seatCount         Int
+  basePrice         Float?
+  visibility        CommitteeVisibility  @default(PUBLIC)
+  organizerConfig   OrganizerConferenceConfig @relation(fields: [organizerConfigId], references: [id], onDelete: Cascade)
+  questions         ApplicationQuestion[]
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+}
+
+model ApplicationQuestion {
+  id          String          @id @default(cuid())
+  committeeId String?
+  label       String
+  type        String
+  required    Boolean         @default(false)
+  optionsJson String?
+  committee   CommitteeConfig? @relation(fields: [committeeId], references: [id], onDelete: Cascade)
+  createdAt   DateTime        @default(now())
+}
+
+model PricingPhaseConfig {
+  id                String                 @id @default(cuid())
+  organizerConfigId String
+  name              String
+  startDate         DateTime
+  endDate           DateTime
+  basePrice         Float
+  committeePriceJson String?
+  organizerConfig   OrganizerConferenceConfig @relation(fields: [organizerConfigId], references: [id], onDelete: Cascade)
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+}

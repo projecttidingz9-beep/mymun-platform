@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useAuth } from "@/lib/auth-context";
@@ -22,32 +22,40 @@ export default function Navbar({ openAuthModal }: NavbarProps) {
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [authOpen, setAuthOpen] = useState(false);
-  const [darkMode, setDarkMode] = useState(false);
+  const hydrated = useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false
+  );
+  const [darkMode, setDarkMode] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return localStorage.getItem("tidingz_dark") === "true";
+  });
   const [userMenuOpen, setUserMenuOpen] = useState(false);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 20);
     window.addEventListener("scroll", onScroll);
-    // Init dark mode from localStorage
-    const saved = localStorage.getItem("tidingz_dark");
-    if (saved === "true") {
-      document.documentElement.classList.add("dark");
-      setDarkMode(true);
-    }
+    onScroll();
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
+  useEffect(() => {
+    document.documentElement.classList.toggle("dark", darkMode);
+    localStorage.setItem("tidingz_dark", String(darkMode));
+  }, [darkMode]);
+
   const toggleDark = () => {
-    const next = !darkMode;
-    setDarkMode(next);
-    document.documentElement.classList.toggle("dark", next);
-    localStorage.setItem("tidingz_dark", String(next));
+    setDarkMode((prev) => !prev);
   };
 
   const handleAuthClick = () => {
     if (openAuthModal) openAuthModal();
     else setAuthOpen(true);
   };
+
+  const showLoggedInUi = hydrated && isLoggedIn;
+  const showDarkModeOnIcon = hydrated && darkMode;
 
   return (
     <>
@@ -110,7 +118,7 @@ export default function Navbar({ openAuthModal }: NavbarProps) {
               }}
               title="Toggle dark mode"
             >
-              {darkMode ? (
+              {showDarkModeOnIcon ? (
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                   <path d="M12 3v1m0 16v1M4.22 4.22l.7.7m12.16 12.16.7.7M1 12h1m20 0h1m-16.78 7.78.7-.7M18.36 5.64l.7-.7M12 6a6 6 0 0 0 0 12A6 6 0 0 0 12 6z" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" />
                 </svg>
@@ -121,7 +129,7 @@ export default function Navbar({ openAuthModal }: NavbarProps) {
               )}
             </button>
 
-            {isLoggedIn ? (
+            {showLoggedInUi ? (
               <div className="relative">
                 <button
                   onClick={() => setUserMenuOpen((p) => !p)}
@@ -163,6 +171,14 @@ export default function Navbar({ openAuthModal }: NavbarProps) {
                       style={{ color: "var(--fg)" }}
                     >
                       📊 Dashboard
+                    </Link>
+                    <Link
+                      href={`/delegates/${user?.id || ""}`}
+                      onClick={() => setUserMenuOpen(false)}
+                      className="flex items-center gap-3 px-4 py-3 text-sm font-medium transition-colors"
+                      style={{ color: "var(--fg)" }}
+                    >
+                      🪪 Public Profile
                     </Link>
                     <Link
                       href="/organizers/dashboard"

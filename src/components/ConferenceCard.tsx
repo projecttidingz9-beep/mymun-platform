@@ -5,7 +5,6 @@ import { Conference } from "@/lib/types";
 
 interface ConferenceCardProps {
   conference: Conference;
-  featured?: boolean;
 }
 
 const LEVEL_BADGE: Record<string, { class: string; emoji: string }> = {
@@ -35,14 +34,24 @@ function SeatsBar({ registered, capacity }: { registered: number; capacity: numb
   );
 }
 
-export default function ConferenceCard({ conference: c, featured }: ConferenceCardProps) {
+export default function ConferenceCard({ conference: c }: ConferenceCardProps) {
   const badge = LEVEL_BADGE[c.level] || LEVEL_BADGE["Open"];
+  const hasBanner = Boolean(c.bannerImageUrl);
 
   return (
     <Link href={`/conference/${c.id}`} className="block group card rounded-[1.5rem] overflow-hidden cursor-pointer">
       {/* Card Header / Color Banner */}
       <div
-        className={`relative h-36 bg-gradient-to-br ${c.color} flex items-end p-5 overflow-hidden`}
+        className={`relative h-36 ${hasBanner ? "" : `bg-gradient-to-br ${c.color}`} flex items-end p-5 overflow-hidden`}
+        style={
+          hasBanner
+            ? {
+                backgroundImage: `linear-gradient(to bottom, rgba(0, 0, 0, 0.1), rgba(0, 0, 0, 0.5)), url("${c.bannerImageUrl}")`,
+                backgroundSize: "cover",
+                backgroundPosition: "center",
+              }
+            : undefined
+        }
       >
         {/* Background pattern */}
         <div

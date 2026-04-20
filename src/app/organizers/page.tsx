@@ -1,13 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { ChangeEvent, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import AuthModal from "@/components/AuthModal";
 import { useAuth } from "@/lib/auth-context";
+import { DynamicFieldType, RegistrationCategory } from "@/lib/types";
+import { hasOverlappingPhases } from "@/lib/pricing";
 
-type WizardStep = 1 | 2 | 3 | 4 | 5;
+type WizardStep = 1 | 2 | 3 | 4 | 5 | 6;
 
 const FEATURES_FOR_ORGANIZERS = [
   {
@@ -72,34 +74,240 @@ const TIERS = [
   },
 ];
 
-const STEPS = ["Conference Details", "Committees", "Pricing & Dates", "Review & Submit"];
+const FIELD_TYPE_OPTIONS: DynamicFieldType[] = ["text", "textarea", "select", "number", "date", "checkbox"];
+const STEPS = ["Event Basics", "Registration Categories", "Committees", "Pricing Phases", "Custom Forms", "Review & Submit"];
 
 export default function OrganizersPage() {
   const router = useRouter();
   const { isLoggedIn, user, addOrganizerConference } = useAuth();
+  const hydrated = useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false
+  );
+  const showLoggedInCta = hydrated && isLoggedIn;
   const [authOpen, setAuthOpen] = useState(false);
   const [wizardOpen, setWizardOpen] = useState(false);
   const [step, setStep] = useState<WizardStep>(1);
   const [submitted, setSubmitted] = useState(false);
+  const idCounter = useRef(1);
 
-  // Form state
   const [confName, setConfName] = useState("");
   const [confCity, setConfCity] = useState("");
   const [confCountry, setConfCountry] = useState("");
-  const [confDesc, setConfDesc] = useState("");
   const [confOrg, setConfOrg] = useState("");
-  const [committees, setCommittees] = useState([{ name: "", topic: "", size: "" }]);
-  const [regFee, setRegFee] = useState("");
+  const [committees, setCommittees] = useState([
+    {
+      id: "cm-1",
+      name: "",
+      agenda: "",
+      type: "UN",
+      seatCount: "",
+      basePrice: "",
+      chairName: "",
+      chairEmail: "",
+      isPublic: true,
+      customQuestions: "",
+    },
+  ]);
+  const [categories, setCategories] = useState<RegistrationCategory[]>([
+    {
+      id: "cat-1",
+      name: "Delegate Registration",
+      description: "",
+      basePrice: 85,
+      requiresCommitteeSelection: true,
+      formFields: [],
+      pricingPhases: [],
+    },
+  ]);
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [deadline, setDeadline] = useState("");
   const [level, setLevel] = useState("High School");
   const [capacity, setCapacity] = useState("");
+  const [venue, setVenue] = useState("");
+  const [description, setDescription] = useState("");
+  const [website, setWebsite] = useState("");
+  const [instagram, setInstagram] = useState("");
+  const [linkedin, setLinkedin] = useState("");
+  const [twitter, setTwitter] = useState("");
+  const [logoImageUrl, setLogoImageUrl] = useState("");
+  const [brandPrimaryColor, setBrandPrimaryColor] = useState("#2563eb");
+  const [brandSecondaryColor, setBrandSecondaryColor] = useState("#60a5fa");
+  const [bannerImageUrl, setBannerImageUrl] = useState("");
+  const [bannerSourceType, setBannerSourceType] = useState<"upload" | "url" | null>(null);
+  const [bannerError, setBannerError] = useState("");
 
-  const addCommittee = () => setCommittees(prev => [...prev, { name: "", topic: "", size: "" }]);
+  const nextId = (prefix: string) => {
+    idCounter.current += 1;
+    return `${prefix}-${idCounter.current}`;
+  };
+
+  const addCommittee = () =>
+    setCommittees((prev) => [
+      ...prev,
+      {
+        id: nextId("cm"),
+        name: "",
+        agenda: "",
+        type: "Custom",
+        seatCount: "",
+        basePrice: "",
+        chairName: "",
+        chairEmail: "",
+        isPublic: true,
+        customQuestions: "",
+      },
+    ]);
   const removeCommittee = (i: number) => setCommittees(prev => prev.filter((_, idx) => idx !== i));
-  const updateCommittee = (i: number, field: string, val: string) =>
+  const updateCommittee = (
+    i: number,
+    field:
+      | "name"
+      | "agenda"
+      | "type"
+      | "seatCount"
+      | "basePrice"
+      | "chairName"
+      | "chairEmail"
+      | "customQuestions",
+    val: string
+  ) =>
     setCommittees(prev => prev.map((c, idx) => idx === i ? { ...c, [field]: val } : c));
+
+  const addCategory = () => {
+    setCategories((prev) => [
+      ...prev,
+      {
+        id: nextId("cat"),
+        name: "",
+        description: "",
+        basePrice: 0,
+        requiresCommitteeSelection: true,
+        formFields: [],
+        pricingPhases: [],
+      },
+    ]);
+  };
+
+  const updateCategory = (
+    index: number,
+    patch: Partial<Pick<RegistrationCategory, "name" | "description" | "basePrice" | "requiresCommitteeSelection">>
+  ) => {
+    setCategories((prev) => prev.map((category, idx) => (idx === index ? { ...category, ...patch } : category)));
+  };
+
+  const addPhase = (categoryId: string) => {
+    setCategories((prev) =>
+      prev.map((category) =>
+        category.id !== categoryId
+          ? category
+          : {
+              ...category,
+              pricingPhases: [
+                ...category.pricingPhases,
+                {
+                  id: nextId("phase"),
+                  name: "",
+                  startDate: "",
+                  endDate: "",
+                  basePrice: category.basePrice || 0,
+                  committeePrices: [],
+                },
+              ],
+            }
+      )
+    );
+  };
+
+  const updatePhase = (
+    categoryId: string,
+    phaseId: string,
+    patch: Partial<{ name: string; startDate: string; endDate: string; basePrice: number }>
+  ) => {
+    setCategories((prev) =>
+      prev.map((category) =>
+        category.id !== categoryId
+          ? category
+          : {
+              ...category,
+              pricingPhases: category.pricingPhases.map((phase) =>
+                phase.id === phaseId ? { ...phase, ...patch } : phase
+              ),
+            }
+      )
+    );
+  };
+
+  const updateCommitteeOverride = (
+    categoryId: string,
+    phaseId: string,
+    committeeId: string,
+    rawPrice: string
+  ) => {
+    const committeeName = committees.find((committee) => committee.id === committeeId)?.name || committeeId;
+    const parsed = Number(rawPrice);
+    setCategories((prev) =>
+      prev.map((category) =>
+        category.id !== categoryId
+          ? category
+          : {
+              ...category,
+              pricingPhases: category.pricingPhases.map((phase) => {
+                if (phase.id !== phaseId) return phase;
+                const rest = phase.committeePrices.filter((entry) => entry.committeeId !== committeeId);
+                if (!rawPrice.trim() || Number.isNaN(parsed)) {
+                  return { ...phase, committeePrices: rest };
+                }
+                return {
+                  ...phase,
+                  committeePrices: [...rest, { committeeId, committeeName, price: parsed }],
+                };
+              }),
+            }
+      )
+    );
+  };
+
+  const addField = (categoryId: string) => {
+    setCategories((prev) =>
+      prev.map((category) =>
+        category.id !== categoryId
+          ? category
+          : {
+              ...category,
+              formFields: [
+                ...category.formFields,
+                {
+                  id: nextId("field"),
+                  label: "",
+                  type: "text",
+                  required: true,
+                  placeholder: "",
+                },
+              ],
+            }
+      )
+    );
+  };
+
+  const updateField = (
+    categoryId: string,
+    fieldId: string,
+    patch: Partial<{ label: string; type: DynamicFieldType; required: boolean; placeholder: string; options: string[] }>
+  ) => {
+    setCategories((prev) =>
+      prev.map((category) =>
+        category.id !== categoryId
+          ? category
+          : {
+              ...category,
+              formFields: category.formFields.map((field) => (field.id === fieldId ? { ...field, ...patch } : field)),
+            }
+      )
+    );
+  };
 
   const openWizard = () => {
     if (!isLoggedIn) {
@@ -124,27 +332,100 @@ export default function OrganizersPage() {
       city: confCity,
       country: confCountry,
       organizerName: confOrg,
+      venue: venue || undefined,
+      description: description || undefined,
       level: level as "High School" | "University" | "Open",
-      registrationFee: Number(regFee),
       capacity: Number(capacity),
       startDate,
       endDate,
       registrationDeadline: deadline,
+      logoImageUrl: logoImageUrl.trim() || undefined,
+      bannerImageUrl: bannerImageUrl.trim() || undefined,
+      bannerSourceType: bannerSourceType || undefined,
+      socialLinks: {
+        website: website.trim() || undefined,
+        instagram: instagram.trim() || undefined,
+        linkedin: linkedin.trim() || undefined,
+        twitter: twitter.trim() || undefined,
+      },
+      brandPrimaryColor: brandPrimaryColor.trim() || undefined,
+      brandSecondaryColor: brandSecondaryColor.trim() || undefined,
+      registrationCategories: categories
+        .filter((category) => category.name.trim())
+        .map((category) => ({
+          ...category,
+          pricingPhases: category.pricingPhases.filter(
+            (phase) => phase.name && phase.startDate && phase.endDate
+          ),
+          formFields: category.formFields.filter((field) => field.label.trim()),
+        })),
       committees: committees
-        .filter((committee) => committee.name && committee.topic)
+        .filter((committee) => committee.name && committee.agenda)
         .map((committee, index) => ({
-          id: `cm-${Date.now()}-${index}`,
+          id: committee.id || `cm-${Date.now()}-${index}`,
           name: committee.name,
-          topic: committee.topic,
-          size: Number(committee.size) || 0,
+          agenda: committee.agenda,
+          type: committee.type || undefined,
+          seatCount: Number(committee.seatCount) || 0,
+          basePrice: committee.basePrice ? Number(committee.basePrice) : undefined,
+          chairName: committee.chairName || undefined,
+          chairEmail: committee.chairEmail || undefined,
+          isPublic: committee.isPublic,
+          customQuestions: committee.customQuestions
+            .split(",")
+            .map((question) => question.trim())
+            .filter(Boolean)
+            .map((question, questionIndex) => ({
+              id: `${committee.id}-q-${questionIndex}`,
+              question,
+              required: true,
+            })),
         })),
     });
     setSubmitted(true);
   };
 
+  const handleBannerFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const selectedFile = event.target.files?.[0];
+    if (!selectedFile) return;
+
+    if (!selectedFile.type.startsWith("image/")) {
+      setBannerError("Please upload an image file.");
+      event.target.value = "";
+      return;
+    }
+
+    const maxBytes = 2 * 1024 * 1024;
+    if (selectedFile.size > maxBytes) {
+      setBannerError("Banner image must be under 2MB.");
+      event.target.value = "";
+      return;
+    }
+
+    setBannerError("");
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === "string") {
+        setBannerImageUrl(reader.result);
+        setBannerSourceType("upload");
+      }
+    };
+    reader.readAsDataURL(selectedFile);
+  };
+
+  const handleBannerUrlChange = (value: string) => {
+    setBannerError("");
+    setBannerImageUrl(value);
+    setBannerSourceType(value.trim() ? "url" : null);
+  };
+
   const isStep1Valid = confName && confCity && confCountry && confOrg;
-  const isStep2Valid = committees.some(c => c.name && c.topic);
-  const isStep3Valid = regFee && startDate && endDate && capacity;
+  const isStep2Valid = categories.some((category) => category.name.trim());
+  const isStep3Valid = committees.some(c => c.name && c.agenda);
+  const isStep4Valid = categories.every((category) => !hasOverlappingPhases(category.pricingPhases));
+  const isStep5Valid = categories.every(
+    (category) => category.formFields.length === 0 || category.formFields.some((field) => field.label.trim())
+  );
 
   return (
     <>
@@ -201,7 +482,7 @@ export default function OrganizersPage() {
               className="btn text-base font-bold px-8 py-4"
               style={{ background: "rgba(255,255,255,0.08)", color: "white", border: "1.5px solid rgba(255,255,255,0.2)", borderRadius: "16px" }}
             >
-              {isLoggedIn ? "Open Organizer Dashboard" : "Sign In to Dashboard"}
+              {showLoggedInCta ? "Open Organizer Dashboard" : "Sign In to Dashboard"}
             </button>
           </div>
 
@@ -226,7 +507,7 @@ export default function OrganizersPage() {
             <div className="p-7 pb-5 flex items-center justify-between" style={{ borderBottom: "1px solid var(--border)" }}>
               <div>
                 <h2 className="text-2xl font-black" style={{ color: "var(--fg)" }}>
-                  {submitted ? "🎉 Conference Submitted!" : `Create Conference — Step ${step} of 4`}
+                  {submitted ? "🎉 Conference Submitted!" : `Create Conference — Step ${step} of 6`}
                 </h2>
                 {!submitted && (
                   <p className="text-sm mt-1" style={{ color: "var(--fg-muted)" }}>{STEPS[step - 1]}</p>
@@ -239,7 +520,7 @@ export default function OrganizersPage() {
             {!submitted && (
               <div className="px-7 py-3" style={{ background: "var(--bg-subtle)" }}>
                 <div className="flex gap-2">
-                  {[1, 2, 3, 4].map((s) => (
+                  {[1, 2, 3, 4, 5, 6].map((s) => (
                     <div key={s} className="flex-1 h-1.5 rounded-full" style={{
                       background: s <= step ? "var(--blue)" : "var(--border)",
                     }} />
@@ -265,7 +546,7 @@ export default function OrganizersPage() {
                     <p className="text-sm"><strong>Conference:</strong> {confName}</p>
                     <p className="text-sm"><strong>Location:</strong> {confCity}, {confCountry}</p>
                     <p className="text-sm"><strong>Committees:</strong> {committees.filter(c => c.name).length}</p>
-                    <p className="text-sm"><strong>Registration Fee:</strong> ${regFee}</p>
+                    <p className="text-sm"><strong>Categories:</strong> {categories.filter((category) => category.name).length}</p>
                   </div>
                   <button onClick={() => router.push("/organizers/dashboard")} className="btn btn-primary w-full">
                     Open Organizer Dashboard
@@ -273,7 +554,7 @@ export default function OrganizersPage() {
                 </div>
               ) : (
                 <>
-                  {/* Step 1: Conference Details */}
+                  {/* Step 1: Event Basics */}
                   {step === 1 && (
                     <div className="space-y-4">
                       <div>
@@ -295,6 +576,67 @@ export default function OrganizersPage() {
                         <input value={confOrg} onChange={e => setConfOrg(e.target.value)} className="input-base" placeholder="e.g. School MUN Society" />
                       </div>
                       <div>
+                        <label className="block text-sm font-semibold mb-1.5" style={{ color: "var(--fg)" }}>Venue</label>
+                        <input value={venue} onChange={e => setVenue(e.target.value)} className="input-base" placeholder="Venue / campus / hotel" />
+                      </div>
+                      <textarea
+                        value={description}
+                        onChange={(event) => setDescription(event.target.value)}
+                        className="input-base"
+                        rows={3}
+                        placeholder="Conference description shown on public page"
+                      />
+                      <input
+                        value={logoImageUrl}
+                        onChange={(event) => setLogoImageUrl(event.target.value)}
+                        className="input-base text-sm"
+                        placeholder="Conference logo URL (https://...)"
+                      />
+                      <div className="rounded-xl p-4 space-y-3" style={{ background: "var(--bg-subtle)", border: "1.5px solid var(--border)" }}>
+                        <label className="block text-sm font-semibold" style={{ color: "var(--fg)" }}>Conference Banner (optional)</label>
+                        <input
+                          value={bannerSourceType === "url" ? bannerImageUrl : ""}
+                          onChange={(event) => handleBannerUrlChange(event.target.value)}
+                          className="input-base text-sm"
+                          placeholder="Paste banner image URL (https://...)"
+                        />
+                        <div>
+                          <label className="block text-xs mb-1" style={{ color: "var(--fg-muted)" }}>
+                            Or upload image (PNG/JPG/WebP, max 2MB)
+                          </label>
+                          <input
+                            type="file"
+                            accept="image/png,image/jpeg,image/webp,image/gif"
+                            onChange={handleBannerFileChange}
+                            className="input-base text-xs file:mr-3 file:rounded-lg file:border-0 file:bg-blue-600 file:px-3 file:py-1.5 file:text-white"
+                          />
+                        </div>
+                        {bannerError && (
+                          <p className="text-xs" style={{ color: "#dc2626" }}>{bannerError}</p>
+                        )}
+                        {bannerImageUrl.trim() && (
+                          <div className="rounded-xl overflow-hidden" style={{ border: "1.5px solid var(--border)" }}>
+                            <div className="h-28 bg-cover bg-center" style={{ backgroundImage: `url("${bannerImageUrl}")` }} />
+                          </div>
+                        )}
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <input value={website} onChange={(event) => setWebsite(event.target.value)} className="input-base text-sm" placeholder="Website URL" />
+                        <input value={instagram} onChange={(event) => setInstagram(event.target.value)} className="input-base text-sm" placeholder="Instagram URL" />
+                        <input value={linkedin} onChange={(event) => setLinkedin(event.target.value)} className="input-base text-sm" placeholder="LinkedIn URL" />
+                        <input value={twitter} onChange={(event) => setTwitter(event.target.value)} className="input-base text-sm" placeholder="X / Twitter URL" />
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs font-semibold mb-1" style={{ color: "var(--fg-muted)" }}>Primary brand color</label>
+                          <input value={brandPrimaryColor} onChange={(event) => setBrandPrimaryColor(event.target.value)} className="input-base text-sm" placeholder="#2563eb" />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold mb-1" style={{ color: "var(--fg-muted)" }}>Secondary brand color</label>
+                          <input value={brandSecondaryColor} onChange={(event) => setBrandSecondaryColor(event.target.value)} className="input-base text-sm" placeholder="#60a5fa" />
+                        </div>
+                      </div>
+                      <div>
                         <label className="block text-sm font-semibold mb-1.5" style={{ color: "var(--fg)" }}>Conference Level</label>
                         <div className="grid grid-cols-3 gap-2">
                           {["High School", "University", "Open"].map((l) => (
@@ -308,83 +650,275 @@ export default function OrganizersPage() {
                           ))}
                         </div>
                       </div>
-                      <div>
-                        <label className="block text-sm font-semibold mb-1.5" style={{ color: "var(--fg)" }}>Brief Description</label>
-                        <textarea value={confDesc} onChange={e => setConfDesc(e.target.value)} className="input-base" rows={3} placeholder="Describe your conference in 2-3 sentences..." style={{ resize: "none" }} />
-                      </div>
                       <button onClick={() => setStep(2)} disabled={!isStep1Valid} className="btn btn-primary w-full" style={{ opacity: isStep1Valid ? 1 : 0.5 }}>
-                        Next: Add Committees →
+                        Next: Add Categories →
                       </button>
                     </div>
                   )}
 
-                  {/* Step 2: Committees */}
+                  {/* Step 2: Categories */}
                   {step === 2 && (
                     <div className="space-y-4">
-                      <p className="text-sm" style={{ color: "var(--fg-muted)" }}>Add at least one committee with a topic.</p>
+                      <p className="text-sm" style={{ color: "var(--fg-muted)" }}>Create registration categories like Delegate, EB, OC, or IP.</p>
+                      {categories.map((category, index) => (
+                        <div key={category.id} className="p-4 rounded-xl space-y-3" style={{ background: "var(--bg-subtle)", border: "1.5px solid var(--border)" }}>
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-bold" style={{ color: "var(--fg)" }}>Category {index + 1}</span>
+                            {index > 0 && (
+                              <button
+                                onClick={() => setCategories((prev) => prev.filter((_, idx) => idx !== index))}
+                                className="text-xs"
+                                style={{ color: "#dc2626" }}
+                              >
+                                Remove
+                              </button>
+                            )}
+                          </div>
+                          <div className="grid grid-cols-2 gap-3">
+                            <input
+                              value={category.name}
+                              onChange={(event) => updateCategory(index, { name: event.target.value })}
+                              className="input-base text-sm"
+                              placeholder="Category name"
+                            />
+                            <input
+                              value={category.basePrice}
+                              onChange={(event) => updateCategory(index, { basePrice: Number(event.target.value) })}
+                              className="input-base text-sm"
+                              placeholder="Default price"
+                              type="number"
+                            />
+                          </div>
+                          <input
+                            value={category.description}
+                            onChange={(event) => updateCategory(index, { description: event.target.value })}
+                            className="input-base text-sm"
+                            placeholder="Describe this registration category"
+                          />
+                          <label className="flex items-center gap-2 text-sm" style={{ color: "var(--fg-muted)" }}>
+                            <input
+                              type="checkbox"
+                              checked={category.requiresCommitteeSelection}
+                              onChange={(event) =>
+                                updateCategory(index, { requiresCommitteeSelection: event.target.checked })
+                              }
+                            />
+                            Requires committee selection
+                          </label>
+                        </div>
+                      ))}
+                      <button onClick={addCategory} className="btn btn-ghost w-full text-sm" style={{ borderStyle: "dashed" }}>
+                        + Add Another Category
+                      </button>
+                      <div className="flex gap-3">
+                        <button onClick={() => setStep(1)} className="btn btn-ghost flex-1">← Back</button>
+                        <button onClick={() => setStep(3)} disabled={!isStep2Valid} className="btn btn-primary flex-[2]" style={{ opacity: isStep2Valid ? 1 : 0.5 }}>
+                          Next: Add Committees →
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Step 3: Committees */}
+                  {step === 3 && (
+                    <div className="space-y-4">
+                      <p className="text-sm" style={{ color: "var(--fg-muted)" }}>Define custom committees; nothing is hardcoded to UN bodies.</p>
                       {committees.map((cm, i) => (
-                        <div key={i} className="p-4 rounded-xl space-y-3" style={{ background: "var(--bg-subtle)", border: "1.5px solid var(--border)" }}>
+                        <div key={cm.id} className="p-4 rounded-xl space-y-3" style={{ background: "var(--bg-subtle)", border: "1.5px solid var(--border)" }}>
                           <div className="flex items-center justify-between">
                             <span className="text-sm font-bold" style={{ color: "var(--fg)" }}>Committee {i + 1}</span>
                             {i > 0 && <button onClick={() => removeCommittee(i)} className="text-xs" style={{ color: "#dc2626" }}>Remove</button>}
                           </div>
                           <div className="grid grid-cols-2 gap-3">
-                            <input value={cm.name} onChange={e => updateCommittee(i, "name", e.target.value)} className="input-base text-sm" placeholder="Committee name" />
-                            <input value={cm.size} onChange={e => updateCommittee(i, "size", e.target.value)} className="input-base text-sm" placeholder="Max delegates" type="number" />
+                            <input value={cm.name} onChange={e => updateCommittee(i, "name", e.target.value)} className="input-base text-sm" placeholder="Committee name (AIPPM, Lok Sabha...)" />
+                            <input value={cm.seatCount} onChange={e => updateCommittee(i, "seatCount", e.target.value)} className="input-base text-sm" placeholder="Seat count" type="number" />
                           </div>
-                          <input value={cm.topic} onChange={e => updateCommittee(i, "topic", e.target.value)} className="input-base text-sm" placeholder="Main topic of discussion" />
+                          <div className="grid grid-cols-2 gap-3">
+                            <input value={cm.type} onChange={e => updateCommittee(i, "type", e.target.value)} className="input-base text-sm" placeholder="Committee type (UN / Non-UN / Crisis...)" />
+                            <input value={cm.basePrice} onChange={e => updateCommittee(i, "basePrice", e.target.value)} className="input-base text-sm" placeholder="Committee base price (optional)" type="number" />
+                          </div>
+                          <input value={cm.agenda} onChange={e => updateCommittee(i, "agenda", e.target.value)} className="input-base text-sm" placeholder="Committee agenda" />
+                          <div className="grid grid-cols-2 gap-3">
+                            <input value={cm.chairName} onChange={e => updateCommittee(i, "chairName", e.target.value)} className="input-base text-sm" placeholder="Chair name" />
+                            <input value={cm.chairEmail} onChange={e => updateCommittee(i, "chairEmail", e.target.value)} className="input-base text-sm" placeholder="Chair email" />
+                          </div>
+                          <input
+                            value={cm.customQuestions}
+                            onChange={e => updateCommittee(i, "customQuestions", e.target.value)}
+                            className="input-base text-sm"
+                            placeholder="Custom questions (comma separated)"
+                          />
+                          <label className="flex items-center gap-2 text-xs" style={{ color: "var(--fg-muted)" }}>
+                            <input
+                              type="checkbox"
+                              checked={cm.isPublic}
+                              onChange={(event) =>
+                                setCommittees((prev) =>
+                                  prev.map((committee, idx) =>
+                                    idx === i ? { ...committee, isPublic: event.target.checked } : committee
+                                  )
+                                )
+                              }
+                            />
+                            Show committee on public conference page
+                          </label>
                         </div>
                       ))}
                       <button onClick={addCommittee} className="btn btn-ghost w-full text-sm" style={{ borderStyle: "dashed" }}>
                         + Add Another Committee
                       </button>
-                      <div className="flex gap-3">
-                        <button onClick={() => setStep(1)} className="btn btn-ghost flex-1">← Back</button>
-                        <button onClick={() => setStep(3)} disabled={!isStep2Valid} className="btn btn-primary flex-[2]" style={{ opacity: isStep2Valid ? 1 : 0.5 }}>
-                          Next: Pricing & Dates →
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Step 3: Pricing & Dates */}
-                  {step === 3 && (
-                    <div className="space-y-4">
                       <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-sm font-semibold mb-1.5" style={{ color: "var(--fg)" }}>Registration Fee (USD) *</label>
-                          <input value={regFee} onChange={e => setRegFee(e.target.value)} className="input-base" placeholder="e.g. 80" type="number" />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-semibold mb-1.5" style={{ color: "var(--fg)" }}>Delegate Capacity *</label>
-                          <input value={capacity} onChange={e => setCapacity(e.target.value)} className="input-base" placeholder="e.g. 300" type="number" />
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-sm font-semibold mb-1.5" style={{ color: "var(--fg)" }}>Start Date *</label>
-                          <input value={startDate} onChange={e => setStartDate(e.target.value)} className="input-base" type="date" />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-semibold mb-1.5" style={{ color: "var(--fg)" }}>End Date *</label>
-                          <input value={endDate} onChange={e => setEndDate(e.target.value)} className="input-base" type="date" />
-                        </div>
+                        <input value={startDate} onChange={e => setStartDate(e.target.value)} className="input-base" type="date" />
+                        <input value={endDate} onChange={e => setEndDate(e.target.value)} className="input-base" type="date" />
                       </div>
                       <div>
-                        <label className="block text-sm font-semibold mb-1.5" style={{ color: "var(--fg)" }}>Registration Deadline</label>
+                        <label className="block text-sm font-semibold mb-1.5" style={{ color: "var(--fg)" }}>Capacity *</label>
+                        <input value={capacity} onChange={e => setCapacity(e.target.value)} className="input-base" type="number" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-semibold mb-1.5" style={{ color: "var(--fg)" }}>Registration Deadline *</label>
                         <input value={deadline} onChange={e => setDeadline(e.target.value)} className="input-base" type="date" />
                       </div>
                       <div className="flex gap-3">
                         <button onClick={() => setStep(2)} className="btn btn-ghost flex-1">← Back</button>
                         <button onClick={() => setStep(4)} disabled={!isStep3Valid} className="btn btn-primary flex-[2]" style={{ opacity: isStep3Valid ? 1 : 0.5 }}>
-                          Review & Submit →
+                          Next: Pricing Phases →
                         </button>
                       </div>
                     </div>
                   )}
 
-                  {/* Step 4: Review */}
+                  {/* Step 4: Pricing Phases */}
                   {step === 4 && (
+                    <div className="space-y-5">
+                      {categories.map((category) => (
+                        <div key={category.id} className="rounded-2xl p-5 space-y-3" style={{ background: "var(--bg-subtle)", border: "1.5px solid var(--border)" }}>
+                          <div className="flex items-center justify-between">
+                            <h4 className="font-bold" style={{ color: "var(--fg)" }}>{category.name || "Untitled Category"}</h4>
+                            <button onClick={() => addPhase(category.id)} className="btn btn-ghost text-xs">+ Add Phase</button>
+                          </div>
+                          {category.pricingPhases.length === 0 && (
+                            <p className="text-xs" style={{ color: "var(--fg-muted)" }}>No phases added. Base category price will be used.</p>
+                          )}
+                          {category.pricingPhases.map((phase) => (
+                            <div key={phase.id} className="p-3 rounded-xl space-y-2" style={{ background: "var(--bg)" }}>
+                              <div className="grid grid-cols-2 gap-2">
+                                <input className="input-base text-sm" placeholder="Phase name" value={phase.name} onChange={(event) => updatePhase(category.id, phase.id, { name: event.target.value })} />
+                                <input className="input-base text-sm" placeholder="Phase price" type="number" value={phase.basePrice} onChange={(event) => updatePhase(category.id, phase.id, { basePrice: Number(event.target.value) })} />
+                              </div>
+                              <div className="grid grid-cols-2 gap-2">
+                                <input className="input-base text-sm" type="date" value={phase.startDate} onChange={(event) => updatePhase(category.id, phase.id, { startDate: event.target.value })} />
+                                <input className="input-base text-sm" type="date" value={phase.endDate} onChange={(event) => updatePhase(category.id, phase.id, { endDate: event.target.value })} />
+                              </div>
+                              {category.requiresCommitteeSelection && committees.length > 0 && (
+                                <div className="grid md:grid-cols-2 gap-2">
+                                  {committees.map((committee) => (
+                                    <input
+                                      key={committee.id}
+                                      className="input-base text-xs"
+                                      placeholder={`${committee.name || "Committee"} override`}
+                                      value={
+                                        phase.committeePrices.find((entry) => entry.committeeId === committee.id)?.price ?? ""
+                                      }
+                                      onChange={(event) => updateCommitteeOverride(category.id, phase.id, committee.id, event.target.value)}
+                                      type="number"
+                                    />
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                          {hasOverlappingPhases(category.pricingPhases) && (
+                            <p className="text-xs" style={{ color: "#dc2626" }}>Phases overlap. Adjust dates to continue.</p>
+                          )}
+                        </div>
+                      ))}
+                      <div className="flex gap-3">
+                        <button onClick={() => setStep(3)} className="btn btn-ghost flex-1">← Back</button>
+                        <button onClick={() => setStep(5)} disabled={!isStep4Valid} className="btn btn-primary flex-[2]" style={{ opacity: isStep4Valid ? 1 : 0.5 }}>
+                          Next: Build Forms →
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Step 5: Custom Forms */}
+                  {step === 5 && (
+                    <div className="space-y-5">
+                      {categories.map((category) => (
+                        <div key={category.id} className="rounded-2xl p-5 space-y-3" style={{ background: "var(--bg-subtle)", border: "1.5px solid var(--border)" }}>
+                          <div className="flex items-center justify-between">
+                            <h4 className="font-bold" style={{ color: "var(--fg)" }}>{category.name || "Untitled Category"}</h4>
+                            <button onClick={() => addField(category.id)} className="btn btn-ghost text-xs">+ Add Field</button>
+                          </div>
+                          {category.formFields.length === 0 && (
+                            <p className="text-xs" style={{ color: "var(--fg-muted)" }}>No custom fields added yet.</p>
+                          )}
+                          {category.formFields.map((field) => (
+                            <div key={field.id} className="p-3 rounded-xl space-y-2" style={{ background: "var(--bg)" }}>
+                              <div className="grid grid-cols-2 gap-2">
+                                <input
+                                  className="input-base text-sm"
+                                  placeholder="Field label"
+                                  value={field.label}
+                                  onChange={(event) => updateField(category.id, field.id, { label: event.target.value })}
+                                />
+                                <select
+                                  className="input-base text-sm"
+                                  value={field.type}
+                                  onChange={(event) => updateField(category.id, field.id, { type: event.target.value as DynamicFieldType })}
+                                >
+                                  {FIELD_TYPE_OPTIONS.map((type) => (
+                                    <option key={type} value={type}>{type}</option>
+                                  ))}
+                                </select>
+                              </div>
+                              <input
+                                className="input-base text-sm"
+                                placeholder="Placeholder text (optional)"
+                                value={field.placeholder || ""}
+                                onChange={(event) => updateField(category.id, field.id, { placeholder: event.target.value })}
+                              />
+                              {field.type === "select" && (
+                                <input
+                                  className="input-base text-sm"
+                                  placeholder="Options comma separated"
+                                  value={field.options?.join(", ") || ""}
+                                  onChange={(event) =>
+                                    updateField(category.id, field.id, {
+                                      options: event.target.value
+                                        .split(",")
+                                        .map((value) => value.trim())
+                                        .filter(Boolean),
+                                    })
+                                  }
+                                />
+                              )}
+                              <label className="flex items-center gap-2 text-xs" style={{ color: "var(--fg-muted)" }}>
+                                <input
+                                  type="checkbox"
+                                  checked={field.required}
+                                  onChange={(event) =>
+                                    updateField(category.id, field.id, { required: event.target.checked })
+                                  }
+                                />
+                                Required field
+                              </label>
+                            </div>
+                          ))}
+                        </div>
+                      ))}
+                      <div className="flex gap-3">
+                        <button onClick={() => setStep(4)} className="btn btn-ghost flex-1">← Back</button>
+                        <button onClick={() => setStep(6)} disabled={!isStep5Valid} className="btn btn-primary flex-[2]" style={{ opacity: isStep5Valid ? 1 : 0.5 }}>
+                          Next: Review →
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Step 6: Review */}
+                  {step === 6 && (
                     <div className="space-y-5">
                       <div className="rounded-2xl p-5 space-y-3" style={{ background: "var(--bg-subtle)", border: "1.5px solid var(--border)" }}>
                         {[
@@ -392,8 +926,8 @@ export default function OrganizersPage() {
                           { label: "Location", value: `${confCity}, ${confCountry}` },
                           { label: "Organizer", value: confOrg },
                           { label: "Level", value: level },
+                          { label: "Categories", value: categories.map((category) => category.name).filter(Boolean).join(", ") },
                           { label: "Committees", value: committees.filter(c => c.name).map(c => c.name).join(", ") },
-                          { label: "Fee", value: `$${regFee} USD` },
                           { label: "Capacity", value: `${capacity} delegates` },
                           { label: "Dates", value: `${startDate} to ${endDate}` },
                         ].map(r => (
@@ -407,7 +941,7 @@ export default function OrganizersPage() {
                         By submitting, you agree to Tidingz&apos;s Organizer Terms. Your conference will be reviewed within 48 hours.
                       </p>
                       <div className="flex gap-3">
-                        <button onClick={() => setStep(3)} className="btn btn-ghost flex-1">← Back</button>
+                        <button onClick={() => setStep(5)} className="btn btn-ghost flex-1">← Back</button>
                         <button onClick={handleSubmit} className="btn btn-primary flex-[2]">
                           🚀 Submit Conference
                         </button>

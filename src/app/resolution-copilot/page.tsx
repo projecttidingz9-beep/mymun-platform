@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef } from "react";
 import Link from "next/link";
 import Navbar from "@/components/Navbar";
 import { useAuth } from "@/lib/auth-context";
@@ -34,7 +34,7 @@ const AI_PROMPTS = [
     label: "Draft Operative Clauses",
     emoji: "⚙️",
     color: "#7c3aed",
-    generate: (content: string) =>
+    generate: () =>
       `Here are operative clauses to strengthen your resolution:\n\n` +
       `1. **Calls upon** all member states to cooperate fully with the established framework...\n` +
       `2. **Urges** the Secretary-General to appoint a Special Envoy to facilitate dialogue...\n` +

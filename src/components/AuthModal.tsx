@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import Image from "next/image";
 import { useAuth } from "@/lib/auth-context";
 
 interface AuthModalProps {
@@ -19,15 +20,15 @@ export default function AuthModal({ isOpen, onClose, defaultTab = "signin" }: Au
   const [loading, setLoading] = useState(false);
   const overlayRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    if (isOpen) {
-      setTab(defaultTab);
-      setError("");
-      setEmail("");
-      setPassword("");
-      setName("");
-    }
-  }, [isOpen, defaultTab]);
+  const closeModal = () => {
+    setTab(defaultTab);
+    setError("");
+    setEmail("");
+    setPassword("");
+    setName("");
+    setLoading(false);
+    onClose();
+  };
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => e.key === "Escape" && onClose();
@@ -49,14 +50,13 @@ export default function AuthModal({ isOpen, onClose, defaultTab = "signin" }: Au
     setLoading(true);
     await new Promise(r => setTimeout(r, 900)); // Simulate API
     login(email, tab === "register" ? name : undefined);
-    setLoading(false);
-    onClose();
+    closeModal();
   };
 
   return (
     <div
       ref={overlayRef}
-      onClick={(e) => { if (e.target === overlayRef.current) onClose(); }}
+      onClick={(e) => { if (e.target === overlayRef.current) closeModal(); }}
       className="fixed inset-0 z-[999] flex items-center justify-center p-4"
       style={{ background: "rgba(0,0,0,0.5)", backdropFilter: "blur(8px)" }}
     >
@@ -77,15 +77,17 @@ export default function AuthModal({ isOpen, onClose, defaultTab = "signin" }: Au
         >
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-2.5">
-              <img
+              <Image
                 src="/tidingz-logo.png"
                 alt="Tidingz logo"
+                width={32}
+                height={32}
                 className="w-8 h-8 rounded-xl object-cover border border-white/25"
               />
               <span className="text-white font-bold">Tidingz</span>
             </div>
             <button
-              onClick={onClose}
+              onClick={closeModal}
               className="w-8 h-8 rounded-xl flex items-center justify-center text-white/70 hover:text-white hover:bg-white/10 transition-all"
             >
               ✕

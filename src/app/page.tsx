@@ -317,7 +317,7 @@ export default function HomePage() {
           </div>
           <div className="grid md:grid-cols-3 gap-6">
             {featured.map((c) => (
-              <ConferenceCard key={c.id} conference={c} featured />
+              <ConferenceCard key={c.id} conference={c} />
             ))}
           </div>
           <div className="mt-8 text-center md:hidden">
