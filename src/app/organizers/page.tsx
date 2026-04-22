@@ -76,6 +76,17 @@ const TIERS = [
 
 const FIELD_TYPE_OPTIONS: DynamicFieldType[] = ["text", "textarea", "select", "number", "date", "checkbox"];
 const STEPS = ["Event Basics", "Registration Categories", "Committees", "Pricing Phases", "Custom Forms", "Review & Submit"];
+const COMMITTEE_TYPE_OPTIONS = [
+  { value: "UN", label: "UN Committee" },
+  { value: "NON_UN", label: "Non-UN Committee" },
+  { value: "CUSTOM", label: "Custom Type" },
+] as const;
+
+const getCommitteeTypeLabel = (committee: { committeeType: "UN" | "NON_UN" | "CUSTOM"; customTypeLabel: string }) => {
+  if (committee.committeeType === "UN") return "UN";
+  if (committee.committeeType === "NON_UN") return "Non-UN";
+  return committee.customTypeLabel.trim() || "Custom";
+};
 
 export default function OrganizersPage() {
   const router = useRouter();
@@ -101,7 +112,8 @@ export default function OrganizersPage() {
       id: "cm-1",
       name: "",
       agenda: "",
-      type: "UN",
+      committeeType: "UN" as "UN" | "NON_UN" | "CUSTOM",
+      customTypeLabel: "",
       seatCount: "",
       basePrice: "",
       chairName: "",
@@ -151,7 +163,8 @@ export default function OrganizersPage() {
         id: nextId("cm"),
         name: "",
         agenda: "",
-        type: "Custom",
+        committeeType: "UN" as "UN" | "NON_UN" | "CUSTOM",
+        customTypeLabel: "",
         seatCount: "",
         basePrice: "",
         chairName: "",
@@ -166,7 +179,8 @@ export default function OrganizersPage() {
     field:
       | "name"
       | "agenda"
-      | "type"
+      | "committeeType"
+      | "customTypeLabel"
       | "seatCount"
       | "basePrice"
       | "chairName"
@@ -365,7 +379,10 @@ export default function OrganizersPage() {
           id: committee.id || `cm-${Date.now()}-${index}`,
           name: committee.name,
           agenda: committee.agenda,
-          type: committee.type || undefined,
+          committeeType: committee.committeeType,
+          customTypeLabel:
+            committee.committeeType === "CUSTOM" ? committee.customTypeLabel.trim() || undefined : undefined,
+          type: getCommitteeTypeLabel(committee),
           seatCount: Number(committee.seatCount) || 0,
           basePrice: committee.basePrice ? Number(committee.basePrice) : undefined,
           chairName: committee.chairName || undefined,
@@ -734,9 +751,27 @@ export default function OrganizersPage() {
                             <input value={cm.seatCount} onChange={e => updateCommittee(i, "seatCount", e.target.value)} className="input-base text-sm" placeholder="Seat count" type="number" />
                           </div>
                           <div className="grid grid-cols-2 gap-3">
-                            <input value={cm.type} onChange={e => updateCommittee(i, "type", e.target.value)} className="input-base text-sm" placeholder="Committee type (UN / Non-UN / Crisis...)" />
+                            <select
+                              value={cm.committeeType}
+                              onChange={(event) => updateCommittee(i, "committeeType", event.target.value as "UN" | "NON_UN" | "CUSTOM")}
+                              className="input-base text-sm"
+                            >
+                              {COMMITTEE_TYPE_OPTIONS.map((option) => (
+                                <option key={option.value} value={option.value}>
+                                  {option.label}
+                                </option>
+                              ))}
+                            </select>
                             <input value={cm.basePrice} onChange={e => updateCommittee(i, "basePrice", e.target.value)} className="input-base text-sm" placeholder="Committee base price (optional)" type="number" />
                           </div>
+                          {cm.committeeType === "CUSTOM" && (
+                            <input
+                              value={cm.customTypeLabel}
+                              onChange={(event) => updateCommittee(i, "customTypeLabel", event.target.value)}
+                              className="input-base text-sm"
+                              placeholder="Custom committee type (e.g. Lok Sabha / AIPPM)"
+                            />
+                          )}
                           <input value={cm.agenda} onChange={e => updateCommittee(i, "agenda", e.target.value)} className="input-base text-sm" placeholder="Committee agenda" />
                           <div className="grid grid-cols-2 gap-3">
                             <input value={cm.chairName} onChange={e => updateCommittee(i, "chairName", e.target.value)} className="input-base text-sm" placeholder="Chair name" />

@@ -18,15 +18,28 @@ export interface OrganizerCommittee {
   id: string;
   name: string;
   agenda: string;
+  description?: string;
+  logoImageUrl?: string;
+  committeeType?: "UN" | "NON_UN" | "CUSTOM";
+  customTypeLabel?: string;
+  memberMode?: "UN_COUNTRY" | "CUSTOM_MEMBER";
+  // Backward-compatible display type persisted by older records.
   type?: string;
   seatCount: number;
   allottedCount?: number;
   basePrice?: number;
   chairName?: string;
   chairEmail?: string;
+  chairs?: OrganizerCommitteeChair[];
   isPublic?: boolean;
   customQuestions?: OrganizerCommitteeQuestion[];
   portfolios?: OrganizerCommitteePortfolio[];
+}
+
+export interface OrganizerCommitteeChair {
+  id: string;
+  name: string;
+  email?: string;
 }
 
 export interface OrganizerCommitteeQuestion {
@@ -202,6 +215,8 @@ export interface OrganizerConference {
   socialLinks?: OrganizerSocialLinks;
   brandPrimaryColor?: string;
   brandSecondaryColor?: string;
+  bankingDetails?: OrganizerBankingDetails;
+  statusEmailTemplates?: OrganizerStatusEmailTemplates;
   status: "Draft" | "Review" | "Published";
   registrationCategories: RegistrationCategory[];
   committees: OrganizerCommittee[];
@@ -268,6 +283,35 @@ export interface OrganizerSocialLinks {
   linkedin?: string;
   twitter?: string;
 }
+
+export interface OrganizerBankingDetails {
+  accountHolderName?: string;
+  bankName?: string;
+  accountNumber?: string;
+  accountType?: "Savings" | "Current" | "Checking" | "Other";
+  ifscCode?: string;
+  swiftCode?: string;
+  iban?: string;
+  routingNumber?: string;
+  branchName?: string;
+  branchAddress?: string;
+  upiId?: string;
+  payoutNotes?: string;
+  verificationStatus?: "Unverified" | "Pending" | "Verified";
+  updatedAt?: string;
+}
+
+export type OrganizerStatusEmailTemplateKey = "allotted" | "rejected" | "waitlisted" | "invited";
+
+export interface OrganizerStatusEmailTemplate {
+  subject: string;
+  body: string;
+}
+
+export type OrganizerStatusEmailTemplates = Record<
+  OrganizerStatusEmailTemplateKey,
+  OrganizerStatusEmailTemplate
+>;
 
 export interface OrganizerOverviewAnalytics {
   totalRegistrations: number;

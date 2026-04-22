@@ -6,9 +6,12 @@ import {
   DelegateMunAward,
   DelegateMunParticipation,
   OrganizerAwardConfig,
+  OrganizerBankingDetails,
   OrganizerCommittee,
   OrganizerCommitteeQuestion,
   OrganizerSocialLinks,
+  OrganizerStatusEmailTemplateKey,
+  OrganizerStatusEmailTemplates,
   User,
   Registration,
   OrganizerConference,
@@ -17,6 +20,136 @@ import {
   UserNotification,
 } from "./types";
 import { MOCK_USER, MOCK_ORGANIZER_CONFERENCES } from "./data";
+
+const buildDefaultStatusEmailTemplates = (conferenceTitle: string): OrganizerStatusEmailTemplates => ({
+  allotted: {
+    subject: `Application accepted - ${conferenceTitle}`,
+    body: `Hi {{applicantName}},\n\nYour application for {{conferenceTitle}} has been accepted.\nStatus: {{status}}\nCommittee: {{assignedCommittee}}\nCountry/Portfolio: {{assignedPortfolio}}\n\nRegards,\n{{conferenceTitle}} Organizing Team`,
+  },
+  rejected: {
+    subject: `Application update - ${conferenceTitle}`,
+    body: `Hi {{applicantName}},\n\nThank you for applying to {{conferenceTitle}}.\nWe regret to inform you that your application is currently {{status}}.\n\nRegards,\n{{conferenceTitle}} Organizing Team`,
+  },
+  waitlisted: {
+    subject: `Application waitlisted - ${conferenceTitle}`,
+    body: `Hi {{applicantName}},\n\nYour application for {{conferenceTitle}} has been moved to {{status}}.\nWe will contact you if a seat opens up.\n\nRegards,\n{{conferenceTitle}} Organizing Team`,
+  },
+  invited: {
+    subject: `Invitation update - ${conferenceTitle}`,
+    body: `Hi {{applicantName}},\n\nYou are {{status}} for {{conferenceTitle}}.\nPlease complete the required next steps to confirm your participation.\n\nRegards,\n{{conferenceTitle}} Organizing Team`,
+  },
+});
+
+const normalizeStatusEmailTemplates = (
+  raw: unknown,
+  conferenceTitle: string
+): OrganizerStatusEmailTemplates => {
+  const defaults = buildDefaultStatusEmailTemplates(conferenceTitle);
+  const value = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+  const readTemplate = (key: OrganizerStatusEmailTemplateKey) => {
+    const maybeTemplate = value[key];
+    if (!maybeTemplate || typeof maybeTemplate !== "object") return defaults[key];
+    const template = maybeTemplate as Record<string, unknown>;
+    const subject =
+      typeof template.subject === "string" && template.subject.trim()
+        ? template.subject
+        : defaults[key].subject;
+    const body =
+      typeof template.body === "string" && template.body.trim()
+        ? template.body
+        : defaults[key].body;
+    return { subject, body };
+  };
+
+  return {
+    allotted: readTemplate("allotted"),
+    rejected: readTemplate("rejected"),
+    waitlisted: readTemplate("waitlisted"),
+    invited: readTemplate("invited"),
+  };
+};
+
+const statusToTemplateKey = (
+  status: OrganizerApplicant["status"]
+): OrganizerStatusEmailTemplateKey | null => {
+  if (status === "Allotted") return "allotted";
+  if (status === "Rejected") return "rejected";
+  if (status === "Waitlisted") return "waitlisted";
+  if (status === "Invited") return "invited";
+  return null;
+};
+
+const getCommitteeTypeLabel = (committee: Partial<OrganizerCommittee>): string => {
+  if (committee.committeeType === "UN") return "UN";
+  if (committee.committeeType === "NON_UN") return "Non-UN";
+  if (committee.committeeType === "CUSTOM") {
+    return committee.customTypeLabel?.trim() || committee.type?.trim() || "Custom";
+  }
+  const legacyType = committee.type?.trim();
+  if (!legacyType) return "UN";
+  if (legacyType.toLowerCase() === "un") return "UN";
+  if (legacyType.toLowerCase() === "non-un" || legacyType.toLowerCase() === "non un") return "Non-UN";
+  return legacyType;
+};
+
+const normalizeCommitteeType = (
+  rawCommittee: Record<string, unknown>
+): Pick<OrganizerCommittee, "committeeType" | "customTypeLabel" | "type" | "memberMode"> => {
+  const normalizedType = typeof rawCommittee.committeeType === "string"
+    ? rawCommittee.committeeType.toUpperCase()
+    : "";
+  const normalizedMemberMode = typeof rawCommittee.memberMode === "string"
+    ? rawCommittee.memberMode.toUpperCase()
+    : "";
+  const customTypeLabel = rawCommittee.customTypeLabel
+    ? String(rawCommittee.customTypeLabel).trim()
+    : "";
+  const legacyType = rawCommittee.type ? String(rawCommittee.type).trim() : "";
+  const inferMemberMode = (committeeType: OrganizerCommittee["committeeType"]): OrganizerCommittee["memberMode"] =>
+    normalizedMemberMode === "UN_COUNTRY" || normalizedMemberMode === "CUSTOM_MEMBER"
+      ? (normalizedMemberMode as OrganizerCommittee["memberMode"])
+      : committeeType === "UN"
+        ? "UN_COUNTRY"
+        : "CUSTOM_MEMBER";
+
+  if (normalizedType === "UN") {
+    return { committeeType: "UN", customTypeLabel: undefined, type: "UN", memberMode: inferMemberMode("UN") };
+  }
+  if (normalizedType === "NON_UN") {
+    return {
+      committeeType: "NON_UN",
+      customTypeLabel: undefined,
+      type: "Non-UN",
+      memberMode: inferMemberMode("NON_UN"),
+    };
+  }
+  if (normalizedType === "CUSTOM") {
+    const customLabel = customTypeLabel || legacyType || "Custom";
+    return {
+      committeeType: "CUSTOM",
+      customTypeLabel: customLabel,
+      type: customLabel,
+      memberMode: inferMemberMode("CUSTOM"),
+    };
+  }
+  if (!legacyType || legacyType.toLowerCase() === "un") {
+    return { committeeType: "UN", customTypeLabel: undefined, type: "UN", memberMode: inferMemberMode("UN") };
+  }
+  if (legacyType.toLowerCase() === "non-un" || legacyType.toLowerCase() === "non un") {
+    return {
+      committeeType: "NON_UN",
+      customTypeLabel: undefined,
+      type: "Non-UN",
+      memberMode: inferMemberMode("NON_UN"),
+    };
+  }
+  return {
+    committeeType: "CUSTOM",
+    customTypeLabel: legacyType,
+    type: legacyType,
+    memberMode: inferMemberMode("CUSTOM"),
+  };
+};
 
 const normalizeOrganizerConference = (raw: unknown): OrganizerConference | null => {
   if (!raw || typeof raw !== "object") return null;
@@ -47,7 +180,9 @@ const normalizeOrganizerConference = (raw: unknown): OrganizerConference | null 
           id: String(committee.id ?? `cm-${index}`),
           name: String(committee.name ?? "Committee"),
           agenda: String(committee.agenda ?? committee.topic ?? "Agenda will be announced"),
-          type: committee.type ? String(committee.type) : undefined,
+          description: committee.description ? String(committee.description) : undefined,
+          logoImageUrl: committee.logoImageUrl ? String(committee.logoImageUrl) : undefined,
+          ...normalizeCommitteeType(committee),
           seatCount: Number(committee.seatCount ?? committee.size ?? 0),
           allottedCount: Number(committee.allottedCount ?? 0),
           basePrice:
@@ -65,6 +200,24 @@ const normalizeOrganizerConference = (raw: unknown): OrganizerConference | null 
                 } as OrganizerCommitteeQuestion;
               })
             : [],
+          chairs: Array.isArray(committee.chairs)
+            ? committee.chairs.map((chair, chairIndex) => {
+                const rawChair = chair as Record<string, unknown>;
+                return {
+                  id: String(rawChair.id ?? `chair-${index}-${chairIndex}`),
+                  name: String(rawChair.name ?? ""),
+                  email: rawChair.email ? String(rawChair.email) : undefined,
+                };
+              }).filter((chair) => chair.name.trim())
+            : committee.chairName
+              ? [
+                  {
+                    id: `chair-${index}-0`,
+                    name: String(committee.chairName),
+                    email: committee.chairEmail ? String(committee.chairEmail) : undefined,
+                  },
+                ]
+              : [],
           portfolios,
         };
       })
@@ -135,6 +288,46 @@ const normalizeOrganizerConference = (raw: unknown): OrganizerConference | null 
       })
     : [];
 
+  const bankingDetailsRaw =
+    typeof conference.bankingDetails === "object" && conference.bankingDetails !== null
+      ? (conference.bankingDetails as Record<string, unknown>)
+      : null;
+  const bankingDetails: OrganizerBankingDetails | undefined = bankingDetailsRaw
+    ? {
+        accountHolderName: bankingDetailsRaw.accountHolderName
+          ? String(bankingDetailsRaw.accountHolderName).trim()
+          : undefined,
+        bankName: bankingDetailsRaw.bankName ? String(bankingDetailsRaw.bankName).trim() : undefined,
+        accountNumber: bankingDetailsRaw.accountNumber
+          ? String(bankingDetailsRaw.accountNumber).trim()
+          : undefined,
+        accountType:
+          bankingDetailsRaw.accountType === "Savings" ||
+          bankingDetailsRaw.accountType === "Current" ||
+          bankingDetailsRaw.accountType === "Checking" ||
+          bankingDetailsRaw.accountType === "Other"
+            ? bankingDetailsRaw.accountType
+            : undefined,
+        ifscCode: bankingDetailsRaw.ifscCode ? String(bankingDetailsRaw.ifscCode).trim() : undefined,
+        swiftCode: bankingDetailsRaw.swiftCode ? String(bankingDetailsRaw.swiftCode).trim() : undefined,
+        iban: bankingDetailsRaw.iban ? String(bankingDetailsRaw.iban).trim() : undefined,
+        routingNumber: bankingDetailsRaw.routingNumber
+          ? String(bankingDetailsRaw.routingNumber).trim()
+          : undefined,
+        branchName: bankingDetailsRaw.branchName ? String(bankingDetailsRaw.branchName).trim() : undefined,
+        branchAddress: bankingDetailsRaw.branchAddress
+          ? String(bankingDetailsRaw.branchAddress).trim()
+          : undefined,
+        upiId: bankingDetailsRaw.upiId ? String(bankingDetailsRaw.upiId).trim() : undefined,
+        payoutNotes: bankingDetailsRaw.payoutNotes ? String(bankingDetailsRaw.payoutNotes) : undefined,
+        verificationStatus:
+          bankingDetailsRaw.verificationStatus === "Pending" || bankingDetailsRaw.verificationStatus === "Verified"
+            ? bankingDetailsRaw.verificationStatus
+            : "Unverified",
+        updatedAt: bankingDetailsRaw.updatedAt ? String(bankingDetailsRaw.updatedAt) : undefined,
+      }
+    : undefined;
+
   return {
     id: String(conference.id ?? `org-${Date.now()}`),
     title: String(conference.title ?? "Untitled Conference"),
@@ -171,6 +364,11 @@ const normalizeOrganizerConference = (raw: unknown): OrganizerConference | null 
       conference.brandPrimaryColor === undefined ? undefined : String(conference.brandPrimaryColor),
     brandSecondaryColor:
       conference.brandSecondaryColor === undefined ? undefined : String(conference.brandSecondaryColor),
+    bankingDetails,
+    statusEmailTemplates: normalizeStatusEmailTemplates(
+      conference.statusEmailTemplates,
+      String(conference.title ?? "Conference")
+    ),
     partnerConferenceIds: Array.isArray(conference.partnerConferenceIds)
       ? conference.partnerConferenceIds.map((entry) => String(entry))
       : [],
@@ -363,12 +561,14 @@ interface AuthContextType {
         | "socialLinks"
         | "brandPrimaryColor"
         | "brandSecondaryColor"
+        | "bankingDetails"
         | "partnerConferenceIds"
         | "previousEditions"
         | "delegationInviteCode"
         | "organizerTeam"
         | "awards"
         | "reviews"
+        | "statusEmailTemplates"
       >
     >
   ) => void;
@@ -377,6 +577,8 @@ interface AuthContextType {
     committeeId: string,
     patch: Partial<OrganizerCommittee>
   ) => void;
+  addOrganizerCommittee: (conferenceId: string, committee: Omit<OrganizerCommittee, "id" | "allottedCount">) => void;
+  removeOrganizerCommittee: (conferenceId: string, committeeId: string) => void;
   updateRegistrationCategoryConfig: (
     conferenceId: string,
     categoryId: string,
@@ -438,6 +640,8 @@ const AuthContext = createContext<AuthContextType>({
   updateOrganizerConferenceStatus: () => {},
   updateOrganizerConferenceConfig: () => {},
   updateOrganizerCommitteeConfig: () => {},
+  addOrganizerCommittee: () => {},
+  removeOrganizerCommittee: () => {},
   updateRegistrationCategoryConfig: () => {},
   addConferenceReview: () => {},
   moderateConferenceReview: () => {},
@@ -583,6 +787,53 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.setItem("tidingz_organizer_conferences", JSON.stringify(normalized));
   };
 
+  const triggerStatusEmail = ({
+    conference,
+    applicant,
+    status,
+    assignedCommitteeName,
+    assignedPortfolioName,
+  }: {
+    conference: OrganizerConference;
+    applicant: OrganizerApplicant;
+    status: OrganizerApplicant["status"];
+    assignedCommitteeName?: string;
+    assignedPortfolioName?: string;
+  }) => {
+    const templateKey = statusToTemplateKey(status);
+    if (!templateKey) return;
+    const recipientEmail = applicant.userEmail || user?.email;
+    if (!recipientEmail) return;
+    const templates = conference.statusEmailTemplates || buildDefaultStatusEmailTemplates(conference.title);
+    const selectedTemplate = templates[templateKey];
+    if (!selectedTemplate?.subject?.trim() || !selectedTemplate?.body?.trim()) return;
+
+    void fetch("/api/organizers/send-status-email", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({
+        to: recipientEmail,
+        templateKey,
+        subjectTemplate: selectedTemplate.subject,
+        bodyTemplate: selectedTemplate.body,
+        context: {
+          applicantName: applicant.name,
+          conferenceTitle: conference.title,
+          status,
+          assignedCommittee: assignedCommitteeName || applicant.assignedCommitteeName || "Not assigned",
+          assignedPortfolio: assignedPortfolioName || applicant.assignedPortfolioName || "Not assigned",
+        },
+      }),
+    })
+      .then(async (response) => {
+        if (response.ok) return;
+        const payload = (await response.json().catch(() => ({}))) as { error?: string };
+        console.warn("Status email dispatch failed:", payload.error || response.statusText);
+      })
+      .catch(() => undefined);
+  };
+
   const persistNotifications = (next: UserNotification[]) => {
     setNotifications(next);
     localStorage.setItem("tidingz_notifications", JSON.stringify(next));
@@ -630,6 +881,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         status: "Review",
         applicants: [],
         announcements: [],
+        statusEmailTemplates: normalizeStatusEmailTemplates(payload.statusEmailTemplates, payload.title),
       },
       ...current,
     ];
@@ -677,6 +929,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         committees: conference.committees.map((committee) =>
           committee.id === committeeId ? { ...committee, ...patch } : committee
         ),
+      };
+    });
+    persistOrganizerConferences(next);
+  };
+
+  const addOrganizerCommittee: AuthContextType["addOrganizerCommittee"] = (conferenceId, committee) => {
+    const current = ensureOrganizerSeed(organizerConferences);
+    const next = current.map((conference) => {
+      if (conference.id !== conferenceId) return conference;
+      const nextCommittee: OrganizerCommittee = {
+        ...committee,
+        id: `cm-${Date.now()}`,
+        allottedCount: 0,
+        type: getCommitteeTypeLabel(committee),
+        memberMode:
+          committee.memberMode || (committee.committeeType === "UN" ? "UN_COUNTRY" : "CUSTOM_MEMBER"),
+        description: committee.description || undefined,
+        logoImageUrl: committee.logoImageUrl || undefined,
+        chairs: committee.chairs ?? [],
+      };
+      return {
+        ...conference,
+        committees: [...conference.committees, nextCommittee],
+      };
+    });
+    persistOrganizerConferences(next);
+  };
+
+  const removeOrganizerCommittee: AuthContextType["removeOrganizerCommittee"] = (conferenceId, committeeId) => {
+    const current = ensureOrganizerSeed(organizerConferences);
+    const next = current.map((conference) => {
+      if (conference.id !== conferenceId) return conference;
+      return {
+        ...conference,
+        committees: conference.committees.filter((committee) => committee.id !== committeeId),
       };
     });
     persistOrganizerConferences(next);
@@ -780,6 +1067,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       };
     });
     persistOrganizerConferences(next);
+    const targetConference = next.find((conference) => conference.id === conferenceId);
+    const targetApplicant = targetConference?.applicants.find((applicant) => applicant.id === applicantId);
+    if (targetConference && targetApplicant) {
+      triggerStatusEmail({ conference: targetConference, applicant: targetApplicant, status });
+    }
   };
 
   const toggleApplicantPayment: AuthContextType["toggleApplicantPayment"] = (conferenceId, applicantId) => {
@@ -928,6 +1220,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       read: false,
     });
 
+    const updatedConference = next.find((entry) => entry.id === conferenceId);
+    const updatedApplicant = updatedConference?.applicants.find((entry) => entry.id === applicantId);
+    if (updatedConference && updatedApplicant) {
+      triggerStatusEmail({
+        conference: updatedConference,
+        applicant: updatedApplicant,
+        status: "Allotted",
+        assignedCommitteeName: committee.name,
+        assignedPortfolioName: portfolioName,
+      });
+    }
+
     return { ok: true, message: "Applicant allotted successfully." };
   };
 
@@ -1033,6 +1337,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       createdAt: new Date().toISOString(),
       read: false,
     });
+    const updatedConference = next.find((entry) => entry.id === conferenceId);
+    const updatedApplicant = updatedConference?.applicants.find((entry) => entry.id === applicantId);
+    if (updatedConference && updatedApplicant) {
+      triggerStatusEmail({ conference: updatedConference, applicant: updatedApplicant, status: "Waitlisted" });
+    }
     return { ok: true, message: "Applicant waitlisted." };
   };
 
@@ -1078,6 +1387,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       createdAt: new Date().toISOString(),
       read: false,
     });
+    const updatedConference = next.find((entry) => entry.id === conferenceId);
+    const updatedApplicant = updatedConference?.applicants.find((entry) => entry.id === applicantId);
+    if (updatedConference && updatedApplicant) {
+      triggerStatusEmail({ conference: updatedConference, applicant: updatedApplicant, status: "Invited" });
+    }
     return { ok: true, message: "Applicant marked as invited." };
   };
 
@@ -1132,6 +1446,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         updateOrganizerConferenceStatus,
         updateOrganizerConferenceConfig,
         updateOrganizerCommitteeConfig,
+        addOrganizerCommittee,
+        removeOrganizerCommittee,
         updateRegistrationCategoryConfig,
         addConferenceReview,
         moderateConferenceReview,
