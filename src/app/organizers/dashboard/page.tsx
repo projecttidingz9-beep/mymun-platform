@@ -423,8 +423,9 @@ export default function OrganizerDashboardPage() {
     }
     const reader = new FileReader();
     reader.onload = () => {
-      if (typeof reader.result === "string") {
-        setDetailsEditorDraft((prev) => ({ ...prev, logoImageUrl: reader.result }));
+      const result = reader.result;
+      if (typeof result === "string") {
+        setDetailsEditorDraft((prev) => ({ ...prev, logoImageUrl: result }));
       }
     };
     reader.readAsDataURL(selectedFile);
