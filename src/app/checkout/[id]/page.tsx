@@ -20,6 +20,28 @@ const COUNTRIES = [
 
 const createConfirmationId = () => `MYM-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
 
+const parseDayNumber = (value?: string) => {
+  if (!value) return null;
+  const parsed = new Date(value).setHours(0, 0, 0, 0);
+  return Number.isNaN(parsed) ? null : parsed;
+};
+
+const getCategoryTypeLabel = (applicationType?: RegistrationCategory["applicationType"]) => {
+  if (applicationType === "delegation") return "Delegation";
+  if (applicationType === "chair") return "Chair";
+  if (applicationType === "organizer") return "Organizer Team";
+  if (applicationType === "other") return "Custom";
+  return "Delegate";
+};
+
+const getCategoryTypeHint = (applicationType?: RegistrationCategory["applicationType"]) => {
+  if (applicationType === "delegation") return "This category is intended for delegation-level applications.";
+  if (applicationType === "chair") return "This category is intended for executive board and chair applications.";
+  if (applicationType === "organizer") return "This category is intended for organizer team applications.";
+  if (applicationType === "other") return "This category uses organizer-defined custom criteria.";
+  return "This category is intended for delegate applications.";
+};
+
 export default function CheckoutPage() {
   const params = useParams();
   const router = useRouter();
@@ -48,23 +70,29 @@ export default function CheckoutPage() {
   const marketplaceConference = CONFERENCES.find((conference) => conference.id === params.id);
 
   useEffect(() => {
-    if (!isLoggedIn) router.push("/");
-  }, [isLoggedIn, router]);
-
-  if (!organizerConference && !marketplaceConference) return null;
+    if (!isLoggedIn) {
+      router.push("/");
+      return;
+    }
+    if (user?.role === "organizer") {
+      router.push(`/conference/${String(params.id)}`);
+    }
+  }, [isLoggedIn, user?.role, router, params.id]);
 
   const displayTitle = organizerConference?.title || marketplaceConference?.title || "Conference";
   const displayCity = organizerConference?.city || marketplaceConference?.city || "";
   const displayStartDate = organizerConference?.startDate || marketplaceConference?.startDate || "";
   const currencySymbol = marketplaceConference?.currency === "EUR" ? "€" : marketplaceConference?.currency === "GBP" ? "£" : "$";
 
-  const categories: RegistrationCategory[] = organizerConference
+  const rawCategories: RegistrationCategory[] = organizerConference
     ? organizerConference.registrationCategories
     : [
         {
           id: "default-delegate",
           name: "Delegate Registration",
           description: "Standard delegate registration",
+          applicationType: "delegate",
+          isOpen: true,
           basePrice: marketplaceConference?.price || 0,
           requiresCommitteeSelection: true,
           formFields: [
@@ -79,6 +107,13 @@ export default function CheckoutPage() {
           pricingPhases: [],
         },
       ];
+  const todayDay = new Date().setHours(0, 0, 0, 0);
+  const categories = rawCategories.filter((category) => {
+    if (category.isOpen === false) return false;
+    const deadline = parseDayNumber(category.deadlineOverride);
+    if (deadline !== null && todayDay > deadline) return false;
+    return true;
+  });
 
   const committees: OrganizerCommittee[] = organizerConference
     ? organizerConference.committees
@@ -95,6 +130,14 @@ export default function CheckoutPage() {
   const selectedCommittee = committees.find((committee) => committee.id === selectedCommitteeId);
   const selectedCommitteePortfolios =
     committees.find((committee) => committee.id === selectedCommitteeId)?.portfolios ?? [];
+  const delegationSizeRaw = Number(answers.delegation_size ?? 0);
+  const isDelegationCategory = selectedCategory?.applicationType === "delegation";
+  const delegationSizeValid =
+    !isDelegationCategory ||
+    (Number.isFinite(delegationSizeRaw) &&
+      delegationSizeRaw >= 1 &&
+      (selectedCategory?.maxDelegatesPerDelegation === undefined ||
+        delegationSizeRaw <= selectedCategory.maxDelegatesPerDelegation));
   const priceResult = selectedCategory
     ? resolveRegistrationPrice(selectedCategory, selectedCommitteeId || undefined)
     : { amount: 0, phaseId: undefined, phaseName: undefined };
@@ -143,9 +186,13 @@ export default function CheckoutPage() {
   const isStep1Valid = !!selectedCategoryId;
   const isStep2Valid = !!selectedCategory && selectedCategory.formFields.every(
     (field) => !field.required || answers[field.id] !== undefined
-  );
+  ) && delegationSizeValid;
   const isStep3Valid = !selectedCategory?.requiresCommitteeSelection || !!selectedCommitteeId;
   const isStep4Valid = cardNumber.replace(/\s/g, "").length === 16 && !!cardName && expiry.length === 5 && cvv.length >= 3;
+
+  if (user?.role === "organizer") return null;
+
+  if (!organizerConference && !marketplaceConference) return null;
 
   return (
     <>
@@ -180,6 +227,11 @@ export default function CheckoutPage() {
           {step === 1 && (
             <div className="card p-8 rounded-2xl space-y-4">
               <h2 className="text-xl font-bold" style={{ color: "var(--fg)" }}>Choose Category</h2>
+              {categories.length === 0 && (
+                <p className="text-sm" style={{ color: "var(--fg-muted)" }}>
+                  No registration categories are currently open for this conference.
+                </p>
+              )}
               {categories.map((category) => (
                 <button
                   key={category.id}
@@ -194,6 +246,9 @@ export default function CheckoutPage() {
                     <span className="font-bold text-sm" style={{ color: "var(--fg)" }}>{category.name}</span>
                     <span className="badge badge-blue">${category.basePrice}</span>
                   </div>
+                  <p className="text-[11px] mt-1" style={{ color: "var(--blue)" }}>
+                    {getCategoryTypeLabel(category.applicationType)}
+                  </p>
                   <p className="text-xs mt-1" style={{ color: "var(--fg-muted)" }}>{category.description || "No description provided."}</p>
                 </button>
               ))}
@@ -211,6 +266,14 @@ export default function CheckoutPage() {
           {step === 2 && selectedCategory && (
             <div className="card p-8 rounded-2xl space-y-4">
               <h2 className="text-xl font-bold" style={{ color: "var(--fg)" }}>{selectedCategory.name} Form</h2>
+              <div className="rounded-xl p-3" style={{ background: "var(--bg-subtle)", border: "1px solid var(--border)" }}>
+                <p className="text-xs font-semibold" style={{ color: "var(--fg)" }}>
+                  Category Type: {getCategoryTypeLabel(selectedCategory.applicationType)}
+                </p>
+                <p className="text-xs mt-1" style={{ color: "var(--fg-muted)" }}>
+                  {getCategoryTypeHint(selectedCategory.applicationType)}
+                </p>
+              </div>
               <input value={fullName} onChange={(event) => { setFullName(event.target.value); setAnswers((prev) => ({ ...prev, fullName: event.target.value })); }} className="input-base" placeholder="Full Name" />
               <input value={school} onChange={(event) => { setSchool(event.target.value); setAnswers((prev) => ({ ...prev, school: event.target.value })); }} className="input-base" placeholder="School / University" />
               <input value={phone} onChange={(event) => { setPhone(event.target.value); setAnswers((prev) => ({ ...prev, phone: event.target.value })); }} className="input-base" placeholder="Phone" />
@@ -238,6 +301,45 @@ export default function CheckoutPage() {
                   )}
                 </div>
               ))}
+              {isDelegationCategory && (
+                <div>
+                  <label className="block text-sm font-semibold mb-1.5" style={{ color: "var(--fg)" }}>
+                    Number of Delegates in this Delegation *
+                  </label>
+                  <input
+                    className="input-base"
+                    type="number"
+                    min={1}
+                    max={selectedCategory?.maxDelegatesPerDelegation}
+                    value={answers.delegation_size === undefined ? "" : String(answers.delegation_size)}
+                    onChange={(event) => {
+                      const raw = event.target.value;
+                      setAnswers((prev) => ({
+                        ...prev,
+                        delegation_size: raw === "" ? "" : Number(raw),
+                      }));
+                    }}
+                    placeholder={
+                      selectedCategory?.maxDelegatesPerDelegation
+                        ? `Max ${selectedCategory.maxDelegatesPerDelegation}`
+                        : "Enter delegation size"
+                    }
+                  />
+                  {selectedCategory?.maxDelegatesPerDelegation && (
+                    <p className="text-xs mt-1" style={{ color: "var(--fg-muted)" }}>
+                      Maximum allowed delegates: {selectedCategory.maxDelegatesPerDelegation}
+                    </p>
+                  )}
+                  {!delegationSizeValid && (
+                    <p className="text-xs mt-1" style={{ color: "#dc2626" }}>
+                      Delegation size must be at least 1
+                      {selectedCategory?.maxDelegatesPerDelegation
+                        ? ` and at most ${selectedCategory.maxDelegatesPerDelegation}.`
+                        : "."}
+                    </p>
+                  )}
+                </div>
+              )}
               <select value={selectedCountry} onChange={(event) => setSelectedCountry(event.target.value)} className="input-base">
                 <option value="">Country Preference...</option>
                 {COUNTRIES.map((country) => <option key={country} value={country}>{country}</option>)}

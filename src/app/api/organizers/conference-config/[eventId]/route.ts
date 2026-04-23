@@ -44,6 +44,11 @@ export async function PATCH(
     organizerName: typeof body.organizerName === "string" ? body.organizerName : undefined,
     venue: typeof body.venue === "string" ? body.venue : undefined,
     description: typeof body.description === "string" ? body.description : undefined,
+    termsAndConditions:
+      typeof body.termsAndConditions === "string" ? body.termsAndConditions : undefined,
+    refundPolicy: typeof body.refundPolicy === "string" ? body.refundPolicy : undefined,
+    codeOfConduct: typeof body.codeOfConduct === "string" ? body.codeOfConduct : undefined,
+    faqNotes: typeof body.faqNotes === "string" ? body.faqNotes : undefined,
     logoImageUrl: typeof body.logoImageUrl === "string" ? body.logoImageUrl : undefined,
     bannerImageUrl: typeof body.bannerImageUrl === "string" ? body.bannerImageUrl : undefined,
     brandPrimaryColor: typeof body.brandPrimaryColor === "string" ? body.brandPrimaryColor : undefined,

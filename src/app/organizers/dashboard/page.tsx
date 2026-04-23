@@ -8,7 +8,13 @@ import Footer from "@/components/Footer";
 import QrScannerPanel from "@/components/QrScannerPanel";
 import { ensureServerSession } from "@/lib/client/session";
 import { useAuth } from "@/lib/auth-context";
-import { OrganizerBankingDetails, OrganizerConference, OrganizerStatusEmailTemplateKey } from "@/lib/types";
+import {
+  OrganizerBankingDetails,
+  OrganizerConference,
+  OrganizerDocument,
+  OrganizerDocumentCategory,
+  OrganizerStatusEmailTemplateKey,
+} from "@/lib/types";
 import { getActivePhase } from "@/lib/pricing";
 
 const STATUS_STYLES: Record<OrganizerConference["status"], string> = {
@@ -24,6 +30,10 @@ const buildPreviewDraft = (conference?: OrganizerConference | null) => ({
   organizerName: conference?.organizerName || "",
   venue: conference?.venue || "",
   description: conference?.description || "",
+  termsAndConditions: conference?.termsAndConditions || "",
+  refundPolicy: conference?.refundPolicy || "",
+  codeOfConduct: conference?.codeOfConduct || "",
+  faqNotes: conference?.faqNotes || "",
   logoImageUrl: conference?.logoImageUrl || "",
   bannerImageUrl: conference?.bannerImageUrl || "",
   website: conference?.socialLinks?.website || "",
@@ -94,6 +104,24 @@ const UN_TEMPLATE_COUNTRIES = {
 } as const;
 
 type UnTemplateKey = keyof typeof UN_TEMPLATE_COUNTRIES;
+
+type PartnerRelationship = {
+  id: string;
+  sourceEventId: string;
+  targetEventId: string;
+  status: "PENDING" | "ACCEPTED" | "REJECTED" | "CANCELLED";
+  direction: "incoming" | "outgoing";
+  partnerEvent: { id: string; title: string };
+};
+
+type DocumentDraft = {
+  title: string;
+  category: OrganizerDocumentCategory;
+  sourceType: "upload" | "url";
+  url: string;
+  fileName?: string;
+  mimeType?: string;
+};
 
 const buildDefaultStatusEmailTemplates = (conferenceTitle: string) => ({
   allotted: {
@@ -190,7 +218,9 @@ export default function OrganizerDashboardPage() {
     prizeTitle: "",
     sponsorName: "",
     sponsorLogoUrl: "",
+    sponsorLogoSourceType: "url" as "url" | "upload",
     description: "",
+    participantId: "",
   });
   const [committeeDraft, setCommitteeDraft] = useState({
     name: "",
@@ -232,6 +262,23 @@ export default function OrganizerDashboardPage() {
   const [previewDraft, setPreviewDraft] = useState(() =>
     buildPreviewDraft(organizerConferences[0] || null)
   );
+  const [partnerRelationships, setPartnerRelationships] = useState<PartnerRelationship[]>([]);
+  const [partnerInviteTargetId, setPartnerInviteTargetId] = useState("");
+  const [partnerActionStatus, setPartnerActionStatus] = useState("");
+  const [commonDocumentDraft, setCommonDocumentDraft] = useState<DocumentDraft>({
+    title: "",
+    category: "background-guide",
+    sourceType: "url",
+    url: "",
+  });
+  const [committeeDocumentDraft, setCommitteeDocumentDraft] = useState<DocumentDraft>({
+    title: "",
+    category: "background-guide",
+    sourceType: "url",
+    url: "",
+  });
+  const [committeeDocumentTargetId, setCommitteeDocumentTargetId] = useState("");
+  const [documentActionStatus, setDocumentActionStatus] = useState("");
 
   const memberModeForType = (committeeType: "UN" | "NON_UN" | "CUSTOM") =>
     committeeType === "UN" ? "UN_COUNTRY" : "CUSTOM_MEMBER";
@@ -431,6 +478,34 @@ export default function OrganizerDashboardPage() {
     reader.readAsDataURL(selectedFile);
   };
 
+  const onAwardLogoFileSelected = (event: ChangeEvent<HTMLInputElement>) => {
+    const selectedFile = event.target.files?.[0];
+    if (!selectedFile) return;
+    if (!selectedFile.type.startsWith("image/")) {
+      alert("Please choose an image file for the award logo.");
+      event.target.value = "";
+      return;
+    }
+    const maxBytes = 2 * 1024 * 1024;
+    if (selectedFile.size > maxBytes) {
+      alert("Award logo must be under 2MB.");
+      event.target.value = "";
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = typeof reader.result === "string" ? reader.result : "";
+      if (!dataUrl) return;
+      setAwardDraft((prev) => ({
+        ...prev,
+        sponsorLogoSourceType: "upload",
+        sponsorLogoUrl: dataUrl,
+      }));
+      event.target.value = "";
+    };
+    reader.readAsDataURL(selectedFile);
+  };
+
   const saveCommitteeDetails = (conferenceId: string) => {
     if (!detailsEditorCommitteeId) return;
     const normalizedChairs = detailsEditorDraft.chairs
@@ -516,14 +591,17 @@ export default function OrganizerDashboardPage() {
   useEffect(() => {
     if (!isLoggedIn) {
       router.push("/organizers");
+      return;
     }
-  }, [isLoggedIn, router]);
+    if (user?.role === "delegate") {
+      router.push("/dashboard");
+    }
+  }, [isLoggedIn, user, router]);
 
   useEffect(() => {
     if (!isLoggedIn || !user) return;
     void ensureServerSession({
       email: user.email,
-      role: "organizer",
       name: user.name,
     });
   }, [isLoggedIn, user]);
@@ -534,6 +612,14 @@ export default function OrganizerDashboardPage() {
     }
     return organizerConferences[0];
   }, [organizerConferences, selectedConferenceId]);
+
+  useEffect(() => {
+    if (!selectedConference) return;
+    const hasSelected = selectedConference.committees.some((committee) => committee.id === committeeDocumentTargetId);
+    if (!hasSelected) {
+      setCommitteeDocumentTargetId(selectedConference.committees[0]?.id || "");
+    }
+  }, [selectedConference, committeeDocumentTargetId]);
 
   useEffect(() => {
     if (!selectedConference) return;
@@ -550,6 +636,10 @@ export default function OrganizerDashboardPage() {
           organizerName: String(cfg.organizerName ?? prev.organizerName),
           venue: String(cfg.venue ?? prev.venue),
           description: String(cfg.description ?? prev.description),
+          termsAndConditions: String(cfg.termsAndConditions ?? prev.termsAndConditions),
+          refundPolicy: String(cfg.refundPolicy ?? prev.refundPolicy),
+          codeOfConduct: String(cfg.codeOfConduct ?? prev.codeOfConduct),
+          faqNotes: String(cfg.faqNotes ?? prev.faqNotes),
           logoImageUrl: String(cfg.logoImageUrl ?? prev.logoImageUrl),
           bannerImageUrl: String(cfg.bannerImageUrl ?? prev.bannerImageUrl),
           website: String((cfg.socialLinks as { website?: string } | undefined)?.website ?? prev.website),
@@ -570,6 +660,223 @@ export default function OrganizerDashboardPage() {
       .then((data) => setServerOverview(data.analytics || null))
       .catch(() => setServerOverview(null));
   }, [selectedConference]);
+
+  useEffect(() => {
+    if (!selectedConference) return;
+    void fetch(`/api/organizers/partners/${selectedConference.id}`, { credentials: "include" })
+      .then((response) => response.json())
+      .then((data) => {
+        const rows = Array.isArray(data?.partnerships)
+          ? (data.partnerships as PartnerRelationship[])
+          : [];
+        setPartnerRelationships(rows);
+        const acceptedPartnerIds = rows
+          .filter((entry) => entry.status === "ACCEPTED")
+          .map((entry) => entry.partnerEvent.id);
+        const currentPartnerIds = selectedConference.partnerConferenceIds || [];
+        const nextSorted = [...acceptedPartnerIds].sort();
+        const currentSorted = [...currentPartnerIds].sort();
+        const partnerLinks = rows.map((entry) => ({
+          id: entry.id,
+          partnerConferenceId: entry.partnerEvent.id,
+          partnerConferenceTitle: entry.partnerEvent.title,
+          direction: entry.direction,
+          status: entry.status,
+          createdAt: undefined,
+          updatedAt: undefined,
+        }));
+        if (JSON.stringify(nextSorted) !== JSON.stringify(currentSorted)) {
+          updateOrganizerConferenceConfig(selectedConference.id, {
+            partnerConferenceIds: nextSorted,
+            partnerLinks,
+          });
+        }
+      })
+      .catch(() => setPartnerRelationships([]));
+  }, [selectedConference, updateOrganizerConferenceConfig]);
+
+  const refreshPartnerships = async () => {
+    if (!selectedConference) return;
+    const response = await fetch(`/api/organizers/partners/${selectedConference.id}`, {
+      credentials: "include",
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(String(data?.error || "Failed to refresh partners."));
+    }
+    const rows = Array.isArray(data?.partnerships) ? (data.partnerships as PartnerRelationship[]) : [];
+    setPartnerRelationships(rows);
+    const acceptedPartnerIds = rows
+      .filter((entry) => entry.status === "ACCEPTED")
+      .map((entry) => entry.partnerEvent.id);
+    const partnerLinks = rows.map((entry) => ({
+      id: entry.id,
+      partnerConferenceId: entry.partnerEvent.id,
+      partnerConferenceTitle: entry.partnerEvent.title,
+      direction: entry.direction,
+      status: entry.status,
+      createdAt: undefined,
+      updatedAt: undefined,
+    }));
+    updateOrganizerConferenceConfig(selectedConference.id, {
+      partnerConferenceIds: acceptedPartnerIds,
+      partnerLinks,
+    });
+  };
+
+  const sendPartnerInvite = async () => {
+    if (!selectedConference || !partnerInviteTargetId) return;
+    setPartnerActionStatus("Sending invite...");
+    try {
+      const response = await fetch(`/api/organizers/partners/${selectedConference.id}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ targetEventId: partnerInviteTargetId }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(String(data?.error || "Failed to send invitation."));
+      }
+      setPartnerInviteTargetId("");
+      await refreshPartnerships();
+      setPartnerActionStatus("Invite sent.");
+    } catch (error) {
+      setPartnerActionStatus(error instanceof Error ? error.message : "Failed to send invitation.");
+    }
+  };
+
+  const actOnPartnership = async (
+    partnershipId: string,
+    action: "accept" | "reject" | "cancel" | "unlink"
+  ) => {
+    if (!selectedConference) return;
+    setPartnerActionStatus("Updating partnership...");
+    try {
+      const response =
+        action === "unlink"
+          ? await fetch(`/api/organizers/partners/${selectedConference.id}/${partnershipId}`, {
+              method: "DELETE",
+              credentials: "include",
+            })
+          : await fetch(`/api/organizers/partners/${selectedConference.id}/${partnershipId}`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              credentials: "include",
+              body: JSON.stringify({ action }),
+            });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(String(data?.error || "Failed to update partnership."));
+      }
+      await refreshPartnerships();
+      setPartnerActionStatus("Partnership updated.");
+    } catch (error) {
+      setPartnerActionStatus(error instanceof Error ? error.message : "Failed to update partnership.");
+    }
+  };
+
+  const resetDocumentDraft = (scope: "common" | "committee") => {
+    const resetState: DocumentDraft = { title: "", category: "background-guide", sourceType: "url", url: "" };
+    if (scope === "common") {
+      setCommonDocumentDraft(resetState);
+      return;
+    }
+    setCommitteeDocumentDraft(resetState);
+  };
+
+  const readFileToDataUrl = (selectedFile: File, onDone: (payload: Partial<DocumentDraft>) => void) => {
+    const allowed =
+      selectedFile.type === "application/pdf" ||
+      selectedFile.type.startsWith("image/") ||
+      selectedFile.type.includes("document") ||
+      selectedFile.type.includes("word");
+    if (!allowed) {
+      alert("Please upload a PDF, image, or doc file.");
+      return;
+    }
+    const maxBytes = 8 * 1024 * 1024;
+    if (selectedFile.size > maxBytes) {
+      alert("Document must be under 8MB.");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = typeof reader.result === "string" ? reader.result : "";
+      if (!result) return;
+      onDone({
+        sourceType: "upload",
+        url: result,
+        fileName: selectedFile.name,
+        mimeType: selectedFile.type || undefined,
+      });
+    };
+    reader.readAsDataURL(selectedFile);
+  };
+
+  const createDocumentRecord = (draft: DocumentDraft): OrganizerDocument | null => {
+    const title = draft.title.trim();
+    const url = draft.url.trim();
+    if (!title || !url) return null;
+    return {
+      id: `doc-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      title,
+      category: draft.category,
+      sourceType: draft.sourceType,
+      url,
+      fileName: draft.fileName,
+      mimeType: draft.mimeType,
+      uploadedAt: new Date().toISOString(),
+    };
+  };
+
+  const addCommonDocument = () => {
+    if (!selectedConference) return;
+    const next = createDocumentRecord(commonDocumentDraft);
+    if (!next) {
+      setDocumentActionStatus("Please provide title and document link/file.");
+      return;
+    }
+    updateOrganizerConferenceConfig(selectedConference.id, {
+      commonDocuments: [...(selectedConference.commonDocuments || []), next],
+    });
+    resetDocumentDraft("common");
+    setDocumentActionStatus("Common document added.");
+  };
+
+  const removeCommonDocument = (documentId: string) => {
+    if (!selectedConference) return;
+    updateOrganizerConferenceConfig(selectedConference.id, {
+      commonDocuments: (selectedConference.commonDocuments || []).filter((entry) => entry.id !== documentId),
+    });
+    setDocumentActionStatus("Common document removed.");
+  };
+
+  const addCommitteeDocument = () => {
+    if (!selectedConference || !committeeDocumentTargetId) return;
+    const next = createDocumentRecord(committeeDocumentDraft);
+    if (!next) {
+      setDocumentActionStatus("Please provide title and document link/file.");
+      return;
+    }
+    const committee = selectedConference.committees.find((entry) => entry.id === committeeDocumentTargetId);
+    if (!committee) return;
+    updateOrganizerCommitteeConfig(selectedConference.id, committeeDocumentTargetId, {
+      documents: [...(committee.documents || []), next],
+    });
+    resetDocumentDraft("committee");
+    setDocumentActionStatus("Committee document added.");
+  };
+
+  const removeCommitteeDocument = (committeeId: string, documentId: string) => {
+    if (!selectedConference) return;
+    const committee = selectedConference.committees.find((entry) => entry.id === committeeId);
+    if (!committee) return;
+    updateOrganizerCommitteeConfig(selectedConference.id, committeeId, {
+      documents: (committee.documents || []).filter((entry) => entry.id !== documentId),
+    });
+    setDocumentActionStatus("Committee document removed.");
+  };
 
   const selectedConferenceAnalytics = useMemo(() => {
     if (!selectedConference) return null;
@@ -798,25 +1105,6 @@ export default function OrganizerDashboardPage() {
     if (!selectedConference || !detailsEditorCommitteeId) return null;
     return selectedConference.committees.find((entry) => entry.id === detailsEditorCommitteeId) || null;
   }, [selectedConference, detailsEditorCommitteeId]);
-
-  const delegationGroups = useMemo(() => {
-    if (!selectedConference) return [];
-    const groups = new Map<string, typeof selectedConference.applicants>();
-    for (const applicant of selectedConference.applicants) {
-      const groupKey = applicant.school || "Independent Delegates";
-      const current = groups.get(groupKey) || [];
-      current.push(applicant);
-      groups.set(groupKey, current);
-    }
-    return Array.from(groups.entries())
-      .map(([school, members]) => ({
-        school,
-        members,
-        paidMembers: members.filter((entry) => entry.paid).length,
-        assignedMembers: members.filter((entry) => entry.status === "Allotted").length,
-      }))
-      .sort((a, b) => b.members.length - a.members.length);
-  }, [selectedConference]);
 
   const financeSummary = useMemo(() => {
     if (!selectedConference) return null;
@@ -1158,6 +1446,10 @@ export default function OrganizerDashboardPage() {
                             organizerName: previewDraft.organizerName,
                             venue: previewDraft.venue || undefined,
                             description: previewDraft.description || undefined,
+                            termsAndConditions: previewDraft.termsAndConditions.trim() || undefined,
+                            refundPolicy: previewDraft.refundPolicy.trim() || undefined,
+                            codeOfConduct: previewDraft.codeOfConduct.trim() || undefined,
+                            faqNotes: previewDraft.faqNotes.trim() || undefined,
                             logoImageUrl: previewDraft.logoImageUrl || undefined,
                             bannerImageUrl: previewDraft.bannerImageUrl || undefined,
                             socialLinks: {
@@ -1217,6 +1509,51 @@ export default function OrganizerDashboardPage() {
                           <p className="text-xs" style={{ color: "var(--fg-muted)" }}>Venue: {previewDraft.venue || "—"}</p>
                         </div>
                       </div>
+                    </div>
+                  </div>
+
+                  <div className="card p-6 rounded-2xl">
+                    <h3 className="text-lg font-bold mb-4" style={{ color: "var(--fg)" }}>Conference Policies & Info</h3>
+                    <div className="space-y-3">
+                      <textarea
+                        value={previewDraft.termsAndConditions}
+                        onChange={(event) =>
+                          setPreviewDraft((prev) => ({ ...prev, termsAndConditions: event.target.value }))
+                        }
+                        className="input-base text-sm"
+                        rows={4}
+                        placeholder="Terms and conditions"
+                      />
+                      <textarea
+                        value={previewDraft.refundPolicy}
+                        onChange={(event) =>
+                          setPreviewDraft((prev) => ({ ...prev, refundPolicy: event.target.value }))
+                        }
+                        className="input-base text-sm"
+                        rows={3}
+                        placeholder="Refund / cancellation policy"
+                      />
+                      <textarea
+                        value={previewDraft.codeOfConduct}
+                        onChange={(event) =>
+                          setPreviewDraft((prev) => ({ ...prev, codeOfConduct: event.target.value }))
+                        }
+                        className="input-base text-sm"
+                        rows={3}
+                        placeholder="Code of conduct"
+                      />
+                      <textarea
+                        value={previewDraft.faqNotes}
+                        onChange={(event) =>
+                          setPreviewDraft((prev) => ({ ...prev, faqNotes: event.target.value }))
+                        }
+                        className="input-base text-sm"
+                        rows={4}
+                        placeholder="FAQ / additional notes"
+                      />
+                      <p className="text-xs" style={{ color: "var(--fg-muted)" }}>
+                        Saved using the same Preview Settings save button above.
+                      </p>
                     </div>
                   </div>
 
@@ -1948,35 +2285,7 @@ export default function OrganizerDashboardPage() {
                     </div>
                   </div>
 
-                  <div className="grid md:grid-cols-2 gap-6">
-                    <div className="card p-6 rounded-2xl">
-                      <div className="flex items-center justify-between mb-4">
-                        <h3 className="text-lg font-bold" style={{ color: "var(--fg)" }}>Delegation Groups</h3>
-                        <button
-                          className="btn btn-ghost text-xs"
-                          onClick={() => {
-                            const code = Math.random().toString(36).slice(2, 9).toUpperCase();
-                            updateOrganizerConferenceConfig(selectedConference.id, { delegationInviteCode: code });
-                          }}
-                        >
-                          Generate Invite Link
-                        </button>
-                      </div>
-                      <p className="text-xs mb-3" style={{ color: "var(--fg-muted)" }}>
-                        Invite code: {selectedConference.delegationInviteCode || "Not generated"}
-                      </p>
-                      <div className="space-y-2">
-                        {delegationGroups.map((group) => (
-                          <div key={group.school} className="p-3 rounded-xl" style={{ background: "var(--bg-subtle)" }}>
-                            <p className="text-sm font-semibold" style={{ color: "var(--fg)" }}>{group.school}</p>
-                            <p className="text-xs" style={{ color: "var(--fg-muted)" }}>
-                              Members: {group.members.length} · Paid: {group.paidMembers} · Assigned: {group.assignedMembers}
-                            </p>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
+                  <div>
                     <div className="card p-6 rounded-2xl">
                       <h3 className="text-lg font-bold mb-4" style={{ color: "var(--fg)" }}>Transactions</h3>
                       {!financeSummary ? (
@@ -2116,37 +2425,286 @@ export default function OrganizerDashboardPage() {
                     <div className="card p-6 rounded-2xl">
                       <h3 className="text-lg font-bold mb-4" style={{ color: "var(--fg)" }}>Conference Settings</h3>
                       <div className="space-y-3">
-                        <div>
-                          <label className="text-xs font-semibold" style={{ color: "var(--fg-muted)" }}>Partner conferences</label>
-                          <div className="mt-1 flex flex-wrap gap-2">
-                            {organizerConferences
-                              .filter((entry) => entry.id !== selectedConference.id)
-                              .map((entry) => {
-                                const selected = (selectedConference.partnerConferenceIds || []).includes(entry.id);
-                                return (
-                                  <button
-                                    key={entry.id}
-                                    className="btn btn-ghost text-xs"
-                                    style={{
-                                      borderColor: selected ? "var(--blue)" : "var(--border)",
-                                      color: selected ? "var(--blue)" : "var(--fg-muted)",
-                                    }}
-                                    onClick={() => {
-                                      const current = selectedConference.partnerConferenceIds || [];
-                                      const next = selected
-                                        ? current.filter((id) => id !== entry.id)
-                                        : [...current, entry.id];
-                                      updateOrganizerConferenceConfig(selectedConference.id, {
-                                        partnerConferenceIds: next,
-                                      });
-                                    }}
-                                  >
+                        <div className="p-3 rounded-xl space-y-3" style={{ background: "var(--bg-subtle)" }}>
+                          <p className="text-xs font-semibold" style={{ color: "var(--fg)" }}>Partner MUNs</p>
+                          <div className="flex items-center gap-2">
+                            <select
+                              className="input-base text-xs flex-1"
+                              value={partnerInviteTargetId}
+                              onChange={(event) => setPartnerInviteTargetId(event.target.value)}
+                            >
+                              <option value="">Select organizer conference to invite</option>
+                              {organizerConferences
+                                .filter((entry) => entry.id !== selectedConference.id)
+                                .map((entry) => (
+                                  <option key={entry.id} value={entry.id}>
                                     {entry.title}
+                                  </option>
+                                ))}
+                            </select>
+                            <button
+                              className="btn btn-primary text-xs"
+                              disabled={!partnerInviteTargetId}
+                              onClick={() => void sendPartnerInvite()}
+                            >
+                              Send Invite
+                            </button>
+                          </div>
+                          {partnerActionStatus && (
+                            <p className="text-[11px]" style={{ color: "var(--fg-muted)" }}>
+                              {partnerActionStatus}
+                            </p>
+                          )}
+                          <div className="space-y-2">
+                            <p className="text-[11px] font-semibold" style={{ color: "var(--fg-muted)" }}>
+                              Pending received
+                            </p>
+                            {partnerRelationships
+                              .filter((entry) => entry.status === "PENDING" && entry.direction === "incoming")
+                              .map((entry) => (
+                                <div key={entry.id} className="flex items-center justify-between gap-2">
+                                  <p className="text-xs" style={{ color: "var(--fg)" }}>{entry.partnerEvent.title}</p>
+                                  <div className="flex gap-1">
+                                    <button className="btn btn-ghost text-xs" onClick={() => void actOnPartnership(entry.id, "accept")}>
+                                      Accept
+                                    </button>
+                                    <button className="btn btn-ghost text-xs" onClick={() => void actOnPartnership(entry.id, "reject")}>
+                                      Reject
+                                    </button>
+                                  </div>
+                                </div>
+                              ))}
+                          </div>
+                          <div className="space-y-2">
+                            <p className="text-[11px] font-semibold" style={{ color: "var(--fg-muted)" }}>
+                              Pending sent
+                            </p>
+                            {partnerRelationships
+                              .filter((entry) => entry.status === "PENDING" && entry.direction === "outgoing")
+                              .map((entry) => (
+                                <div key={entry.id} className="flex items-center justify-between gap-2">
+                                  <p className="text-xs" style={{ color: "var(--fg)" }}>{entry.partnerEvent.title}</p>
+                                  <button className="btn btn-ghost text-xs" onClick={() => void actOnPartnership(entry.id, "cancel")}>
+                                    Cancel
                                   </button>
-                                );
-                              })}
+                                </div>
+                              ))}
+                          </div>
+                          <div className="space-y-2">
+                            <p className="text-[11px] font-semibold" style={{ color: "var(--fg-muted)" }}>
+                              Accepted partners
+                            </p>
+                            {partnerRelationships
+                              .filter((entry) => entry.status === "ACCEPTED")
+                              .map((entry) => (
+                                <div key={entry.id} className="flex items-center justify-between gap-2">
+                                  <p className="text-xs" style={{ color: "var(--fg)" }}>{entry.partnerEvent.title}</p>
+                                  <button className="btn btn-ghost text-xs" onClick={() => void actOnPartnership(entry.id, "unlink")}>
+                                    Unlink
+                                  </button>
+                                </div>
+                              ))}
+                            {partnerRelationships.filter((entry) => entry.status === "ACCEPTED").length === 0 && (
+                              <p className="text-xs" style={{ color: "var(--fg-muted)" }}>No accepted partner MUNs yet.</p>
+                            )}
                           </div>
                         </div>
+                        <div className="p-3 rounded-xl" style={{ background: "var(--bg-subtle)" }}>
+                          <p className="text-xs font-semibold mb-2" style={{ color: "var(--fg)" }}>Common Documents</p>
+                          <div className="grid grid-cols-2 gap-2 mb-2">
+                            <input
+                              className="input-base text-xs col-span-2"
+                              placeholder="Document title"
+                              value={commonDocumentDraft.title ?? ""}
+                              onChange={(event) =>
+                                setCommonDocumentDraft((prev) => ({ ...prev, title: event.target.value }))
+                              }
+                            />
+                            <select
+                              className="input-base text-xs"
+                              value={commonDocumentDraft.category ?? "background-guide"}
+                              onChange={(event) =>
+                                setCommonDocumentDraft((prev) => ({
+                                  ...prev,
+                                  category: event.target.value as OrganizerDocumentCategory,
+                                }))
+                              }
+                            >
+                              <option value="background-guide">Background Guide</option>
+                              <option value="guidelines">Guidelines</option>
+                              <option value="rules">Rules</option>
+                              <option value="other">Other</option>
+                            </select>
+                            <select
+                              className="input-base text-xs"
+                              value={commonDocumentDraft.sourceType ?? "url"}
+                              onChange={(event) =>
+                                setCommonDocumentDraft((prev) => ({
+                                  ...prev,
+                                  sourceType: event.target.value as "upload" | "url",
+                                  url: event.target.value === "url" ? prev.url : "",
+                                  fileName: undefined,
+                                  mimeType: undefined,
+                                }))
+                              }
+                            >
+                              <option value="url">URL link</option>
+                              <option value="upload">Upload file</option>
+                            </select>
+                            {commonDocumentDraft.sourceType === "url" ? (
+                              <input
+                                className="input-base text-xs col-span-2"
+                                placeholder="https://example.com/guide.pdf"
+                                value={commonDocumentDraft.url ?? ""}
+                                onChange={(event) =>
+                                  setCommonDocumentDraft((prev) => ({ ...prev, url: event.target.value }))
+                                }
+                              />
+                            ) : (
+                              <input
+                                className="input-base text-xs col-span-2"
+                                type="file"
+                                accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.webp"
+                                onChange={(event) => {
+                                  const selectedFile = event.target.files?.[0];
+                                  if (!selectedFile) return;
+                                  readFileToDataUrl(selectedFile, (payload) => {
+                                    setCommonDocumentDraft((prev) => ({ ...prev, ...payload }));
+                                  });
+                                }}
+                              />
+                            )}
+                          </div>
+                          <button className="btn btn-primary text-xs" onClick={addCommonDocument}>Add Common Document</button>
+                          <div className="mt-2 space-y-1">
+                            {(selectedConference.commonDocuments || []).length === 0 && (
+                              <p className="text-xs" style={{ color: "var(--fg-muted)" }}>No common documents yet.</p>
+                            )}
+                            {(selectedConference.commonDocuments || []).map((doc) => (
+                              <div key={doc.id} className="flex items-center justify-between gap-2">
+                                <p className="text-xs" style={{ color: "var(--fg-muted)" }}>
+                                  {doc.title} · {doc.category}
+                                </p>
+                                <button className="btn btn-ghost text-xs" onClick={() => removeCommonDocument(doc.id)}>
+                                  Remove
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                        <div className="p-3 rounded-xl" style={{ background: "var(--bg-subtle)" }}>
+                          <p className="text-xs font-semibold mb-2" style={{ color: "var(--fg)" }}>Committee Documents</p>
+                          <div className="grid grid-cols-2 gap-2 mb-2">
+                            <select
+                              className="input-base text-xs col-span-2"
+                              value={committeeDocumentTargetId ?? ""}
+                              onChange={(event) => setCommitteeDocumentTargetId(event.target.value)}
+                            >
+                              {selectedConference.committees.map((committee) => (
+                                <option key={committee.id} value={committee.id}>
+                                  {committee.name}
+                                </option>
+                              ))}
+                            </select>
+                            <input
+                              className="input-base text-xs col-span-2"
+                              placeholder="Document title"
+                              value={committeeDocumentDraft.title ?? ""}
+                              onChange={(event) =>
+                                setCommitteeDocumentDraft((prev) => ({ ...prev, title: event.target.value }))
+                              }
+                            />
+                            <select
+                              className="input-base text-xs"
+                              value={committeeDocumentDraft.category ?? "background-guide"}
+                              onChange={(event) =>
+                                setCommitteeDocumentDraft((prev) => ({
+                                  ...prev,
+                                  category: event.target.value as OrganizerDocumentCategory,
+                                }))
+                              }
+                            >
+                              <option value="background-guide">Background Guide</option>
+                              <option value="guidelines">Guidelines</option>
+                              <option value="rules">Rules</option>
+                              <option value="other">Other</option>
+                            </select>
+                            <select
+                              className="input-base text-xs"
+                              value={committeeDocumentDraft.sourceType ?? "url"}
+                              onChange={(event) =>
+                                setCommitteeDocumentDraft((prev) => ({
+                                  ...prev,
+                                  sourceType: event.target.value as "upload" | "url",
+                                  url: event.target.value === "url" ? prev.url : "",
+                                  fileName: undefined,
+                                  mimeType: undefined,
+                                }))
+                              }
+                            >
+                              <option value="url">URL link</option>
+                              <option value="upload">Upload file</option>
+                            </select>
+                            {committeeDocumentDraft.sourceType === "url" ? (
+                              <input
+                                className="input-base text-xs col-span-2"
+                                placeholder="https://example.com/committee-guide.pdf"
+                                value={committeeDocumentDraft.url ?? ""}
+                                onChange={(event) =>
+                                  setCommitteeDocumentDraft((prev) => ({ ...prev, url: event.target.value }))
+                                }
+                              />
+                            ) : (
+                              <input
+                                className="input-base text-xs col-span-2"
+                                type="file"
+                                accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.webp"
+                                onChange={(event) => {
+                                  const selectedFile = event.target.files?.[0];
+                                  if (!selectedFile) return;
+                                  readFileToDataUrl(selectedFile, (payload) => {
+                                    setCommitteeDocumentDraft((prev) => ({ ...prev, ...payload }));
+                                  });
+                                }}
+                              />
+                            )}
+                          </div>
+                          <button className="btn btn-primary text-xs" onClick={addCommitteeDocument}>
+                            Add Committee Document
+                          </button>
+                          <div className="mt-2 space-y-1">
+                            {selectedConference.committees
+                              .filter((committee) => (committee.documents || []).length > 0)
+                              .map((committee) => (
+                                <div key={committee.id} className="space-y-1">
+                                  <p className="text-xs font-semibold" style={{ color: "var(--fg-muted)" }}>
+                                    {committee.name}
+                                  </p>
+                                  {(committee.documents || []).map((doc) => (
+                                    <div key={doc.id} className="flex items-center justify-between gap-2">
+                                      <p className="text-xs" style={{ color: "var(--fg-muted)" }}>
+                                        {doc.title} · {doc.category}
+                                      </p>
+                                      <button
+                                        className="btn btn-ghost text-xs"
+                                        onClick={() => removeCommitteeDocument(committee.id, doc.id)}
+                                      >
+                                        Remove
+                                      </button>
+                                    </div>
+                                  ))}
+                                </div>
+                              ))}
+                            {selectedConference.committees.every((committee) => (committee.documents || []).length === 0) && (
+                              <p className="text-xs" style={{ color: "var(--fg-muted)" }}>No committee documents yet.</p>
+                            )}
+                          </div>
+                        </div>
+                        {documentActionStatus && (
+                          <p className="text-[11px]" style={{ color: "var(--fg-muted)" }}>
+                            {documentActionStatus}
+                          </p>
+                        )}
                         <div className="p-3 rounded-xl" style={{ background: "var(--bg-subtle)" }}>
                           <p className="text-xs font-semibold mb-2" style={{ color: "var(--fg)" }}>Previous editions</p>
                           <div className="grid grid-cols-2 gap-2 mb-2">
@@ -2390,26 +2948,73 @@ export default function OrganizerDashboardPage() {
                         <input className="input-base text-xs" placeholder="Award category" value={awardDraft.category} onChange={(event) => setAwardDraft((prev) => ({ ...prev, category: event.target.value }))} />
                         <input className="input-base text-xs" placeholder="Prize title" value={awardDraft.prizeTitle} onChange={(event) => setAwardDraft((prev) => ({ ...prev, prizeTitle: event.target.value }))} />
                         <input className="input-base text-xs" placeholder="Sponsor name" value={awardDraft.sponsorName} onChange={(event) => setAwardDraft((prev) => ({ ...prev, sponsorName: event.target.value }))} />
-                        <input className="input-base text-xs" placeholder="Sponsor logo URL" value={awardDraft.sponsorLogoUrl} onChange={(event) => setAwardDraft((prev) => ({ ...prev, sponsorLogoUrl: event.target.value }))} />
+                        <select
+                          className="input-base text-xs"
+                          value={awardDraft.sponsorLogoSourceType}
+                          onChange={(event) =>
+                            setAwardDraft((prev) => ({
+                              ...prev,
+                              sponsorLogoSourceType: event.target.value as "url" | "upload",
+                              sponsorLogoUrl: "",
+                            }))
+                          }
+                        >
+                          <option value="url">Logo via URL</option>
+                          <option value="upload">Upload logo</option>
+                        </select>
+                        {awardDraft.sponsorLogoSourceType === "url" ? (
+                          <input
+                            className="input-base text-xs"
+                            placeholder="Sponsor logo URL"
+                            value={awardDraft.sponsorLogoUrl}
+                            onChange={(event) => setAwardDraft((prev) => ({ ...prev, sponsorLogoUrl: event.target.value }))}
+                          />
+                        ) : (
+                          <input
+                            className="input-base text-xs"
+                            type="file"
+                            accept="image/*"
+                            onChange={onAwardLogoFileSelected}
+                          />
+                        )}
+                        <select
+                          className="input-base text-xs col-span-2"
+                          value={awardDraft.participantId}
+                          onChange={(event) => setAwardDraft((prev) => ({ ...prev, participantId: event.target.value }))}
+                        >
+                          <option value="">Select participant</option>
+                          {selectedConference.applicants.map((applicant) => (
+                            <option key={applicant.id} value={applicant.id}>
+                              {applicant.name} {applicant.userId || applicant.userEmail ? "(linked)" : "(not linked)"}
+                            </option>
+                          ))}
+                        </select>
                         <input className="input-base text-xs col-span-2" placeholder="Description" value={awardDraft.description} onChange={(event) => setAwardDraft((prev) => ({ ...prev, description: event.target.value }))} />
                       </div>
                       <button
                         className="btn btn-primary text-xs mb-3"
                         onClick={() => {
-                          if (!awardDraft.category.trim()) return;
+                          if (!awardDraft.category.trim() || !awardDraft.participantId) return;
+                          const participant = selectedConference.applicants.find((entry) => entry.id === awardDraft.participantId);
                           addConferenceAward(selectedConference.id, {
                             category: awardDraft.category.trim(),
                             prizeTitle: awardDraft.prizeTitle.trim() || undefined,
                             sponsorName: awardDraft.sponsorName.trim() || undefined,
                             sponsorLogoUrl: awardDraft.sponsorLogoUrl.trim() || undefined,
                             description: awardDraft.description.trim() || undefined,
+                            participantId: participant?.id,
+                            participantName: participant?.name,
+                            participantUserId: participant?.userId,
+                            participantUserEmail: participant?.userEmail,
                           });
                           setAwardDraft({
                             category: "",
                             prizeTitle: "",
                             sponsorName: "",
                             sponsorLogoUrl: "",
+                            sponsorLogoSourceType: "url",
                             description: "",
+                            participantId: "",
                           });
                         }}
                       >
@@ -2423,7 +3028,18 @@ export default function OrganizerDashboardPage() {
                               <p className="text-[11px]" style={{ color: "var(--fg-muted)" }}>
                                 {award.prizeTitle || "No prize"} · {award.sponsorName || "No sponsor"}
                               </p>
+                              <p className="text-[11px]" style={{ color: "var(--fg-muted)" }}>
+                                Recipient: {award.participantName || "Not set"} · {award.participantUserId || award.participantUserEmail ? "Linked profile" : "Not linked"}
+                              </p>
                             </div>
+                            {award.sponsorLogoUrl && (
+                              <img
+                                src={award.sponsorLogoUrl}
+                                alt={`${award.category} logo`}
+                                className="w-8 h-8 rounded object-cover"
+                                style={{ border: "1px solid var(--border)" }}
+                              />
+                            )}
                             <button className="btn btn-ghost text-xs" onClick={() => removeConferenceAward(selectedConference.id, award.id)}>Remove</button>
                           </div>
                         ))}
@@ -2487,7 +3103,7 @@ export default function OrganizerDashboardPage() {
                                 value={category.applicationType || "delegate"}
                                 onChange={(event) =>
                                   updateRegistrationCategoryConfig(selectedConference.id, category.id, {
-                                    applicationType: event.target.value as "delegate" | "chair" | "delegation" | "organizer",
+                                    applicationType: event.target.value as "delegate" | "chair" | "delegation" | "organizer" | "other",
                                   })
                                 }
                               >
@@ -2495,6 +3111,7 @@ export default function OrganizerDashboardPage() {
                                 <option value="chair">Chair</option>
                                 <option value="delegation">Delegation</option>
                                 <option value="organizer">Organizer Team</option>
+                                <option value="other">Other (Custom)</option>
                               </select>
                               <input
                                 className="input-base text-xs"
@@ -2519,6 +3136,27 @@ export default function OrganizerDashboardPage() {
                                 Application Open
                               </label>
                             </div>
+                            {category.applicationType === "delegation" && (
+                              <div className="mt-2">
+                                <label className="text-xs font-semibold" style={{ color: "var(--fg-muted)" }}>
+                                  Max delegates in one delegation
+                                </label>
+                                <input
+                                  className="input-base text-xs mt-1"
+                                  type="number"
+                                  min={1}
+                                  value={category.maxDelegatesPerDelegation ?? ""}
+                                  onChange={(event) => {
+                                    const parsed = Number(event.target.value);
+                                    updateRegistrationCategoryConfig(selectedConference.id, category.id, {
+                                      maxDelegatesPerDelegation:
+                                        Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : undefined,
+                                    });
+                                  }}
+                                  placeholder="e.g. 10"
+                                />
+                              </div>
+                            )}
                             <div className="rounded-lg p-3 mt-3 space-y-2" style={{ background: "var(--bg)" }}>
                               <div className="flex items-center justify-between">
                                 <p className="text-xs font-semibold" style={{ color: "var(--fg)" }}>Category Pricing</p>

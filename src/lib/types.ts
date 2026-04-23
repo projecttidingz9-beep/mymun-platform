@@ -34,6 +34,20 @@ export interface OrganizerCommittee {
   isPublic?: boolean;
   customQuestions?: OrganizerCommitteeQuestion[];
   portfolios?: OrganizerCommitteePortfolio[];
+  documents?: OrganizerDocument[];
+}
+
+export type OrganizerDocumentCategory = "background-guide" | "guidelines" | "rules" | "other";
+
+export interface OrganizerDocument {
+  id: string;
+  title: string;
+  category: OrganizerDocumentCategory;
+  sourceType: "upload" | "url";
+  url: string;
+  fileName?: string;
+  mimeType?: string;
+  uploadedAt?: string;
 }
 
 export interface OrganizerCommitteeChair {
@@ -79,7 +93,8 @@ export interface RegistrationCategory {
   id: string;
   name: string;
   description: string;
-  applicationType?: "delegate" | "chair" | "delegation" | "organizer";
+  applicationType?: "delegate" | "chair" | "delegation" | "organizer" | "other";
+  maxDelegatesPerDelegation?: number;
   isOpen?: boolean;
   deadlineOverride?: string;
   basePrice: number;
@@ -119,8 +134,21 @@ export interface User {
   id: string;
   name: string;
   email: string;
+  role?: "delegate" | "organizer" | "admin";
   avatar: string;
+  profileImageUrl?: string;
+  firstName?: string;
+  lastName?: string;
   school: string;
+  college?: string;
+  fieldOfStudy?: string;
+  profileHeadline?: string;
+  phone?: string;
+  city?: string;
+  state?: string;
+  postalCode?: string;
+  socialMedia?: DelegateSocialMedia;
+  invoiceAddress?: DelegateInvoiceAddress;
   country: string;
   munExperienceSummary?: string;
   munAwardsSummary?: string;
@@ -131,6 +159,22 @@ export interface User {
   notifications?: UserNotification[];
 }
 
+export interface DelegateSocialMedia {
+  instagram?: string;
+  linkedin?: string;
+  twitter?: string;
+  github?: string;
+}
+
+export interface DelegateInvoiceAddress {
+  line1?: string;
+  line2?: string;
+  city?: string;
+  state?: string;
+  postalCode?: string;
+  country?: string;
+}
+
 export interface DelegateMunParticipation {
   id: string;
   conferenceName: string;
@@ -139,6 +183,9 @@ export interface DelegateMunParticipation {
   year?: number;
   countryRepresented?: string;
   notes?: string;
+  certificateUrl?: string;
+  certificateFileName?: string;
+  certificateMimeType?: string;
 }
 
 export interface DelegateMunAward {
@@ -148,6 +195,7 @@ export interface DelegateMunAward {
   year?: number;
   category?: string;
   committee?: string;
+  logoUrl?: string;
 }
 
 export interface OrganizerApplicant {
@@ -212,6 +260,10 @@ export interface OrganizerConference {
   bannerImageUrl?: string;
   bannerSourceType?: "upload" | "url";
   description?: string;
+  termsAndConditions?: string;
+  refundPolicy?: string;
+  codeOfConduct?: string;
+  faqNotes?: string;
   socialLinks?: OrganizerSocialLinks;
   brandPrimaryColor?: string;
   brandSecondaryColor?: string;
@@ -220,14 +272,28 @@ export interface OrganizerConference {
   status: "Draft" | "Review" | "Published";
   registrationCategories: RegistrationCategory[];
   committees: OrganizerCommittee[];
+  commonDocuments?: OrganizerDocument[];
   applicants: OrganizerApplicant[];
   announcements: OrganizerAnnouncement[];
   partnerConferenceIds?: string[];
+  partnerLinks?: OrganizerConferencePartnerLink[];
   previousEditions?: OrganizerPreviousEdition[];
   delegationInviteCode?: string;
   organizerTeam?: OrganizerTeamMember[];
   awards?: OrganizerAwardConfig[];
   reviews?: ConferenceReview[];
+}
+
+export type OrganizerConferencePartnerStatus = "PENDING" | "ACCEPTED" | "REJECTED" | "CANCELLED";
+
+export interface OrganizerConferencePartnerLink {
+  id: string;
+  partnerConferenceId: string;
+  partnerConferenceTitle?: string;
+  direction: "incoming" | "outgoing";
+  status: OrganizerConferencePartnerStatus;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface OrganizerPreviousEdition {
@@ -260,6 +326,10 @@ export interface OrganizerAwardConfig {
   sponsorName?: string;
   sponsorLogoUrl?: string;
   description?: string;
+  participantId?: string;
+  participantName?: string;
+  participantUserId?: string;
+  participantUserEmail?: string;
 }
 
 export interface ConferenceReview {
@@ -335,6 +405,10 @@ export interface OrganizerConferencePreviewConfig {
   organizerName?: string;
   venue?: string;
   description?: string;
+  termsAndConditions?: string;
+  refundPolicy?: string;
+  codeOfConduct?: string;
+  faqNotes?: string;
   logoImageUrl?: string;
   bannerImageUrl?: string;
   socialLinks?: OrganizerSocialLinks;

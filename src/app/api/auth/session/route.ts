@@ -6,36 +6,36 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const email = String(body.email || "").trim().toLowerCase();
-    const role = String(body.role || "delegate").toLowerCase();
     const name = String(body.name || email.split("@")[0] || "user");
 
     if (!email || !email.includes("@")) {
       return NextResponse.json({ error: "Valid email is required." }, { status: 400 });
     }
-    if (!["delegate", "organizer", "admin"].includes(role)) {
-      return NextResponse.json({ error: "Invalid role." }, { status: 400 });
-    }
-
-    await prisma.user.upsert({
+    const user = await prisma.user.upsert({
       where: { email },
       update: {
         name,
-        role: role === "admin" ? "ADMIN" : role === "organizer" ? "ORGANIZER" : "DELEGATE",
       },
       create: {
         email,
         name,
-        role: role === "admin" ? "ADMIN" : role === "organizer" ? "ORGANIZER" : "DELEGATE",
+        role: "DELEGATE",
+      },
+      select: {
+        email: true,
+        name: true,
+        role: true,
       },
     });
+    const role = user.role === "ADMIN" ? "admin" : user.role === "ORGANIZER" ? "organizer" : "delegate";
 
     const token = await signSessionToken({
-      email,
-      role: role as "delegate" | "organizer" | "admin",
-      name,
+      email: user.email,
+      role,
+      name: user.name,
     });
 
-    const response = NextResponse.json({ ok: true });
+    const response = NextResponse.json({ ok: true, role });
     response.cookies.set("mymun_session", token, {
       httpOnly: true,
       sameSite: "lax",

@@ -1,18 +1,19 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { ChangeEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { ensureServerSession } from "@/lib/client/session";
+import { downloadRegistrationInvoicePdf } from "@/lib/client/invoice-pdf";
 import { useAuth } from "@/lib/auth-context";
 import { CONFERENCES } from "@/lib/data";
-import { DelegateMunAward, DelegateMunParticipation } from "@/lib/types";
+import { DelegateMunAward, DelegateMunParticipation, Registration } from "@/lib/types";
 
 export default function DashboardPage() {
-  const { user, isLoggedIn, notifications, markNotificationRead, updateDelegateProfile } = useAuth();
+  const { user, isLoggedIn, notifications, markNotificationRead, updateDelegateProfile, logout } = useAuth();
   const router = useRouter();
   const [delegatePasses, setDelegatePasses] = useState<Array<{
     id: string;
@@ -37,19 +38,49 @@ export default function DashboardPage() {
   }>>([]);
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [draftSchool, setDraftSchool] = useState("");
+  const [draftProfileImageUrl, setDraftProfileImageUrl] = useState("");
+  const [draftFirstName, setDraftFirstName] = useState("");
+  const [draftLastName, setDraftLastName] = useState("");
+  const [draftCollege, setDraftCollege] = useState("");
+  const [draftFieldOfStudy, setDraftFieldOfStudy] = useState("");
+  const [draftProfileHeadline, setDraftProfileHeadline] = useState("");
+  const [draftPhone, setDraftPhone] = useState("");
+  const [draftCity, setDraftCity] = useState("");
+  const [draftState, setDraftState] = useState("");
+  const [draftPostalCode, setDraftPostalCode] = useState("");
+  const [draftInstagram, setDraftInstagram] = useState("");
+  const [draftLinkedin, setDraftLinkedin] = useState("");
+  const [draftTwitter, setDraftTwitter] = useState("");
+  const [draftGithub, setDraftGithub] = useState("");
+  const [draftInvoiceLine1, setDraftInvoiceLine1] = useState("");
+  const [draftInvoiceLine2, setDraftInvoiceLine2] = useState("");
+  const [draftInvoiceCity, setDraftInvoiceCity] = useState("");
+  const [draftInvoiceState, setDraftInvoiceState] = useState("");
+  const [draftInvoicePostalCode, setDraftInvoicePostalCode] = useState("");
+  const [draftInvoiceCountry, setDraftInvoiceCountry] = useState("");
+  const [draftProfileVisibility, setDraftProfileVisibility] = useState<"public" | "private">("public");
   const [draftCountry, setDraftCountry] = useState("");
   const [draftExperienceSummary, setDraftExperienceSummary] = useState("");
   const [draftAwardsSummary, setDraftAwardsSummary] = useState("");
   const [draftParticipations, setDraftParticipations] = useState<DelegateMunParticipation[]>([]);
   const [draftAwards, setDraftAwards] = useState<DelegateMunAward[]>([]);
+  const [changePasswordCurrent, setChangePasswordCurrent] = useState("");
+  const [changePasswordNext, setChangePasswordNext] = useState("");
+  const [changePasswordConfirm, setChangePasswordConfirm] = useState("");
+  const [changePasswordLoading, setChangePasswordLoading] = useState(false);
+  const [deletePassword, setDeletePassword] = useState("");
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   useEffect(() => {
     if (!isLoggedIn) router.push("/");
+    if (isLoggedIn && user?.role === "organizer") {
+      router.push("/organizers/dashboard");
+    }
   }, [isLoggedIn, router]);
 
   useEffect(() => {
     if (!isLoggedIn || !user) return;
-    void ensureServerSession({ email: user.email, role: "delegate", name: user.name });
+    void ensureServerSession({ email: user.email, name: user.name });
     void fetch("/api/passes/me", { credentials: "include" })
       .then((response) => response.json())
       .then((data) => setDelegatePasses(data.passes || []))
@@ -88,7 +119,29 @@ export default function DashboardPage() {
   };
 
   const startEditingProfile = () => {
+    const [firstNameFromName = "", ...lastNameParts] = user.name.split(" ");
     setDraftSchool(user.school || "");
+    setDraftProfileImageUrl(user.profileImageUrl || "");
+    setDraftFirstName(user.firstName || firstNameFromName);
+    setDraftLastName(user.lastName || lastNameParts.join(" "));
+    setDraftCollege(user.college || "");
+    setDraftFieldOfStudy(user.fieldOfStudy || "");
+    setDraftProfileHeadline(user.profileHeadline || "");
+    setDraftPhone(user.phone || "");
+    setDraftCity(user.city || "");
+    setDraftState(user.state || "");
+    setDraftPostalCode(user.postalCode || "");
+    setDraftInstagram(user.socialMedia?.instagram || "");
+    setDraftLinkedin(user.socialMedia?.linkedin || "");
+    setDraftTwitter(user.socialMedia?.twitter || "");
+    setDraftGithub(user.socialMedia?.github || "");
+    setDraftInvoiceLine1(user.invoiceAddress?.line1 || "");
+    setDraftInvoiceLine2(user.invoiceAddress?.line2 || "");
+    setDraftInvoiceCity(user.invoiceAddress?.city || "");
+    setDraftInvoiceState(user.invoiceAddress?.state || "");
+    setDraftInvoicePostalCode(user.invoiceAddress?.postalCode || "");
+    setDraftInvoiceCountry(user.invoiceAddress?.country || "");
+    setDraftProfileVisibility(user.profileVisibility || "public");
     setDraftCountry(user.country || "");
     setDraftExperienceSummary(user.munExperienceSummary || "");
     setDraftAwardsSummary(user.munAwardsSummary || "");
@@ -112,6 +165,30 @@ export default function DashboardPage() {
     ]);
   };
 
+  const onProfileImageSelected = (event: ChangeEvent<HTMLInputElement>) => {
+    const selectedFile = event.target.files?.[0];
+    if (!selectedFile) return;
+    if (!selectedFile.type.startsWith("image/")) {
+      alert("Please upload an image file.");
+      event.target.value = "";
+      return;
+    }
+    const maxBytes = 5 * 1024 * 1024;
+    if (selectedFile.size > maxBytes) {
+      alert("Profile image must be under 5MB.");
+      event.target.value = "";
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = typeof reader.result === "string" ? reader.result : "";
+      if (!dataUrl) return;
+      setDraftProfileImageUrl(dataUrl);
+      event.target.value = "";
+    };
+    reader.readAsDataURL(selectedFile);
+  };
+
   const updateParticipation = (id: string, patch: Partial<DelegateMunParticipation>) => {
     setDraftParticipations((prev) => prev.map((entry) => (entry.id === id ? { ...entry, ...patch } : entry)));
   };
@@ -131,6 +208,42 @@ export default function DashboardPage() {
 
   const removeParticipation = (id: string) => {
     setDraftParticipations((prev) => prev.filter((entry) => entry.id !== id));
+  };
+
+  const onParticipationCertificateSelected = (
+    participationId: string,
+    event: ChangeEvent<HTMLInputElement>
+  ) => {
+    const selectedFile = event.target.files?.[0];
+    if (!selectedFile) return;
+    const allowedType =
+      selectedFile.type === "application/pdf" ||
+      selectedFile.type.startsWith("image/") ||
+      selectedFile.type.includes("document") ||
+      selectedFile.type.includes("word");
+    if (!allowedType) {
+      alert("Please upload a PDF, image, or DOC file.");
+      event.target.value = "";
+      return;
+    }
+    const maxBytes = 8 * 1024 * 1024;
+    if (selectedFile.size > maxBytes) {
+      alert("Certificate file must be under 8MB.");
+      event.target.value = "";
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = typeof reader.result === "string" ? reader.result : "";
+      if (!dataUrl) return;
+      updateParticipation(participationId, {
+        certificateUrl: dataUrl,
+        certificateFileName: selectedFile.name,
+        certificateMimeType: selectedFile.type || undefined,
+      });
+      event.target.value = "";
+    };
+    reader.readAsDataURL(selectedFile);
   };
 
   const addAward = () => {
@@ -169,12 +282,45 @@ export default function DashboardPage() {
   };
 
   const saveProfile = () => {
+    const missingCertificateEntry = draftParticipations.find(
+      (entry) => entry.conferenceName.trim() && !entry.certificateUrl
+    );
+    if (missingCertificateEntry) {
+      alert(
+        `Please upload a participation certificate for "${missingCertificateEntry.conferenceName.trim()}".`
+      );
+      return;
+    }
     updateDelegateProfile({
+      profileImageUrl: draftProfileImageUrl,
+      firstName: draftFirstName.trim(),
+      lastName: draftLastName.trim(),
       school: draftSchool.trim(),
+      college: draftCollege.trim(),
+      fieldOfStudy: draftFieldOfStudy.trim(),
+      profileHeadline: draftProfileHeadline.trim(),
+      phone: draftPhone.trim(),
+      city: draftCity.trim(),
+      state: draftState.trim(),
+      postalCode: draftPostalCode.trim(),
+      socialMedia: {
+        instagram: draftInstagram.trim(),
+        linkedin: draftLinkedin.trim(),
+        twitter: draftTwitter.trim(),
+        github: draftGithub.trim(),
+      },
+      invoiceAddress: {
+        line1: draftInvoiceLine1.trim(),
+        line2: draftInvoiceLine2.trim(),
+        city: draftInvoiceCity.trim(),
+        state: draftInvoiceState.trim(),
+        postalCode: draftInvoicePostalCode.trim(),
+        country: draftInvoiceCountry.trim(),
+      },
       country: draftCountry.trim(),
       munExperienceSummary: draftExperienceSummary.trim(),
       munAwardsSummary: draftAwardsSummary.trim(),
-      profileVisibility: "public",
+      profileVisibility: draftProfileVisibility,
       munParticipations: draftParticipations
         .filter((entry) => entry.conferenceName.trim())
         .map((entry) => ({
@@ -185,6 +331,9 @@ export default function DashboardPage() {
           countryRepresented: entry.countryRepresented?.trim() || undefined,
           notes: entry.notes?.trim() || undefined,
           year: entry.year,
+          certificateUrl: entry.certificateUrl,
+          certificateFileName: entry.certificateFileName?.trim() || undefined,
+          certificateMimeType: entry.certificateMimeType?.trim() || undefined,
         })),
       munAwards: draftAwards
         .filter((entry) => entry.title.trim() && entry.conferenceName.trim())
@@ -198,6 +347,86 @@ export default function DashboardPage() {
         })),
     });
     setIsEditingProfile(false);
+  };
+
+  const onDownloadInvoicePdf = (registration: Registration) => {
+    if (!registration.paid) {
+      alert("Invoice is available after payment is completed.");
+      return;
+    }
+    downloadRegistrationInvoicePdf(registration, {
+      name: user.name,
+      email: user.email,
+      invoiceAddress: user.invoiceAddress,
+    });
+  };
+
+  const onChangePassword = async () => {
+    if (!changePasswordCurrent || !changePasswordNext || !changePasswordConfirm) {
+      alert("Please fill all password fields.");
+      return;
+    }
+    if (changePasswordNext.length < 8) {
+      alert("New password must be at least 8 characters.");
+      return;
+    }
+    if (changePasswordNext !== changePasswordConfirm) {
+      alert("New password and confirmation do not match.");
+      return;
+    }
+    setChangePasswordLoading(true);
+    try {
+      const response = await fetch("/api/auth/change-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          currentPassword: changePasswordCurrent,
+          newPassword: changePasswordNext,
+        }),
+      });
+      const payload = (await response.json().catch(() => ({}))) as { error?: string };
+      if (!response.ok) {
+        alert(payload.error || "Could not change password.");
+        return;
+      }
+      setChangePasswordCurrent("");
+      setChangePasswordNext("");
+      setChangePasswordConfirm("");
+      alert("Password updated successfully.");
+    } finally {
+      setChangePasswordLoading(false);
+    }
+  };
+
+  const onDeleteAccount = async () => {
+    if (!deletePassword.trim()) {
+      alert("Please confirm your password to delete account.");
+      return;
+    }
+    const confirmed = window.confirm(
+      "This will permanently delete your account data. This action cannot be undone."
+    );
+    if (!confirmed) return;
+    setDeleteLoading(true);
+    try {
+      const response = await fetch("/api/auth/delete-account", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ password: deletePassword }),
+      });
+      const payload = (await response.json().catch(() => ({}))) as { error?: string };
+      if (!response.ok) {
+        alert(payload.error || "Could not delete account.");
+        return;
+      }
+      await fetch("/api/auth/session", { method: "DELETE", credentials: "include" });
+      logout();
+      router.push("/");
+    } finally {
+      setDeleteLoading(false);
+    }
   };
 
   return (
@@ -401,12 +630,22 @@ export default function DashboardPage() {
                   )}
                 </div>
                 <div className="flex items-center gap-4 mb-5">
-                  <div
-                    className="w-14 h-14 rounded-xl flex items-center justify-center text-white font-black text-2xl"
-                    style={{ background: "linear-gradient(135deg, #2563eb, #60a5fa)" }}
-                  >
-                    {user.avatar}
-                  </div>
+                  {user.profileImageUrl ? (
+                    <Image
+                      src={user.profileImageUrl}
+                      alt={`${user.name} profile`}
+                      width={56}
+                      height={56}
+                      className="w-14 h-14 rounded-xl object-cover"
+                    />
+                  ) : (
+                    <div
+                      className="w-14 h-14 rounded-xl flex items-center justify-center text-white font-black text-2xl"
+                      style={{ background: "linear-gradient(135deg, #2563eb, #60a5fa)" }}
+                    >
+                      {user.avatar}
+                    </div>
+                  )}
                   <div>
                     <p className="font-bold" style={{ color: "var(--fg)" }}>{user.name}</p>
                     <p className="text-xs" style={{ color: "var(--fg-muted)" }}>{user.email}</p>
@@ -414,6 +653,46 @@ export default function DashboardPage() {
                 </div>
                 {isEditingProfile ? (
                   <div className="space-y-4">
+                    <div className="space-y-2">
+                      <p className="text-xs font-semibold" style={{ color: "var(--fg)" }}>Profile Picture</p>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="input-base text-xs"
+                        onChange={onProfileImageSelected}
+                      />
+                      {draftProfileImageUrl && (
+                        <div className="flex items-center gap-3">
+                          <Image
+                            src={draftProfileImageUrl}
+                            alt="Draft profile preview"
+                            width={48}
+                            height={48}
+                            className="w-12 h-12 rounded-lg object-cover"
+                          />
+                          <button
+                            className="btn btn-ghost text-xs"
+                            onClick={() => setDraftProfileImageUrl("")}
+                          >
+                            Remove Picture
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <input
+                        value={draftFirstName}
+                        onChange={(event) => setDraftFirstName(event.target.value)}
+                        className="input-base text-xs"
+                        placeholder="First name"
+                      />
+                      <input
+                        value={draftLastName}
+                        onChange={(event) => setDraftLastName(event.target.value)}
+                        className="input-base text-xs"
+                        placeholder="Last name"
+                      />
+                    </div>
                     <div className="grid grid-cols-2 gap-2">
                       <input
                         value={draftSchool}
@@ -427,6 +706,89 @@ export default function DashboardPage() {
                         className="input-base text-xs"
                         placeholder="Country"
                       />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <input
+                        value={draftCollege}
+                        onChange={(event) => setDraftCollege(event.target.value)}
+                        className="input-base text-xs"
+                        placeholder="College"
+                      />
+                      <input
+                        value={draftFieldOfStudy}
+                        onChange={(event) => setDraftFieldOfStudy(event.target.value)}
+                        className="input-base text-xs"
+                        placeholder="Field of study"
+                      />
+                    </div>
+                    <input
+                      value={draftProfileHeadline}
+                      onChange={(event) => setDraftProfileHeadline(event.target.value)}
+                      className="input-base text-xs"
+                      placeholder="Profile headline"
+                    />
+                    <div className="grid grid-cols-2 gap-2">
+                      <input
+                        value={draftPhone}
+                        onChange={(event) => setDraftPhone(event.target.value)}
+                        className="input-base text-xs"
+                        placeholder="Phone"
+                      />
+                      <input
+                        value={draftPostalCode}
+                        onChange={(event) => setDraftPostalCode(event.target.value)}
+                        className="input-base text-xs"
+                        placeholder="Postal code"
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <input
+                        value={draftCity}
+                        onChange={(event) => setDraftCity(event.target.value)}
+                        className="input-base text-xs"
+                        placeholder="City"
+                      />
+                      <input
+                        value={draftState}
+                        onChange={(event) => setDraftState(event.target.value)}
+                        className="input-base text-xs"
+                        placeholder="State"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <p className="text-xs font-semibold" style={{ color: "var(--fg)" }}>Social Media</p>
+                      <div className="grid grid-cols-2 gap-2">
+                        <input value={draftInstagram} onChange={(event) => setDraftInstagram(event.target.value)} className="input-base text-xs" placeholder="Instagram URL" />
+                        <input value={draftLinkedin} onChange={(event) => setDraftLinkedin(event.target.value)} className="input-base text-xs" placeholder="LinkedIn URL" />
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <input value={draftTwitter} onChange={(event) => setDraftTwitter(event.target.value)} className="input-base text-xs" placeholder="X/Twitter URL" />
+                        <input value={draftGithub} onChange={(event) => setDraftGithub(event.target.value)} className="input-base text-xs" placeholder="GitHub URL" />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <p className="text-xs font-semibold" style={{ color: "var(--fg)" }}>Invoice Address</p>
+                      <input value={draftInvoiceLine1} onChange={(event) => setDraftInvoiceLine1(event.target.value)} className="input-base text-xs" placeholder="Address line 1" />
+                      <input value={draftInvoiceLine2} onChange={(event) => setDraftInvoiceLine2(event.target.value)} className="input-base text-xs" placeholder="Address line 2 (optional)" />
+                      <div className="grid grid-cols-2 gap-2">
+                        <input value={draftInvoiceCity} onChange={(event) => setDraftInvoiceCity(event.target.value)} className="input-base text-xs" placeholder="Invoice city" />
+                        <input value={draftInvoiceState} onChange={(event) => setDraftInvoiceState(event.target.value)} className="input-base text-xs" placeholder="Invoice state" />
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <input value={draftInvoicePostalCode} onChange={(event) => setDraftInvoicePostalCode(event.target.value)} className="input-base text-xs" placeholder="Invoice postal code" />
+                        <input value={draftInvoiceCountry} onChange={(event) => setDraftInvoiceCountry(event.target.value)} className="input-base text-xs" placeholder="Invoice country" />
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-xs font-semibold" style={{ color: "var(--fg)" }}>Profile Privacy</p>
+                      <select
+                        value={draftProfileVisibility}
+                        onChange={(event) => setDraftProfileVisibility(event.target.value === "private" ? "private" : "public")}
+                        className="input-base text-xs"
+                      >
+                        <option value="public">Public</option>
+                        <option value="private">Private</option>
+                      </select>
                     </div>
                     <textarea
                       value={draftExperienceSummary}
@@ -488,6 +850,36 @@ export default function DashboardPage() {
                             />
                             <button onClick={() => removeParticipation(entry.id)} className="btn btn-ghost text-xs">Remove</button>
                           </div>
+                          <div className="space-y-2">
+                            <input
+                              type="file"
+                              accept=".pdf,.doc,.docx,image/*"
+                              className="input-base text-xs"
+                              onChange={(event) => onParticipationCertificateSelected(entry.id, event)}
+                            />
+                            <p className="text-[11px]" style={{ color: "var(--fg-muted)" }}>
+                              Certificate upload is mandatory for each participation entry.
+                            </p>
+                            {entry.certificateFileName && (
+                              <div className="flex items-center justify-between">
+                                <p className="text-[11px]" style={{ color: "var(--fg-muted)" }}>
+                                  Uploaded: {entry.certificateFileName}
+                                </p>
+                                <button
+                                  className="btn btn-ghost text-xs"
+                                  onClick={() =>
+                                    updateParticipation(entry.id, {
+                                      certificateUrl: undefined,
+                                      certificateFileName: undefined,
+                                      certificateMimeType: undefined,
+                                    })
+                                  }
+                                >
+                                  Remove Certificate
+                                </button>
+                              </div>
+                            )}
+                          </div>
                           <textarea value={entry.notes || ""} onChange={(event) => updateParticipation(entry.id, { notes: event.target.value })} className="input-base text-xs" rows={2} placeholder="Notes" />
                         </div>
                       ))}
@@ -545,12 +937,38 @@ export default function DashboardPage() {
                 ) : (
                   <div className="space-y-3 text-sm">
                     <div className="flex justify-between">
+                      <span style={{ color: "var(--fg-muted)" }}>First Name</span>
+                      <span className="font-medium" style={{ color: "var(--fg)" }}>{user.firstName || "-"}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span style={{ color: "var(--fg-muted)" }}>Last Name</span>
+                      <span className="font-medium" style={{ color: "var(--fg)" }}>{user.lastName || "-"}</span>
+                    </div>
+                    <div className="flex justify-between">
                       <span style={{ color: "var(--fg-muted)" }}>School</span>
                       <span className="font-medium text-right max-w-[180px] text-xs" style={{ color: "var(--fg)" }}>{user.school}</span>
                     </div>
                     <div className="flex justify-between">
+                      <span style={{ color: "var(--fg-muted)" }}>College</span>
+                      <span className="font-medium text-right max-w-[180px] text-xs" style={{ color: "var(--fg)" }}>{user.college || "-"}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span style={{ color: "var(--fg-muted)" }}>Field of Study</span>
+                      <span className="font-medium text-right max-w-[180px] text-xs" style={{ color: "var(--fg)" }}>{user.fieldOfStudy || "-"}</span>
+                    </div>
+                    <div className="flex justify-between">
                       <span style={{ color: "var(--fg-muted)" }}>Country</span>
                       <span className="font-medium" style={{ color: "var(--fg)" }}>{user.country}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span style={{ color: "var(--fg-muted)" }}>Profile Visibility</span>
+                      <span className="font-medium" style={{ color: "var(--fg)" }}>
+                        {user.profileVisibility === "private" ? "Private" : "Public"}
+                      </span>
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold mb-1" style={{ color: "var(--fg)" }}>Headline</p>
+                      <p className="text-xs" style={{ color: "var(--fg-muted)" }}>{user.profileHeadline || "No headline added."}</p>
                     </div>
                     <div>
                       <p className="text-xs font-semibold mb-1" style={{ color: "var(--fg)" }}>MUN Experience</p>
@@ -559,6 +977,31 @@ export default function DashboardPage() {
                     <div>
                       <p className="text-xs font-semibold mb-1" style={{ color: "var(--fg)" }}>Awards Summary</p>
                       <p className="text-xs" style={{ color: "var(--fg-muted)" }}>{user.munAwardsSummary || "No awards summary added."}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold mb-1" style={{ color: "var(--fg)" }}>Social Media</p>
+                      <p className="text-[11px]" style={{ color: "var(--fg-muted)" }}>
+                        {user.socialMedia?.instagram || user.socialMedia?.linkedin || user.socialMedia?.twitter || user.socialMedia?.github
+                          ? [user.socialMedia?.instagram, user.socialMedia?.linkedin, user.socialMedia?.twitter, user.socialMedia?.github].filter(Boolean).join(" · ")
+                          : "No social media links added."}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold mb-1" style={{ color: "var(--fg)" }}>Invoice Address</p>
+                      <p className="text-[11px]" style={{ color: "var(--fg-muted)" }}>
+                        {user.invoiceAddress?.line1 || user.invoiceAddress?.city || user.invoiceAddress?.country
+                          ? [
+                              user.invoiceAddress?.line1,
+                              user.invoiceAddress?.line2,
+                              user.invoiceAddress?.city,
+                              user.invoiceAddress?.state,
+                              user.invoiceAddress?.postalCode,
+                              user.invoiceAddress?.country,
+                            ]
+                              .filter(Boolean)
+                              .join(", ")
+                          : "No invoice address added."}
+                      </p>
                     </div>
                     <div>
                       <p className="text-xs font-semibold mb-1" style={{ color: "var(--fg)" }}>
@@ -593,6 +1036,98 @@ export default function DashboardPage() {
                     <Link href={`/delegates/${user.id}`} className="btn btn-ghost text-xs w-full">
                       View Public Profile
                     </Link>
+                  </div>
+                )}
+              </div>
+
+              <div className="card p-6 rounded-2xl">
+                <h3 className="font-bold mb-4" style={{ color: "var(--fg)" }}>Account Security</h3>
+                <div className="space-y-3">
+                  <p className="text-xs font-semibold" style={{ color: "var(--fg)" }}>Change Password</p>
+                  <input
+                    type="password"
+                    value={changePasswordCurrent}
+                    onChange={(event) => setChangePasswordCurrent(event.target.value)}
+                    className="input-base text-xs"
+                    placeholder="Current password"
+                  />
+                  <input
+                    type="password"
+                    value={changePasswordNext}
+                    onChange={(event) => setChangePasswordNext(event.target.value)}
+                    className="input-base text-xs"
+                    placeholder="New password"
+                  />
+                  <input
+                    type="password"
+                    value={changePasswordConfirm}
+                    onChange={(event) => setChangePasswordConfirm(event.target.value)}
+                    className="input-base text-xs"
+                    placeholder="Confirm new password"
+                  />
+                  <button
+                    onClick={onChangePassword}
+                    className="btn btn-primary text-xs w-full"
+                    disabled={changePasswordLoading}
+                  >
+                    {changePasswordLoading ? "Updating..." : "Update Password"}
+                  </button>
+                </div>
+                <div className="mt-5 pt-4" style={{ borderTop: "1px solid var(--border)" }}>
+                  <p className="text-xs font-semibold mb-2" style={{ color: "#dc2626" }}>Delete Account</p>
+                  <input
+                    type="password"
+                    value={deletePassword}
+                    onChange={(event) => setDeletePassword(event.target.value)}
+                    className="input-base text-xs"
+                    placeholder="Confirm password to delete account"
+                  />
+                  <button
+                    onClick={onDeleteAccount}
+                    className="btn text-xs w-full mt-2"
+                    style={{ background: "#dc2626", color: "white" }}
+                    disabled={deleteLoading}
+                  >
+                    {deleteLoading ? "Deleting..." : "Delete My Account"}
+                  </button>
+                </div>
+              </div>
+
+              <div className="card p-6 rounded-2xl">
+                <h3 className="font-bold mb-4" style={{ color: "var(--fg)" }}>Payment History</h3>
+                {registrations.length === 0 ? (
+                  <p className="text-xs" style={{ color: "var(--fg-muted)" }}>
+                    No payment records yet.
+                  </p>
+                ) : (
+                  <div className="space-y-3">
+                    {registrations.map((registration) => (
+                      <div key={registration.id} className="rounded-xl p-3" style={{ background: "var(--bg-subtle)" }}>
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <p className="text-xs font-semibold" style={{ color: "var(--fg)" }}>
+                              {registration.conferenceTitle}
+                            </p>
+                            <p className="text-[11px]" style={{ color: "var(--fg-muted)" }}>
+                              {registration.categoryName} · Registered {registration.registeredAt}
+                            </p>
+                            <p className="text-[11px]" style={{ color: "var(--fg-muted)" }}>
+                              Amount: ${registration.amount.toFixed(2)}
+                            </p>
+                          </div>
+                          <span className={`badge ${registration.paid ? "badge-green" : "badge-gray"}`}>
+                            {registration.paid ? "Paid" : "Pending"}
+                          </span>
+                        </div>
+                        <button
+                          className="btn btn-ghost text-xs mt-2 w-full"
+                          disabled={!registration.paid}
+                          onClick={() => onDownloadInvoicePdf(registration)}
+                        >
+                          {registration.paid ? "Download Invoice (PDF)" : "Invoice available after payment"}
+                        </button>
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>

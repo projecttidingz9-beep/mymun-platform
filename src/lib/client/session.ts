@@ -2,7 +2,6 @@
 
 export async function ensureServerSession(payload: {
   email: string;
-  role: "delegate" | "organizer" | "admin";
   name?: string;
 }) {
   try {

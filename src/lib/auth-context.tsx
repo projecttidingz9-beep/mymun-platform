@@ -9,6 +9,7 @@ import {
   OrganizerBankingDetails,
   OrganizerCommittee,
   OrganizerCommitteeQuestion,
+  OrganizerDocument,
   OrganizerSocialLinks,
   OrganizerStatusEmailTemplateKey,
   OrganizerStatusEmailTemplates,
@@ -151,6 +152,34 @@ const normalizeCommitteeType = (
   };
 };
 
+const normalizeDocuments = (raw: unknown, fallbackPrefix: string): OrganizerDocument[] => {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((item, index) => {
+      if (!item || typeof item !== "object") return null;
+      const document = item as Record<string, unknown>;
+      const title = String(document.title ?? "").trim();
+      const url = String(document.url ?? "").trim();
+      if (!title || !url) return null;
+      return {
+        id: String(document.id ?? `${fallbackPrefix}-${index}`),
+        title,
+        category:
+          document.category === "background-guide" ||
+          document.category === "guidelines" ||
+          document.category === "rules"
+            ? document.category
+            : "other",
+        sourceType: document.sourceType === "upload" ? "upload" : "url",
+        url,
+        fileName: document.fileName ? String(document.fileName) : undefined,
+        mimeType: document.mimeType ? String(document.mimeType) : undefined,
+        uploadedAt: document.uploadedAt ? String(document.uploadedAt) : undefined,
+      } as OrganizerDocument;
+    })
+    .filter((entry): entry is OrganizerDocument => !!entry);
+};
+
 const normalizeOrganizerConference = (raw: unknown): OrganizerConference | null => {
   if (!raw || typeof raw !== "object") return null;
   const conference = raw as Record<string, unknown>;
@@ -219,18 +248,68 @@ const normalizeOrganizerConference = (raw: unknown): OrganizerConference | null 
                 ]
               : [],
           portfolios,
+          documents: normalizeDocuments(committee.documents, `cm-doc-${index}`),
         };
       })
     : [];
 
   const registrationCategories = Array.isArray(conference.registrationCategories)
-    ? conference.registrationCategories
+    ? conference.registrationCategories.map((entry, index) => {
+        const category = entry as Record<string, unknown>;
+        const rawApplicationType = typeof category.applicationType === "string"
+          ? category.applicationType.trim().toLowerCase()
+          : "";
+        const normalizedApplicationType =
+          rawApplicationType === "delegate" ||
+          rawApplicationType === "chair" ||
+          rawApplicationType === "delegation" ||
+          rawApplicationType === "organizer" ||
+          rawApplicationType === "other"
+            ? (rawApplicationType as "delegate" | "chair" | "delegation" | "organizer" | "other")
+            : "delegate";
+        const normalizedDeadlineOverride =
+          typeof category.deadlineOverride === "string" && category.deadlineOverride.trim()
+            ? category.deadlineOverride
+            : undefined;
+        const rawMaxDelegates =
+          typeof category.maxDelegatesPerDelegation === "number"
+            ? category.maxDelegatesPerDelegation
+            : typeof category.maxDelegatesPerDelegation === "string"
+              ? Number(category.maxDelegatesPerDelegation)
+              : undefined;
+        const normalizedMaxDelegates =
+          rawMaxDelegates !== undefined &&
+          Number.isFinite(rawMaxDelegates) &&
+          rawMaxDelegates > 0
+            ? Math.floor(rawMaxDelegates)
+            : undefined;
+        return {
+          ...category,
+          id: String(category.id ?? `cat-${index}`),
+          name: String(category.name ?? "Registration Category"),
+          description: String(category.description ?? ""),
+          basePrice: Number(category.basePrice ?? 0),
+          requiresCommitteeSelection:
+            category.requiresCommitteeSelection === undefined
+              ? true
+              : Boolean(category.requiresCommitteeSelection),
+          applicationType: normalizedApplicationType,
+          isOpen: category.isOpen === undefined ? true : Boolean(category.isOpen),
+          deadlineOverride: normalizedDeadlineOverride,
+          formFields: Array.isArray(category.formFields) ? category.formFields : [],
+          pricingPhases: Array.isArray(category.pricingPhases) ? category.pricingPhases : [],
+          maxDelegatesPerDelegation: normalizedMaxDelegates,
+        };
+      })
     : [
         {
           id: "cat-default",
           name: "Delegate Registration",
           description: "Default registration category migrated from legacy event format.",
           basePrice: legacyFee,
+          applicationType: "delegate",
+          isOpen: true,
+          deadlineOverride: undefined,
           requiresCommitteeSelection: true,
           formFields: [],
           pricingPhases: [],
@@ -356,6 +435,14 @@ const normalizeOrganizerConference = (raw: unknown): OrganizerConference | null 
         ? conference.bannerSourceType
         : undefined,
     description: conference.description === undefined ? undefined : String(conference.description),
+    termsAndConditions:
+      conference.termsAndConditions === undefined
+        ? undefined
+        : String(conference.termsAndConditions),
+    refundPolicy: conference.refundPolicy === undefined ? undefined : String(conference.refundPolicy),
+    codeOfConduct:
+      conference.codeOfConduct === undefined ? undefined : String(conference.codeOfConduct),
+    faqNotes: conference.faqNotes === undefined ? undefined : String(conference.faqNotes),
     socialLinks:
       typeof conference.socialLinks === "object" && conference.socialLinks !== null
         ? (conference.socialLinks as OrganizerSocialLinks)
@@ -369,8 +456,30 @@ const normalizeOrganizerConference = (raw: unknown): OrganizerConference | null 
       conference.statusEmailTemplates,
       String(conference.title ?? "Conference")
     ),
+    commonDocuments: normalizeDocuments(conference.commonDocuments, "common-doc"),
     partnerConferenceIds: Array.isArray(conference.partnerConferenceIds)
       ? conference.partnerConferenceIds.map((entry) => String(entry))
+      : [],
+    partnerLinks: Array.isArray(conference.partnerLinks)
+      ? conference.partnerLinks.map((entry, index) => {
+          const link = entry as Record<string, unknown>;
+          return {
+            id: String(link.id ?? `partner-link-${index}`),
+            partnerConferenceId: String(link.partnerConferenceId ?? ""),
+            partnerConferenceTitle: link.partnerConferenceTitle
+              ? String(link.partnerConferenceTitle)
+              : undefined,
+            direction: link.direction === "incoming" ? "incoming" : "outgoing",
+            status:
+              link.status === "ACCEPTED" ||
+              link.status === "REJECTED" ||
+              link.status === "CANCELLED"
+                ? link.status
+                : "PENDING",
+            createdAt: link.createdAt ? String(link.createdAt) : undefined,
+            updatedAt: link.updatedAt ? String(link.updatedAt) : undefined,
+          };
+        })
       : [],
     previousEditions: Array.isArray(conference.previousEditions)
       ? conference.previousEditions.map((entry, index) => {
@@ -422,6 +531,10 @@ const normalizeOrganizerConference = (raw: unknown): OrganizerConference | null 
             sponsorName: award.sponsorName ? String(award.sponsorName) : undefined,
             sponsorLogoUrl: award.sponsorLogoUrl ? String(award.sponsorLogoUrl) : undefined,
             description: award.description ? String(award.description) : undefined,
+            participantId: award.participantId ? String(award.participantId) : undefined,
+            participantName: award.participantName ? String(award.participantName) : undefined,
+            participantUserId: award.participantUserId ? String(award.participantUserId) : undefined,
+            participantUserEmail: award.participantUserEmail ? String(award.participantUserEmail) : undefined,
           };
         })
       : [],
@@ -482,6 +595,11 @@ const recomputeCommitteeAllotments = (conference: OrganizerConference): Organize
 const normalizeUser = (raw: unknown): User | null => {
   if (!raw || typeof raw !== "object") return null;
   const value = raw as Record<string, unknown>;
+  const readOptionalString = (candidate: unknown) => {
+    if (typeof candidate !== "string") return undefined;
+    const trimmed = candidate.trim();
+    return trimmed ? trimmed : undefined;
+  };
 
   const participations: DelegateMunParticipation[] = Array.isArray(value.munParticipations)
     ? value.munParticipations.map((entry, index) => {
@@ -494,6 +612,9 @@ const normalizeUser = (raw: unknown): User | null => {
           year: item.year === undefined ? undefined : Number(item.year),
           countryRepresented: item.countryRepresented ? String(item.countryRepresented) : undefined,
           notes: item.notes ? String(item.notes) : undefined,
+          certificateUrl: item.certificateUrl ? String(item.certificateUrl) : undefined,
+          certificateFileName: item.certificateFileName ? String(item.certificateFileName) : undefined,
+          certificateMimeType: item.certificateMimeType ? String(item.certificateMimeType) : undefined,
         };
       })
     : [];
@@ -508,6 +629,7 @@ const normalizeUser = (raw: unknown): User | null => {
           year: item.year === undefined ? undefined : Number(item.year),
           category: item.category ? String(item.category) : undefined,
           committee: item.committee ? String(item.committee) : undefined,
+          logoUrl: item.logoUrl ? String(item.logoUrl) : undefined,
         };
       })
     : [];
@@ -516,8 +638,42 @@ const normalizeUser = (raw: unknown): User | null => {
     id: String(value.id ?? ""),
     name: String(value.name ?? ""),
     email: String(value.email ?? ""),
+    role:
+      value.role === "organizer" || value.role === "admin"
+        ? value.role
+        : "delegate",
     avatar: String(value.avatar ?? "U"),
+    profileImageUrl: readOptionalString(value.profileImageUrl),
+    firstName: readOptionalString(value.firstName),
+    lastName: readOptionalString(value.lastName),
     school: String(value.school ?? ""),
+    college: readOptionalString(value.college),
+    fieldOfStudy: readOptionalString(value.fieldOfStudy),
+    profileHeadline: readOptionalString(value.profileHeadline),
+    phone: readOptionalString(value.phone),
+    city: readOptionalString(value.city),
+    state: readOptionalString(value.state),
+    postalCode: readOptionalString(value.postalCode),
+    socialMedia:
+      typeof value.socialMedia === "object" && value.socialMedia !== null
+        ? {
+            instagram: readOptionalString((value.socialMedia as Record<string, unknown>).instagram),
+            linkedin: readOptionalString((value.socialMedia as Record<string, unknown>).linkedin),
+            twitter: readOptionalString((value.socialMedia as Record<string, unknown>).twitter),
+            github: readOptionalString((value.socialMedia as Record<string, unknown>).github),
+          }
+        : undefined,
+    invoiceAddress:
+      typeof value.invoiceAddress === "object" && value.invoiceAddress !== null
+        ? {
+            line1: readOptionalString((value.invoiceAddress as Record<string, unknown>).line1),
+            line2: readOptionalString((value.invoiceAddress as Record<string, unknown>).line2),
+            city: readOptionalString((value.invoiceAddress as Record<string, unknown>).city),
+            state: readOptionalString((value.invoiceAddress as Record<string, unknown>).state),
+            postalCode: readOptionalString((value.invoiceAddress as Record<string, unknown>).postalCode),
+            country: readOptionalString((value.invoiceAddress as Record<string, unknown>).country),
+          }
+        : undefined,
     country: String(value.country ?? ""),
     munExperienceSummary: value.munExperienceSummary ? String(value.munExperienceSummary) : "",
     munAwardsSummary: value.munAwardsSummary ? String(value.munAwardsSummary) : "",
@@ -537,7 +693,7 @@ interface AuthContextType {
   user: User | null;
   isLoggedIn: boolean;
   organizerConferences: OrganizerConference[];
-  login: (email: string, name?: string) => void;
+  login: (email: string, name?: string, role?: "delegate" | "organizer" | "admin") => void;
   logout: () => void;
   addRegistration: (reg: Registration) => void;
   addOrganizerConference: (
@@ -555,6 +711,10 @@ interface AuthContextType {
         | "organizerName"
         | "venue"
         | "description"
+        | "termsAndConditions"
+        | "refundPolicy"
+        | "codeOfConduct"
+        | "faqNotes"
         | "logoImageUrl"
         | "bannerImageUrl"
         | "bannerSourceType"
@@ -563,12 +723,14 @@ interface AuthContextType {
         | "brandSecondaryColor"
         | "bankingDetails"
         | "partnerConferenceIds"
+        | "partnerLinks"
         | "previousEditions"
         | "delegationInviteCode"
         | "organizerTeam"
         | "awards"
         | "reviews"
         | "statusEmailTemplates"
+        | "commonDocuments"
       >
     >
   ) => void;
@@ -619,7 +781,31 @@ interface AuthContextType {
   notifications: UserNotification[];
   markNotificationRead: (notificationId: string) => void;
   updateDelegateProfile: (patch: {
+    profileImageUrl?: string;
+    firstName?: string;
+    lastName?: string;
     school?: string;
+    college?: string;
+    fieldOfStudy?: string;
+    profileHeadline?: string;
+    phone?: string;
+    city?: string;
+    state?: string;
+    postalCode?: string;
+    socialMedia?: {
+      instagram?: string;
+      linkedin?: string;
+      twitter?: string;
+      github?: string;
+    };
+    invoiceAddress?: {
+      line1?: string;
+      line2?: string;
+      city?: string;
+      state?: string;
+      postalCode?: string;
+      country?: string;
+    };
     country?: string;
     munExperienceSummary?: string;
     munAwardsSummary?: string;
@@ -716,11 +902,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   });
 
-  const login = (email: string, name?: string) => {
+  const login: AuthContextType["login"] = (email, name, role = "delegate") => {
     const loggedInUser = normalizeUser({
       ...MOCK_USER,
       email,
       name: name || email.split("@")[0].replace(/\./g, " ").replace(/\b\w/g, c => c.toUpperCase()),
+      role,
       avatar: (name || email)[0].toUpperCase(),
     });
     if (!loggedInUser) return;
@@ -1026,17 +1213,78 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const addConferenceAward: AuthContextType["addConferenceAward"] = (conferenceId, award) => {
+    const createDelegateAwardEntry = (conferenceTitle: string) => {
+      const awardTitle = award.prizeTitle?.trim() || award.category.trim() || "Conference Award";
+      const year = new Date().getFullYear();
+      return {
+        id: `mun-award-${Date.now()}`,
+        title: awardTitle,
+        conferenceName: conferenceTitle,
+        year,
+        category: award.category || undefined,
+        committee: undefined,
+        logoUrl: award.sponsorLogoUrl || undefined,
+      };
+    };
+    const syncAwardIntoProfile = (conferenceTitle: string) => {
+      const targetUserId = award.participantUserId?.trim();
+      const targetUserEmail = award.participantUserEmail?.trim().toLowerCase();
+      if (!targetUserId && !targetUserEmail) return;
+
+      const matchesTarget = (candidate: { id?: string; email?: string }) =>
+        (targetUserId && candidate.id === targetUserId) ||
+        (targetUserEmail && candidate.email?.toLowerCase() === targetUserEmail);
+
+      const appendAward = (existingRaw: unknown) => {
+        const existing = normalizeUser(existingRaw);
+        if (!existing || !matchesTarget(existing)) return null;
+        const nextAward = createDelegateAwardEntry(conferenceTitle);
+        const nextAwards = [...(existing.munAwards || []), nextAward];
+        const nextSummary =
+          `${existing.munAwardsSummary || ""}${existing.munAwardsSummary ? "\n" : ""}` +
+          `${nextAward.title} - ${conferenceTitle}`;
+        return normalizeUser({
+          ...existing,
+          munAwards: nextAwards,
+          munAwardsSummary: nextSummary,
+        });
+      };
+
+      if (user) {
+        const nextCurrent = appendAward(user);
+        if (nextCurrent) {
+          setUser(nextCurrent);
+          localStorage.setItem("tidingz_user", JSON.stringify(nextCurrent));
+          return;
+        }
+      }
+
+      const stored = localStorage.getItem("tidingz_user");
+      if (!stored) return;
+      try {
+        const parsed = JSON.parse(stored);
+        const nextStored = appendAward(parsed);
+        if (nextStored) {
+          localStorage.setItem("tidingz_user", JSON.stringify(nextStored));
+        }
+      } catch {
+        // ignore malformed storage
+      }
+    };
+
     const current = ensureOrganizerSeed(organizerConferences);
     const next = current.map((conference) => {
       if (conference.id !== conferenceId) return conference;
+      const createdAward = {
+        ...award,
+        id: `award-${Date.now()}`,
+      };
+      syncAwardIntoProfile(conference.title);
       return {
         ...conference,
         awards: [
           ...(conference.awards || []),
-          {
-            ...award,
-            id: `award-${Date.now()}`,
-          },
+          createdAward,
         ],
       };
     });

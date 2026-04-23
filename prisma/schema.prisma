@@ -35,16 +35,41 @@ enum CommitteeVisibility {
   PRIVATE
 }
 
+enum EventPartnershipStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  CANCELLED
+}
+
 model User {
   id            String         @id @default(cuid())
   email         String         @unique
   name          String
+  passwordHash  String?
   role          UserRole       @default(DELEGATE)
+  deletedAt     DateTime?
   registrations Registration[]
   checkins      Checkin[]      @relation("CheckinBy")
   notifications Notification[]
+  createdPartnerships EventPartnership[] @relation("PartnershipCreatedBy")
+  respondedPartnerships EventPartnership[] @relation("PartnershipRespondedBy")
+  passwordResetTokens PasswordResetToken[]
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
+}
+
+model PasswordResetToken {
+  id         String   @id @default(cuid())
+  userId     String
+  tokenHash  String
+  expiresAt  DateTime
+  usedAt     DateTime?
+  createdAt  DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([tokenHash])
 }
 
 model Event {
@@ -57,8 +82,29 @@ model Event {
   passes        DelegatePass[]
   checkins      Checkin[]
   notifications Notification[]
+  outgoingPartnerships EventPartnership[] @relation("PartnershipSourceEvent")
+  incomingPartnerships EventPartnership[] @relation("PartnershipTargetEvent")
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
+}
+
+model EventPartnership {
+  id                String                 @id @default(cuid())
+  sourceEventId     String
+  targetEventId     String
+  status            EventPartnershipStatus @default(PENDING)
+  createdByUserId   String
+  respondedByUserId String?
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+  sourceEvent       Event                  @relation("PartnershipSourceEvent", fields: [sourceEventId], references: [id], onDelete: Cascade)
+  targetEvent       Event                  @relation("PartnershipTargetEvent", fields: [targetEventId], references: [id], onDelete: Cascade)
+  createdBy         User                   @relation("PartnershipCreatedBy", fields: [createdByUserId], references: [id], onDelete: Cascade)
+  respondedBy       User?                  @relation("PartnershipRespondedBy", fields: [respondedByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([sourceEventId, targetEventId], map: "EventPartnership_source_target_key")
+  @@index([sourceEventId])
+  @@index([targetEventId])
 }
 
 model Registration {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useAuth } from "@/lib/auth-context";
@@ -22,15 +22,8 @@ export default function Navbar({ openAuthModal }: NavbarProps) {
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [authOpen, setAuthOpen] = useState(false);
-  const hydrated = useSyncExternalStore(
-    () => () => {},
-    () => true,
-    () => false
-  );
-  const [darkMode, setDarkMode] = useState(() => {
-    if (typeof window === "undefined") return false;
-    return localStorage.getItem("tidingz_dark") === "true";
-  });
+  const [hydrated, setHydrated] = useState(false);
+  const [darkMode, setDarkMode] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
 
   useEffect(() => {
@@ -38,6 +31,23 @@ export default function Navbar({ openAuthModal }: NavbarProps) {
     window.addEventListener("scroll", onScroll);
     onScroll();
     return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  useEffect(() => {
+    const hydrationTimer = window.setTimeout(() => {
+      setHydrated(true);
+    }, 0);
+    return () => window.clearTimeout(hydrationTimer);
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      const stored = localStorage.getItem("tidingz_dark");
+      if (stored === "true") {
+        setDarkMode(true);
+      }
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, []);
 
   useEffect(() => {
@@ -56,6 +66,21 @@ export default function Navbar({ openAuthModal }: NavbarProps) {
 
   const showLoggedInUi = hydrated && isLoggedIn;
   const showDarkModeOnIcon = hydrated && darkMode;
+  const currentRole = user?.role || "delegate";
+  const visibleNavLinks = showLoggedInUi
+    ? NAV_LINKS.filter((link) => {
+        if (link.href === "/marketplace") {
+          return currentRole !== "organizer";
+        }
+        if (link.href === "/dashboard") {
+          return currentRole !== "organizer";
+        }
+        if (link.href === "/organizers") {
+          return currentRole !== "delegate";
+        }
+        return true;
+      })
+    : NAV_LINKS;
 
   return (
     <>
@@ -85,7 +110,7 @@ export default function Navbar({ openAuthModal }: NavbarProps) {
 
           {/* Desktop nav */}
           <div className="hidden md:flex items-center gap-1">
-            {NAV_LINKS.map((l) => (
+            {visibleNavLinks.map((l) => (
               <Link
                 key={l.href}
                 href={l.href}
@@ -164,30 +189,36 @@ export default function Navbar({ openAuthModal }: NavbarProps) {
                       <p className="text-sm font-semibold" style={{ color: "var(--fg)" }}>{user?.name}</p>
                       <p className="text-xs" style={{ color: "var(--fg-muted)" }}>{user?.email}</p>
                     </div>
-                    <Link
-                      href="/dashboard"
-                      onClick={() => setUserMenuOpen(false)}
-                      className="flex items-center gap-3 px-4 py-3 text-sm font-medium transition-colors"
-                      style={{ color: "var(--fg)" }}
-                    >
-                      📊 Dashboard
-                    </Link>
-                    <Link
-                      href={`/delegates/${user?.id || ""}`}
-                      onClick={() => setUserMenuOpen(false)}
-                      className="flex items-center gap-3 px-4 py-3 text-sm font-medium transition-colors"
-                      style={{ color: "var(--fg)" }}
-                    >
-                      🪪 Public Profile
-                    </Link>
-                    <Link
-                      href="/organizers/dashboard"
-                      onClick={() => setUserMenuOpen(false)}
-                      className="flex items-center gap-3 px-4 py-3 text-sm font-medium transition-colors"
-                      style={{ color: "var(--fg)" }}
-                    >
-                      🏢 Organizer Dashboard
-                    </Link>
+                    {currentRole !== "organizer" && (
+                      <>
+                        <Link
+                          href="/dashboard"
+                          onClick={() => setUserMenuOpen(false)}
+                          className="flex items-center gap-3 px-4 py-3 text-sm font-medium transition-colors"
+                          style={{ color: "var(--fg)" }}
+                        >
+                          📊 Dashboard
+                        </Link>
+                        <Link
+                          href={`/delegates/${user?.id || ""}`}
+                          onClick={() => setUserMenuOpen(false)}
+                          className="flex items-center gap-3 px-4 py-3 text-sm font-medium transition-colors"
+                          style={{ color: "var(--fg)" }}
+                        >
+                          🪪 Public Profile
+                        </Link>
+                      </>
+                    )}
+                    {currentRole !== "delegate" && (
+                      <Link
+                        href="/organizers/dashboard"
+                        onClick={() => setUserMenuOpen(false)}
+                        className="flex items-center gap-3 px-4 py-3 text-sm font-medium transition-colors"
+                        style={{ color: "var(--fg)" }}
+                      >
+                        🏢 Organizer Dashboard
+                      </Link>
+                    )}
                     <Link
                       href="/resolution-copilot"
                       onClick={() => setUserMenuOpen(false)}
@@ -270,7 +301,7 @@ export default function Navbar({ openAuthModal }: NavbarProps) {
             }}
           >
             <div className="pt-4 flex flex-col gap-1">
-              {NAV_LINKS.map((l) => (
+              {visibleNavLinks.map((l) => (
                 <Link
                   key={l.href}
                   href={l.href}

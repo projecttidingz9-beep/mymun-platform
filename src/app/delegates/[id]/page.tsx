@@ -72,7 +72,9 @@ export default function DelegateProfilePage() {
                 <h1 className="text-3xl font-black" style={{ color: "var(--fg)" }}>{profile.name}</h1>
                 <p className="text-sm" style={{ color: "var(--fg-muted)" }}>{profile.school} · {profile.country}</p>
               </div>
-              <span className="badge badge-blue ml-auto">Public Profile</span>
+              <span className="badge badge-blue ml-auto">
+                {isVisible ? "Public Profile" : "Private Profile"}
+              </span>
             </div>
           </div>
 
@@ -119,6 +121,16 @@ export default function DelegateProfilePage() {
                         {entry.notes && (
                           <p className="text-xs mt-2" style={{ color: "var(--fg-muted)" }}>{entry.notes}</p>
                         )}
+                        {entry.certificateUrl && (
+                          <a
+                            href={entry.certificateUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="btn btn-ghost text-xs mt-2 inline-flex"
+                          >
+                            View Certificate
+                          </a>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -135,9 +147,19 @@ export default function DelegateProfilePage() {
                   <div className="space-y-3">
                     {(profile.munAwards || []).map((entry: DelegateMunAward) => (
                       <div key={entry.id} className="rounded-xl p-4" style={{ background: "var(--bg-subtle)" }}>
-                        <p className="text-sm font-semibold" style={{ color: "var(--fg)" }}>
-                          {entry.title} · {entry.conferenceName} {entry.year ? `(${entry.year})` : ""}
-                        </p>
+                        <div className="flex items-center gap-3">
+                          {entry.logoUrl && (
+                            <img
+                              src={entry.logoUrl}
+                              alt={`${entry.title} logo`}
+                              className="w-8 h-8 rounded object-cover"
+                              style={{ border: "1px solid var(--border)" }}
+                            />
+                          )}
+                          <p className="text-sm font-semibold" style={{ color: "var(--fg)" }}>
+                            {entry.title} · {entry.conferenceName} {entry.year ? `(${entry.year})` : ""}
+                          </p>
+                        </div>
                         <p className="text-xs mt-1" style={{ color: "var(--fg-muted)" }}>
                           {entry.category || "General"} {entry.committee ? `· ${entry.committee}` : ""}
                         </p>

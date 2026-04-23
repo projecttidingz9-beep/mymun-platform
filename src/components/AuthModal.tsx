@@ -13,11 +13,13 @@ interface AuthModalProps {
 export default function AuthModal({ isOpen, onClose, defaultTab = "signin" }: AuthModalProps) {
   const { login } = useAuth();
   const [tab, setTab] = useState<"signin" | "register">(defaultTab);
+  const [registerRole, setRegisterRole] = useState<"delegate" | "organizer">("delegate");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [forgotLoading, setForgotLoading] = useState(false);
   const overlayRef = useRef<HTMLDivElement>(null);
 
   const closeModal = () => {
@@ -43,14 +45,58 @@ export default function AuthModal({ isOpen, onClose, defaultTab = "signin" }: Au
     setError("");
 
     if (!email || !password) { setError("Please fill all required fields."); return; }
-    if (password.length < 6) { setError("Password must be at least 6 characters."); return; }
+    if (password.length < 8) { setError("Password must be at least 8 characters."); return; }
     if (tab === "register" && !name) { setError("Please enter your full name."); return; }
     if (!email.includes("@")) { setError("Please enter a valid email address."); return; }
 
     setLoading(true);
-    await new Promise(r => setTimeout(r, 900)); // Simulate API
-    login(email, tab === "register" ? name : undefined);
+    const endpoint = tab === "register" ? "/api/auth/register" : "/api/auth/login";
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({
+        email,
+        password,
+        ...(tab === "register" ? { name, role: registerRole } : {}),
+      }),
+    });
+    const payload = (await response.json().catch(() => ({}))) as {
+      error?: string;
+      name?: string;
+      role?: "delegate" | "organizer" | "admin";
+    };
+    if (!response.ok) {
+      setError(payload.error || "Authentication failed.");
+      setLoading(false);
+      return;
+    }
+    login(email, payload.name || (tab === "register" ? name : undefined), payload.role || "delegate");
     closeModal();
+  };
+
+  const handleForgotPassword = async () => {
+    setError("");
+    if (!email || !email.includes("@")) {
+      setError("Enter your account email first.");
+      return;
+    }
+    setForgotLoading(true);
+    try {
+      const response = await fetch("/api/auth/forgot-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      const payload = (await response.json().catch(() => ({}))) as { error?: string };
+      if (!response.ok) {
+        setError(payload.error || "Could not start password reset.");
+        return;
+      }
+      setError("Password reset link sent. Please check your email.");
+    } finally {
+      setForgotLoading(false);
+    }
   };
 
   return (
@@ -124,17 +170,34 @@ export default function AuthModal({ isOpen, onClose, defaultTab = "signin" }: Au
         {/* Form */}
         <form onSubmit={handleSubmit} className="px-8 pb-8 space-y-4">
           {tab === "register" && (
-            <div>
-              <label className="block text-sm font-semibold mb-1.5" style={{ color: "var(--fg)" }}>
-                Full Name
-              </label>
-              <input
-                type="text"
-                placeholder="e.g. Alex Chen"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                className="input-base"
-              />
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-semibold mb-1.5" style={{ color: "var(--fg)" }}>
+                  Full Name
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Alex Chen"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className="input-base"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold mb-1.5" style={{ color: "var(--fg)" }}>
+                  Register As
+                </label>
+                <select
+                  value={registerRole}
+                  onChange={(event) =>
+                    setRegisterRole(event.target.value === "organizer" ? "organizer" : "delegate")
+                  }
+                  className="input-base"
+                >
+                  <option value="delegate">Participant</option>
+                  <option value="organizer">Organizer</option>
+                </select>
+              </div>
             </div>
           )}
 
@@ -162,6 +225,17 @@ export default function AuthModal({ isOpen, onClose, defaultTab = "signin" }: Au
               onChange={(e) => setPassword(e.target.value)}
               className="input-base"
             />
+            {tab === "signin" && (
+              <button
+                type="button"
+                onClick={handleForgotPassword}
+                className="text-xs mt-2"
+                style={{ color: "var(--blue)" }}
+                disabled={forgotLoading}
+              >
+                {forgotLoading ? "Sending reset link..." : "Forgot password?"}
+              </button>
+            )}
           </div>
 
           {error && (

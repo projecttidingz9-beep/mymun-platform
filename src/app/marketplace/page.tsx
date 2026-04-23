@@ -6,6 +6,7 @@ import Footer from "@/components/Footer";
 import ConferenceCard from "@/components/ConferenceCard";
 import AuthModal from "@/components/AuthModal";
 import { CONFERENCES } from "@/lib/data";
+import { useAuth } from "@/lib/auth-context";
 
 const LEVELS = ["All", "High School", "University", "Elite", "Open", "Hybrid"];
 const REGIONS = ["All", "Asia", "Europe", "Americas", "Africa", "Oceania"];
@@ -29,6 +30,8 @@ function parseDayValue(value: string): number | null {
 }
 
 export default function MarketplacePage() {
+  const { user } = useAuth();
+  const isOrganizerUser = user?.role === "organizer";
   const [search, setSearch] = useState("");
   const [level, setLevel] = useState("All");
   const [region, setRegion] = useState("All");
@@ -387,6 +390,11 @@ export default function MarketplacePage() {
           <p className="text-base" style={{ color: "var(--fg-muted)" }}>
             {CONFERENCES.length} conferences available worldwide — filter to find your perfect match.
           </p>
+          {isOrganizerUser && (
+            <p className="text-sm mt-3" style={{ color: "var(--fg-muted)" }}>
+              Organizer accounts can browse and view conferences, but registration is disabled.
+            </p>
+          )}
 
           <div className="mt-6 flex flex-col gap-3">
             <div

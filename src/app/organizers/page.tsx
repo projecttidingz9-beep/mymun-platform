@@ -127,6 +127,9 @@ export default function OrganizersPage() {
       id: "cat-1",
       name: "Delegate Registration",
       description: "",
+      applicationType: "delegate",
+      isOpen: true,
+      deadlineOverride: "",
       basePrice: 85,
       requiresCommitteeSelection: true,
       formFields: [],
@@ -197,6 +200,9 @@ export default function OrganizersPage() {
         id: nextId("cat"),
         name: "",
         description: "",
+        applicationType: "delegate",
+        isOpen: true,
+        deadlineOverride: "",
         basePrice: 0,
         requiresCommitteeSelection: true,
         formFields: [],
@@ -207,7 +213,19 @@ export default function OrganizersPage() {
 
   const updateCategory = (
     index: number,
-    patch: Partial<Pick<RegistrationCategory, "name" | "description" | "basePrice" | "requiresCommitteeSelection">>
+    patch: Partial<
+      Pick<
+        RegistrationCategory,
+        | "name"
+        | "description"
+        | "applicationType"
+        | "isOpen"
+        | "deadlineOverride"
+        | "maxDelegatesPerDelegation"
+        | "basePrice"
+        | "requiresCommitteeSelection"
+      >
+    >
   ) => {
     setCategories((prev) => prev.map((category, idx) => (idx === index ? { ...category, ...patch } : category)));
   };
@@ -368,6 +386,8 @@ export default function OrganizersPage() {
         .filter((category) => category.name.trim())
         .map((category) => ({
           ...category,
+          deadlineOverride: category.deadlineOverride?.trim() || undefined,
+          isOpen: category.isOpen !== false,
           pricingPhases: category.pricingPhases.filter(
             (phase) => phase.name && phase.startDate && phase.endDate
           ),
@@ -712,6 +732,53 @@ export default function OrganizersPage() {
                             className="input-base text-sm"
                             placeholder="Describe this registration category"
                           />
+                          <div className="grid grid-cols-2 gap-3">
+                            <select
+                              value={category.applicationType || "delegate"}
+                              onChange={(event) =>
+                                updateCategory(index, {
+                                  applicationType: event.target.value as "delegate" | "chair" | "delegation" | "organizer" | "other",
+                                })
+                              }
+                              className="input-base text-sm"
+                            >
+                              <option value="delegate">Delegate</option>
+                              <option value="delegation">Delegation</option>
+                              <option value="chair">Chair</option>
+                              <option value="organizer">Organizer Team</option>
+                              <option value="other">Other (Custom)</option>
+                            </select>
+                            <input
+                              value={category.deadlineOverride || ""}
+                              onChange={(event) => updateCategory(index, { deadlineOverride: event.target.value })}
+                              className="input-base text-sm"
+                              type="date"
+                            />
+                          </div>
+                          <label className="flex items-center gap-2 text-sm" style={{ color: "var(--fg-muted)" }}>
+                            <input
+                              type="checkbox"
+                              checked={category.isOpen !== false}
+                              onChange={(event) => updateCategory(index, { isOpen: event.target.checked })}
+                            />
+                            Category open for applications
+                          </label>
+                          {category.applicationType === "delegation" && (
+                            <input
+                              value={category.maxDelegatesPerDelegation ?? ""}
+                              onChange={(event) => {
+                                const parsed = Number(event.target.value);
+                                updateCategory(index, {
+                                  maxDelegatesPerDelegation:
+                                    Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : undefined,
+                                });
+                              }}
+                              className="input-base text-sm"
+                              placeholder="Max delegates per delegation (optional)"
+                              type="number"
+                              min={1}
+                            />
+                          )}
                           <label className="flex items-center gap-2 text-sm" style={{ color: "var(--fg-muted)" }}>
                             <input
                               type="checkbox"

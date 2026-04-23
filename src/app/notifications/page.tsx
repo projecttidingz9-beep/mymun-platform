@@ -17,7 +17,7 @@ export default function NotificationsPage() {
 
   useEffect(() => {
     if (!isLoggedIn || !user) return;
-    void ensureServerSession({ email: user.email, role: "delegate", name: user.name });
+    void ensureServerSession({ email: user.email, name: user.name });
   }, [isLoggedIn, user]);
 
   if (!isLoggedIn || !user) return null;
