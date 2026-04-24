@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { Conference } from "@/lib/types";
 
 interface ConferenceCardProps {
@@ -37,6 +38,13 @@ function SeatsBar({ registered, capacity }: { registered: number; capacity: numb
 export default function ConferenceCard({ conference: c }: ConferenceCardProps) {
   const badge = LEVEL_BADGE[c.level] || LEVEL_BADGE["Open"];
   const hasBanner = Boolean(c.bannerImageUrl);
+  const hasLogo = Boolean(c.logoImageUrl);
+  const logoFallback = c.title
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() || "")
+    .join("") || "MUN";
 
   return (
     <Link href={`/conference/${c.id}`} className="block group card rounded-[1.5rem] overflow-hidden cursor-pointer">
@@ -61,8 +69,33 @@ export default function ConferenceCard({ conference: c }: ConferenceCardProps) {
             backgroundSize: "40px 40px",
           }}
         />
+        {/* Center logo */}
+        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[2]">
+          <div
+            className="w-16 h-16 rounded-full overflow-hidden flex items-center justify-center text-sm font-black"
+            style={{
+              background: hasLogo ? "rgba(11,13,18,0.8)" : "rgba(11,13,18,0.92)",
+              border: "2px solid rgba(243,237,224,0.7)",
+              boxShadow: "0 8px 24px rgba(0,0,0,0.42)",
+              color: "rgba(243,237,224,0.95)",
+            }}
+            aria-label={`${c.title} logo`}
+          >
+            {hasLogo ? (
+              <Image
+                src={c.logoImageUrl}
+                alt={`${c.title} logo`}
+                className="w-full h-full object-cover rounded-full"
+                width={64}
+                height={64}
+              />
+            ) : (
+              <span style={{ letterSpacing: "0.08em" }}>{logoFallback}</span>
+            )}
+          </div>
+        </div>
         {/* Badges top row */}
-        <div className="absolute top-4 left-4 right-4 flex items-center justify-between">
+        <div className="absolute top-4 left-4 right-4 flex items-center justify-between z-[3]">
           <span className={`badge ${badge.class}`} style={{ background: "rgba(255,255,255,0.2)", color: "white" }}>
             {badge.emoji} {c.level}
           </span>
@@ -74,7 +107,7 @@ export default function ConferenceCard({ conference: c }: ConferenceCardProps) {
         </div>
 
         {/* Price bottom */}
-        <div className="relative">
+        <div className="relative z-[3]">
           <p className="text-white/60 text-[10px] font-bold uppercase tracking-widest">From</p>
           <p className="text-white text-2xl font-black">
             {c.currency === "USD" ? "$" : c.currency === "EUR" ? "€" : c.currency === "GBP" ? "£" : "$"}{c.price}
@@ -82,7 +115,7 @@ export default function ConferenceCard({ conference: c }: ConferenceCardProps) {
         </div>
 
         {/* region label */}
-        <div className="absolute bottom-4 right-4 text-white/50 text-xs font-medium">{c.region}</div>
+        <div className="absolute bottom-4 right-4 text-white/50 text-xs font-medium z-[3]">{c.region}</div>
       </div>
 
       {/* Card Body */}

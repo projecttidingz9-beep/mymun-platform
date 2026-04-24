@@ -616,6 +616,38 @@ textarea:focus-visible {
   color: var(--fg-immersive);
 }
 
+/* Conference detail cards: light by default, dark when html.dark is active. */
+.conference-detail-page .lux-card {
+  background: linear-gradient(180deg, #ffffff 0%, #faf8f3 100%);
+  border: 1px solid var(--border);
+  box-shadow: var(--card-shadow);
+  color: var(--fg);
+}
+
+html.dark .conference-detail-page .lux-card {
+  background: rgba(17, 20, 28, 0.72);
+  border: 1px solid rgba(243, 237, 224, 0.08);
+  box-shadow:
+    0 1px 0 rgba(243, 237, 224, 0.04) inset,
+    0 20px 42px rgba(0, 0, 0, 0.34);
+  color: var(--fg-immersive);
+}
+
+/* Make the top registration card fully white in light mode. */
+.conference-detail-page .conference-hero-card {
+  background: #ffffff;
+  border: 1px solid var(--border);
+  box-shadow: var(--card-shadow);
+}
+
+html.dark .conference-detail-page .conference-hero-card {
+  background: rgba(17, 20, 28, 0.72);
+  border: 1px solid rgba(243, 237, 224, 0.08);
+  box-shadow:
+    0 1px 0 rgba(243, 237, 224, 0.04) inset,
+    0 20px 42px rgba(0, 0, 0, 0.34);
+}
+
 .lux-card-interactive {
   transition: transform 0.35s cubic-bezier(0.2, 0.7, 0.2, 1),
     border-color 0.3s ease, box-shadow 0.3s ease, background 0.3s ease;
@@ -837,6 +869,25 @@ textarea:focus-visible {
 .lux-shell-immersive .card p,
 .lux-shell-immersive .card span:not(.badge) {
   color: rgba(243, 237, 224, 0.72);
+}
+
+/* Forms in immersive pages (e.g. conference reviews) — match footer input contrast. */
+.lux-shell-immersive .input-base,
+.lux-shell-immersive textarea.input-base {
+  background: rgba(243, 237, 224, 0.04);
+  border: 1px solid rgba(243, 237, 224, 0.14);
+  color: var(--fg-immersive);
+}
+
+.lux-shell-immersive .input-base::placeholder,
+.lux-shell-immersive textarea.input-base::placeholder {
+  color: rgba(243, 237, 224, 0.4);
+}
+
+.lux-shell-immersive .input-base:focus,
+.lux-shell-immersive textarea.input-base:focus {
+  border-color: rgba(216, 172, 114, 0.6);
+  box-shadow: 0 0 0 4px rgba(216, 172, 114, 0.18);
 }
 
 /* Footer polish for immersive shell: dark surface, refined links,

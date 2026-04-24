@@ -126,6 +126,7 @@ export interface Conference {
   website: string;
   featured: boolean;
   color: string; // gradient color for card
+  logoImageUrl?: string;
   bannerImageUrl?: string;
   tags: string[];
 }

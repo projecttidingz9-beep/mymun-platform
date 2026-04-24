@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import AuthModal from "@/components/AuthModal";
@@ -53,18 +54,17 @@ export default function ConferenceDetailPage() {
 
   if (!conference && !organizerConference) {
     return (
-      <div className="lux-shell lux-shell-immersive min-h-screen flex items-center justify-center">
-        <div aria-hidden className="lux-backdrop" />
+      <div className="min-h-screen flex items-center justify-center" style={{ background: "var(--bg)" }}>
         <div className="relative text-center">
           <p
             className="lux-eyebrow justify-center inline-flex"
-            style={{ color: "rgba(243,237,224,0.55)" }}
+            style={{ color: "var(--fg-muted)" }}
           >
             Not found
           </p>
           <h1
             className="mt-5 text-3xl font-semibold"
-            style={{ color: "var(--fg-immersive)", letterSpacing: "-0.02em" }}
+            style={{ color: "var(--fg)", letterSpacing: "-0.02em" }}
           >
             We couldn&apos;t find that conference.
           </h1>
@@ -156,6 +156,13 @@ export default function ConferenceDetailPage() {
   const displayOrganizerEmail = c.organizerEmail;
   const displayWebsite = organizerConference?.socialLinks?.website || c.website;
   const heroBannerImage = organizerConference?.bannerImageUrl || c.bannerImageUrl;
+  const heroLogoImage = organizerConference?.logoImageUrl || c.logoImageUrl;
+  const heroLogoFallback = displayTitle
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() || "")
+    .join("") || "MUN";
   const isOrganizerUser = isLoggedIn && user?.role === "organizer";
   const policySections = organizerConference
     ? [
@@ -186,6 +193,30 @@ export default function ConferenceDetailPage() {
       )
     : [];
 
+  const displayCommittees = organizerConference
+    ? mergedCommittees.map((cm) => ({
+        id: cm.id,
+        abbreviation: (cm.type || "Committee").slice(0, 8).toUpperCase(),
+        name: cm.name,
+        difficulty: "Intermediate" as const,
+        topic1: cm.agenda,
+        topic2: cm.customQuestions?.[0]?.question || "Details shared by organizer",
+        size: cm.seatCount,
+        seatsRemaining: cm.seatCount - cm.allotted,
+        portfolios: cm.portfolios ?? [],
+        chairName: cm.chairName,
+        sourceConferenceTitle: cm.sourceConferenceTitle,
+      }))
+    : c.committees.map((cm) => ({
+        ...cm,
+        seatsRemaining: cm.size,
+        portfolios: [],
+        chairName: undefined,
+        sourceConferenceTitle: c.title,
+      }));
+
+  const reviewsToShow = organizerConference ? mergedReviews : [];
+
   const handleRegister = () => {
     if (!isLoggedIn) { setAuthOpen(true); return; }
     if (isOrganizerUser) return;
@@ -201,8 +232,7 @@ export default function ConferenceDetailPage() {
   ];
 
   return (
-    <div className="lux-shell lux-shell-immersive min-h-screen">
-      <div aria-hidden className="lux-backdrop" />
+    <div className="conference-detail-page min-h-screen" style={{ background: "var(--bg)", color: "var(--fg)" }}>
 
       <Navbar openAuthModal={() => setAuthOpen(true)} />
       <AuthModal isOpen={authOpen} onClose={() => setAuthOpen(false)} />
@@ -213,13 +243,13 @@ export default function ConferenceDetailPage() {
         style={
           heroBannerImage
             ? {
-                backgroundImage: `linear-gradient(180deg, rgba(11,13,18,0.55) 0%, rgba(11,13,18,0.78) 65%, rgba(11,13,18,0.94) 100%), url("${heroBannerImage}")`,
+                backgroundImage: `linear-gradient(180deg, color-mix(in srgb, var(--fg) 16%, transparent) 0%, color-mix(in srgb, var(--fg) 26%, transparent) 65%, color-mix(in srgb, var(--fg) 36%, transparent) 100%), url("${heroBannerImage}")`,
                 backgroundSize: "cover",
                 backgroundPosition: "center",
               }
             : {
                 background:
-                  "linear-gradient(180deg, rgba(11,13,18,0.4) 0%, rgba(11,13,18,0.85) 100%)",
+                  "linear-gradient(180deg, color-mix(in srgb, var(--fg) 8%, transparent) 0%, color-mix(in srgb, var(--fg) 16%, transparent) 100%)",
               }
         }
       >
@@ -227,17 +257,17 @@ export default function ConferenceDetailPage() {
           {/* Breadcrumb */}
           <div
             className="flex items-center gap-2 text-xs tracking-[0.22em] uppercase mb-10"
-            style={{ color: "rgba(243,237,224,0.55)" }}
+            style={{ color: "var(--fg-muted)" }}
           >
-            <Link href="/" className="hover:text-white transition-colors">
+            <Link href="/" className="transition-colors">
               Home
             </Link>
             <span>·</span>
-            <Link href="/marketplace" className="hover:text-white transition-colors">
+            <Link href="/marketplace" className="transition-colors">
               Marketplace
             </Link>
             <span>·</span>
-            <span style={{ color: "var(--fg-immersive)" }}>{displayTitle}</span>
+            <span style={{ color: "var(--fg)" }}>{displayTitle}</span>
           </div>
 
           <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-10">
@@ -246,11 +276,11 @@ export default function ConferenceDetailPage() {
                 <span
                   className="text-[10px] font-semibold px-3 py-1 rounded-full"
                   style={{
-                    background: "rgba(243,237,224,0.1)",
-                    color: "var(--fg-immersive)",
+                    background: "var(--bg-subtle)",
+                    color: "var(--fg)",
                     letterSpacing: "0.22em",
                     textTransform: "uppercase",
-                    border: "1px solid rgba(243,237,224,0.18)",
+                    border: "1px solid var(--border)",
                   }}
                 >
                   {c.level}
@@ -272,11 +302,11 @@ export default function ConferenceDetailPage() {
                 <span
                   className="text-[10px] font-semibold px-3 py-1 rounded-full"
                   style={{
-                    background: "rgba(243,237,224,0.1)",
-                    color: "var(--fg-immersive)",
+                    background: "var(--bg-subtle)",
+                    color: "var(--fg)",
                     letterSpacing: "0.22em",
                     textTransform: "uppercase",
-                    border: "1px solid rgba(243,237,224,0.18)",
+                    border: "1px solid var(--border)",
                   }}
                 >
                   {c.region}
@@ -285,15 +315,39 @@ export default function ConferenceDetailPage() {
 
               <h1
                 className="lux-display max-w-3xl"
-                style={{ color: "var(--fg-immersive)" }}
+                style={{ color: "var(--fg)" }}
               >
                 {displayTitle}
               </h1>
+              <div className="mt-6">
+                <div
+                  className="w-20 h-20 rounded-full overflow-hidden flex items-center justify-center text-lg font-black"
+                  style={{
+                    background: "color-mix(in srgb, var(--bg) 86%, transparent 14%)",
+                    border: "2px solid var(--border)",
+                    boxShadow: "0 8px 24px rgba(0,0,0,0.25)",
+                    color: "var(--fg)",
+                  }}
+                  aria-label={`${displayTitle} logo`}
+                >
+                  {heroLogoImage ? (
+                    <Image
+                      src={heroLogoImage}
+                      alt={`${displayTitle} logo`}
+                      width={80}
+                      height={80}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <span style={{ letterSpacing: "0.08em" }}>{heroLogoFallback}</span>
+                  )}
+                </div>
+              </div>
 
               {acceptedPartnerConferences.length > 0 && (
                 <p
                   className="mt-5 text-sm"
-                  style={{ color: "rgba(243,237,224,0.72)" }}
+                  style={{ color: "var(--fg-muted)" }}
                 >
                   Co-hosted by{" "}
                   {acceptedPartnerConferences.map((entry) => entry.title).join(", ")}
@@ -302,7 +356,7 @@ export default function ConferenceDetailPage() {
 
               <div
                 className="mt-8 flex flex-wrap gap-6 text-sm"
-                style={{ color: "rgba(243,237,224,0.75)" }}
+                style={{ color: "var(--fg-muted)" }}
               >
                 <span className="flex items-center gap-2">
                   <span style={{ color: "var(--accent-warm)" }}>◆</span>
@@ -320,11 +374,11 @@ export default function ConferenceDetailPage() {
             </div>
 
             {/* Registration Card */}
-            <div className="w-full lg:w-[340px] lux-card p-7 flex-shrink-0 lg:sticky lg:top-28">
+            <div className="conference-hero-card w-full lg:w-[340px] lux-card p-7 flex-shrink-0 lg:sticky lg:top-28">
               <p
                 className="text-[10px] font-semibold"
                 style={{
-                  color: "rgba(243,237,224,0.55)",
+                  color: "var(--fg-muted)",
                   letterSpacing: "0.28em",
                   textTransform: "uppercase",
                 }}
@@ -335,20 +389,20 @@ export default function ConferenceDetailPage() {
                 <span
                   className="text-4xl font-semibold"
                   style={{
-                    color: "var(--fg-immersive)",
+                    color: "var(--fg)",
                     letterSpacing: "-0.02em",
                   }}
                 >
                   {currencySymbol}
                   {dynamicStartingPrice}
                 </span>
-                <span className="text-xs" style={{ color: "rgba(243,237,224,0.55)" }}>
+                <span className="text-xs" style={{ color: "var(--fg-muted)" }}>
                   per delegate
                 </span>
               </div>
               <p
                 className="mt-2 text-xs"
-                style={{ color: "rgba(243,237,224,0.55)" }}
+                style={{ color: "var(--fg-muted)" }}
               >
                 {activeCategoryPhase
                   ? `${activeCategoryPhase.name} phase is active`
@@ -364,7 +418,7 @@ export default function ConferenceDetailPage() {
                     {seatsLeft}
                     <span
                       className="text-sm font-normal ml-1"
-                      style={{ color: "rgba(243,237,224,0.55)" }}
+                      style={{ color: "var(--fg-muted)" }}
                     >
                       / {derivedCapacity}
                     </span>
@@ -373,14 +427,14 @@ export default function ConferenceDetailPage() {
                 <div>
                   <div
                     className="flex justify-between text-[11px] mb-1.5"
-                    style={{ color: "rgba(243,237,224,0.6)" }}
+                    style={{ color: "var(--fg-muted)" }}
                   >
                     <span>{seatsLeft} remaining</span>
                     <span>{pct}% filled</span>
                   </div>
                   <div
                     className="h-1.5 rounded-full"
-                    style={{ background: "rgba(243,237,224,0.08)" }}
+                    style={{ background: "color-mix(in srgb, var(--fg) 12%, transparent 88%)" }}
                   >
                     <div
                       className="h-full rounded-full transition-all"
@@ -412,9 +466,9 @@ export default function ConferenceDetailPage() {
                   opacity: isOrganizerUser ? 0.6 : 1,
                   ...(isOrganizerUser
                     ? {
-                        color: "var(--fg-immersive)",
-                        borderColor: "rgba(243,237,224,0.22)",
-                        background: "rgba(243,237,224,0.04)",
+                        color: "var(--fg)",
+                        borderColor: "var(--border)",
+                        background: "var(--bg-subtle)",
                       }
                     : {}),
                 }}
@@ -428,7 +482,7 @@ export default function ConferenceDetailPage() {
 
               <p
                 className="mt-4 text-[11px] text-center"
-                style={{ color: "rgba(243,237,224,0.5)" }}
+                style={{ color: "var(--fg-muted)" }}
               >
                 Free cancellation before {c.registrationDeadline}
               </p>
@@ -441,10 +495,10 @@ export default function ConferenceDetailPage() {
       <div
         className="sticky top-[72px] z-40"
         style={{
-          background: "rgba(11,13,18,0.85)",
+          background: "color-mix(in srgb, var(--bg) 90%, transparent 10%)",
           backdropFilter: "blur(14px) saturate(118%)",
           WebkitBackdropFilter: "blur(14px) saturate(118%)",
-          borderBottom: "1px solid rgba(243,237,224,0.08)",
+          borderBottom: "1px solid var(--border)",
         }}
       >
         <div className="max-w-7xl mx-auto px-6">
@@ -458,8 +512,8 @@ export default function ConferenceDetailPage() {
                 style={{
                   color:
                     tab === t.key
-                      ? "var(--fg-immersive)"
-                      : "rgba(243,237,224,0.55)",
+                      ? "var(--fg)"
+                      : "var(--fg-muted)",
                   fontWeight: 500,
                   letterSpacing: "0.04em",
                   fontSize: "13px",
@@ -480,20 +534,26 @@ export default function ConferenceDetailPage() {
       </div>
 
       {/* Content */}
-      <div className="max-w-7xl mx-auto px-6 py-12">
+      <div className="max-w-7xl mx-auto px-6 py-12 relative z-10 isolate">
         {tab === "overview" && (
           <div className="grid lg:grid-cols-3 gap-10">
             <div className="lg:col-span-2 space-y-8">
-              <div>
-                <h2 className="text-2xl font-bold mb-4" style={{ color: "var(--fg)" }}>About this Conference</h2>
+              <div className="lux-card p-6 sm:p-7">
+                <h2 className="text-2xl font-bold mb-4" style={{ color: "var(--fg)" }}>
+                  About this Conference
+                </h2>
                 <p className="text-base leading-relaxed" style={{ color: "var(--fg-muted)" }}>{displayDescription}</p>
               </div>
               {policySections.length > 0 && (
-                <div>
+                <div className="lux-card p-6 sm:p-7">
                   <h2 className="text-2xl font-bold mb-4" style={{ color: "var(--fg)" }}>Policies & Information</h2>
                   <div className="space-y-4">
                     {policySections.map((section) => (
-                      <div key={section.key} className="card p-4 rounded-2xl">
+                      <div
+                        key={section.key}
+                        className="rounded-2xl p-4"
+                        style={{ background: "var(--bg-subtle)", border: "1px solid var(--border)" }}
+                      >
                         <h3 className="text-sm font-semibold mb-2" style={{ color: "var(--fg)" }}>
                           {section.label}
                         </h3>
@@ -506,65 +566,77 @@ export default function ConferenceDetailPage() {
                 </div>
               )}
               {(commonDocuments.length > 0 || committeeDocumentGroups.length > 0) && (
-                <div>
-                  <h2 className="text-2xl font-bold mb-4" style={{ color: "var(--fg)" }}>Documents</h2>
+                <div className="lux-card p-6 sm:p-7 space-y-6">
+                  <h2 className="text-2xl font-bold" style={{ color: "var(--fg)" }}>Documents</h2>
                   {commonDocuments.length > 0 && (
-                    <div className="space-y-2 mb-4">
-                      <p className="text-sm font-semibold" style={{ color: "var(--fg)" }}>Common MUN Documents</p>
-                      {commonDocuments.map((document) => (
-                        <a
-                          key={`${document.sourceConferenceTitle}-${document.id}`}
-                          className="card p-3 rounded-xl flex items-center justify-between gap-2"
-                          href={document.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                        >
-                          <div>
-                            <p className="text-sm" style={{ color: "var(--fg)" }}>{document.title}</p>
-                            <p className="text-xs" style={{ color: "var(--fg-muted)" }}>
-                              {document.category} · {document.sourceConferenceTitle}
-                            </p>
-                          </div>
-                          <span className="text-xs" style={{ color: "var(--blue)" }}>Open</span>
-                        </a>
-                      ))}
+                    <div>
+                      <p className="text-sm font-semibold mb-3" style={{ color: "var(--fg)" }}>Common MUN Documents</p>
+                      <div
+                        className="rounded-xl overflow-hidden divide-y"
+                        style={{ border: "1px solid var(--border)" }}
+                      >
+                        {commonDocuments.map((document) => (
+                          <a
+                            key={`${document.sourceConferenceTitle}-${document.id}`}
+                            className="flex items-center justify-between gap-2 px-4 py-3"
+                            style={{ color: "inherit" }}
+                            href={document.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            <div>
+                              <p className="text-sm" style={{ color: "var(--fg)" }}>{document.title}</p>
+                              <p className="text-xs" style={{ color: "var(--fg-muted)" }}>
+                                {document.category} · {document.sourceConferenceTitle}
+                              </p>
+                            </div>
+                            <span className="text-xs shrink-0" style={{ color: "var(--blue)" }}>Open</span>
+                          </a>
+                        ))}
+                      </div>
                     </div>
                   )}
                   {committeeDocumentGroups.length > 0 && (
-                    <div className="space-y-3">
-                      <p className="text-sm font-semibold" style={{ color: "var(--fg)" }}>Committee Documents</p>
-                      {committeeDocumentGroups.map((group) => (
-                        <div key={group.id} className="card p-4 rounded-xl">
-                          <p className="text-sm font-semibold mb-2" style={{ color: "var(--fg)" }}>
-                            {group.committeeName}
-                          </p>
-                          <p className="text-xs mb-2" style={{ color: "var(--fg-muted)" }}>
-                            {group.sourceConferenceTitle}
-                          </p>
-                          <div className="space-y-2">
-                            {group.documents.map((document) => (
-                              <a
-                                key={document.id}
-                                className="flex items-center justify-between gap-2"
-                                href={document.url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                              >
-                                <span className="text-xs" style={{ color: "var(--fg)" }}>
-                                  {document.title} · {document.category}
-                                </span>
-                                <span className="text-xs" style={{ color: "var(--blue)" }}>Open</span>
-                              </a>
-                            ))}
+                    <div>
+                      <p className="text-sm font-semibold mb-3" style={{ color: "var(--fg)" }}>Committee Documents</p>
+                      <div className="space-y-4">
+                        {committeeDocumentGroups.map((group) => (
+                          <div
+                            key={group.id}
+                            className="rounded-xl p-4"
+                            style={{ background: "var(--bg-subtle)", border: "1px solid var(--border)" }}
+                          >
+                            <p className="text-sm font-semibold mb-2" style={{ color: "var(--fg)" }}>
+                              {group.committeeName}
+                            </p>
+                            <p className="text-xs mb-3" style={{ color: "var(--fg-muted)" }}>
+                              {group.sourceConferenceTitle}
+                            </p>
+                            <div className="space-y-2">
+                              {group.documents.map((document) => (
+                                <a
+                                  key={document.id}
+                                  className="flex items-center justify-between gap-2"
+                                  href={document.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                >
+                                  <span className="text-xs" style={{ color: "var(--fg)" }}>
+                                    {document.title} · {document.category}
+                                  </span>
+                                  <span className="text-xs shrink-0" style={{ color: "var(--blue)" }}>Open</span>
+                                </a>
+                              ))}
+                            </div>
                           </div>
-                        </div>
-                      ))}
+                        ))}
+                      </div>
                     </div>
                   )}
                 </div>
               )}
 
-              <div>
+              <div className="lux-card p-6 sm:p-7">
                 <h2 className="text-2xl font-bold mb-5" style={{ color: "var(--fg)" }}>What&apos;s Included</h2>
                 <div className="grid sm:grid-cols-2 gap-3">
                   {[
@@ -644,29 +716,15 @@ export default function ConferenceDetailPage() {
         {tab === "committees" && (
           <div>
             <h2 className="text-2xl font-bold mb-6" style={{ color: "var(--fg)" }}>Committees</h2>
+            {displayCommittees.length === 0 ? (
+              <div className="lux-card p-8 text-center max-w-lg">
+                <p className="text-sm" style={{ color: "var(--fg-muted)" }}>
+                  No committees are listed for this conference yet. Check back later or contact the organizer for the committee list.
+                </p>
+              </div>
+            ) : (
             <div className="grid md:grid-cols-2 gap-5">
-              {(organizerConference
-                ? mergedCommittees.map((cm) => ({
-                    id: cm.id,
-                    abbreviation: (cm.type || "Committee").slice(0, 8).toUpperCase(),
-                    name: cm.name,
-                    difficulty: "Intermediate" as const,
-                    topic1: cm.agenda,
-                    topic2: cm.customQuestions?.[0]?.question || "Details shared by organizer",
-                    size: cm.seatCount,
-                    seatsRemaining: cm.seatCount - cm.allotted,
-                    portfolios: cm.portfolios ?? [],
-                    chairName: cm.chairName,
-                    sourceConferenceTitle: cm.sourceConferenceTitle,
-                  }))
-                : c.committees.map((cm) => ({
-                    ...cm,
-                    seatsRemaining: cm.size,
-                    portfolios: [],
-                    chairName: undefined,
-                    sourceConferenceTitle: c.title,
-                  }))
-              ).map((cm) => (
+              {displayCommittees.map((cm) => (
                 <div key={cm.id} className="card p-6 rounded-2xl">
                   <div className="flex items-start justify-between mb-4">
                     <div>
@@ -721,26 +779,29 @@ export default function ConferenceDetailPage() {
                 </div>
               ))}
             </div>
+            )}
           </div>
         )}
 
         {tab === "schedule" && (
           <div>
-            <p className="lux-eyebrow" style={{ color: "rgba(243,237,224,0.55)" }}>
-              Programme
-            </p>
-            <h2
-              className="lux-display mt-4 mb-10"
-              style={{ color: "var(--fg-immersive)" }}
-            >
-              Conference schedule.
-            </h2>
+            <div className="lux-card p-6 sm:p-7 mb-8">
+              <p className="lux-eyebrow" style={{ color: "var(--fg-muted)" }}>
+                Programme
+              </p>
+              <h2
+                className="lux-display mt-4"
+                style={{ color: "var(--fg)" }}
+              >
+                Conference schedule.
+              </h2>
+            </div>
             <div className="space-y-5">
               {SCHEDULE.map((day) => (
                 <div key={day.day} className="lux-card p-7">
                   <h3
                     className="text-lg font-semibold mb-5 flex items-center gap-4"
-                    style={{ color: "var(--fg-immersive)" }}
+                    style={{ color: "var(--fg)" }}
                   >
                     <span
                       className="w-10 h-10 rounded-xl flex items-center justify-center text-sm font-semibold"
@@ -766,7 +827,7 @@ export default function ConferenceDetailPage() {
                         />
                         <p
                           className="text-sm"
-                          style={{ color: "rgba(243,237,224,0.72)" }}
+                          style={{ color: "var(--fg-muted)" }}
                         >
                           {event}
                         </p>
@@ -819,8 +880,7 @@ export default function ConferenceDetailPage() {
             <div className="lg:col-span-2">
               <h2 className="text-2xl font-bold mb-4" style={{ color: "var(--fg)" }}>Delegate Reviews</h2>
               <div className="space-y-3">
-                {(organizerConference ? mergedReviews : [])
-                  .map((review) => (
+                {reviewsToShow.map((review) => (
                     <div key={review.id} className="card p-5 rounded-2xl">
                       <div className="flex items-center justify-between">
                         <p className="text-sm font-bold" style={{ color: "var(--fg)" }}>{review.userName}</p>
@@ -831,17 +891,26 @@ export default function ConferenceDetailPage() {
                       {review.featured && <p className="text-xs mt-2" style={{ color: "var(--blue)" }}>Featured testimonial</p>}
                     </div>
                   ))}
-                {(organizerConference ? mergedReviews : []).length === 0 && (
-                  <p className="text-sm" style={{ color: "var(--fg-muted)" }}>No approved reviews yet.</p>
+                {reviewsToShow.length === 0 && (
+                  <div className="lux-card p-8 text-center">
+                    <p className="text-sm font-medium mb-1" style={{ color: "var(--fg)" }}>No approved reviews yet</p>
+                    <p className="text-sm" style={{ color: "var(--fg-muted)" }}>
+                      Be the first to share your experience after the conference.
+                    </p>
+                  </div>
                 )}
               </div>
             </div>
             <div className="card p-5 rounded-2xl h-fit">
               <h3 className="font-bold mb-3" style={{ color: "var(--fg)" }}>Share Your Experience</h3>
               <div className="space-y-2">
+                <label className="text-xs font-semibold" style={{ color: "var(--fg-muted)" }}>Overall rating (1-5)</label>
                 <input className="input-base text-sm" type="number" min={1} max={5} value={reviewDraft.rating} onChange={(event) => setReviewDraft((prev) => ({ ...prev, rating: Number(event.target.value) }))} placeholder="Overall rating (1-5)" />
+                <label className="text-xs font-semibold" style={{ color: "var(--fg-muted)" }}>Organization rating (1-5)</label>
                 <input className="input-base text-sm" type="number" min={1} max={5} value={reviewDraft.organizationRating} onChange={(event) => setReviewDraft((prev) => ({ ...prev, organizationRating: Number(event.target.value) }))} placeholder="Organization rating" />
+                <label className="text-xs font-semibold" style={{ color: "var(--fg-muted)" }}>Committee quality rating (1-5)</label>
                 <input className="input-base text-sm" type="number" min={1} max={5} value={reviewDraft.committeeRating} onChange={(event) => setReviewDraft((prev) => ({ ...prev, committeeRating: Number(event.target.value) }))} placeholder="Committee rating" />
+                <label className="text-xs font-semibold" style={{ color: "var(--fg-muted)" }}>Hospitality rating (1-5)</label>
                 <input className="input-base text-sm" type="number" min={1} max={5} value={reviewDraft.hospitalityRating} onChange={(event) => setReviewDraft((prev) => ({ ...prev, hospitalityRating: Number(event.target.value) }))} placeholder="Hospitality rating" />
                 <textarea className="input-base text-sm" rows={4} value={reviewDraft.comment} onChange={(event) => setReviewDraft((prev) => ({ ...prev, comment: event.target.value }))} placeholder="Write your review..." />
                 <button

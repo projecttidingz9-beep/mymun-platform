@@ -109,6 +109,7 @@ export function mapOrganizerConferenceToMarketplaceConference(
     website: conference.socialLinks?.website || "#",
     featured: false,
     color: "from-slate-700 to-slate-900",
+    logoImageUrl: conference.logoImageUrl,
     bannerImageUrl: conference.bannerImageUrl,
     tags: [conference.level, conference.status, "Organizer Created"],
   };

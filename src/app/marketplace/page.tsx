@@ -189,17 +189,13 @@ export default function MarketplacePage() {
     };
   }, [filtersOpenFor]);
 
-  const renderFilterPanel = (isMobile: boolean) => (
-    <div
-      className={`lux-card p-5 space-y-4 animate-slide-down ${
-        isMobile ? "w-full" : "absolute right-0 top-full mt-2 w-[380px] z-40"
-      }`}
-    >
+  const renderFilterPanelContent = () => (
+    <div className="p-5 space-y-4">
       <div className="flex items-center justify-between">
         <p
           className="text-xs font-semibold"
           style={{
-            color: "rgba(243,237,224,0.98)",
+            color: "var(--fg)",
             letterSpacing: "0.2em",
             textTransform: "uppercase",
           }}
@@ -219,7 +215,7 @@ export default function MarketplacePage() {
           <button
             onClick={() => setFiltersOpenFor(null)}
             className="text-sm"
-            style={{ color: "rgba(243,237,224,0.55)" }}
+            style={{ color: "var(--fg-muted)" }}
             aria-label="Close filters"
           >
             ✕
@@ -232,7 +228,7 @@ export default function MarketplacePage() {
           <div className="flex items-center justify-between mb-1.5">
             <p
               className="text-[10px] font-semibold"
-              style={{ color: "rgba(243,237,224,0.55)", letterSpacing: "0.24em", textTransform: "uppercase" }}
+              style={{ color: "var(--fg-muted)", letterSpacing: "0.24em", textTransform: "uppercase" }}
             >
               Level
             </p>
@@ -254,7 +250,7 @@ export default function MarketplacePage() {
           <div className="flex items-center justify-between mb-1.5">
             <p
               className="text-[10px] font-semibold"
-              style={{ color: "rgba(243,237,224,0.55)", letterSpacing: "0.24em", textTransform: "uppercase" }}
+              style={{ color: "var(--fg-muted)", letterSpacing: "0.24em", textTransform: "uppercase" }}
             >
               Region
             </p>
@@ -278,7 +274,7 @@ export default function MarketplacePage() {
         <div className="flex items-center justify-between mb-1.5">
           <p
             className="text-[10px] font-semibold"
-            style={{ color: "rgba(243,237,224,0.55)", letterSpacing: "0.24em", textTransform: "uppercase" }}
+            style={{ color: "var(--fg-muted)", letterSpacing: "0.24em", textTransform: "uppercase" }}
           >
             Max Price <span style={{ color: "var(--accent-warm)" }}>${maxPrice}</span>
           </p>
@@ -296,16 +292,16 @@ export default function MarketplacePage() {
           className="w-full"
           style={{ accentColor: "var(--accent-warm)" }}
         />
-        <div className="flex justify-between text-xs mt-1" style={{ color: "rgba(243,237,224,0.5)" }}>
+        <div className="flex justify-between text-xs mt-1" style={{ color: "var(--fg-muted)" }}>
           <span>$0</span><span>$250+</span>
         </div>
       </div>
 
       <div
         className="flex items-center justify-between rounded-xl p-3"
-        style={{ background: "rgba(243,237,224,0.04)", border: "1px solid rgba(243,237,224,0.08)" }}
+        style={{ background: "var(--bg-subtle)", border: "1px solid var(--border)" }}
       >
-        <label className="flex items-center gap-2 text-sm" style={{ color: "var(--fg-immersive)" }}>
+        <label className="flex items-center gap-2 text-sm" style={{ color: "var(--fg)" }}>
           <input
             type="checkbox"
             checked={featuredOnly}
@@ -324,15 +320,15 @@ export default function MarketplacePage() {
           onClick={() => setMoreFiltersOpen((prev) => !prev)}
           className="w-full flex items-center justify-between rounded-xl px-3 py-2 text-sm font-medium"
           style={{
-            background: "rgba(243,237,224,0.04)",
-            border: "1px solid rgba(243,237,224,0.08)",
-            color: "var(--fg-immersive)",
+            background: "var(--bg-subtle)",
+            border: "1px solid var(--border)",
+            color: "var(--fg)",
           }}
         >
           <span>More filters</span>
           <span
             className="inline-block transition-transform duration-200"
-            style={{ color: "rgba(243,237,224,0.55)", transform: moreFiltersOpen ? "rotate(180deg)" : "rotate(0deg)" }}
+            style={{ color: "var(--fg-muted)", transform: moreFiltersOpen ? "rotate(180deg)" : "rotate(0deg)" }}
           >
             ⌄
           </span>
@@ -342,12 +338,12 @@ export default function MarketplacePage() {
           <div className="mt-3 space-y-3">
             <div
               className="rounded-xl p-3"
-              style={{ background: "rgba(243,237,224,0.04)", border: "1px solid rgba(243,237,224,0.08)" }}
+              style={{ background: "var(--bg-subtle)", border: "1px solid var(--border)" }}
             >
               <div className="flex items-center justify-between mb-2">
                 <p
                   className="text-[10px] font-semibold"
-                  style={{ color: "rgba(243,237,224,0.55)", letterSpacing: "0.24em", textTransform: "uppercase" }}
+                  style={{ color: "var(--fg-muted)", letterSpacing: "0.24em", textTransform: "uppercase" }}
                 >
                   Availability
                 </p>
@@ -377,12 +373,12 @@ export default function MarketplacePage() {
 
             <div
               className="rounded-xl p-3"
-              style={{ background: "rgba(243,237,224,0.04)", border: "1px solid rgba(243,237,224,0.08)" }}
+              style={{ background: "var(--bg-subtle)", border: "1px solid var(--border)" }}
             >
               <div className="flex items-center justify-between mb-2">
                 <p
                   className="text-[10px] font-semibold"
-                  style={{ color: "rgba(243,237,224,0.55)", letterSpacing: "0.24em", textTransform: "uppercase" }}
+                  style={{ color: "var(--fg-muted)", letterSpacing: "0.24em", textTransform: "uppercase" }}
                 >
                   Conference dates
                 </p>
@@ -398,12 +394,12 @@ export default function MarketplacePage() {
 
             <div
               className="rounded-xl p-3"
-              style={{ background: "rgba(243,237,224,0.04)", border: "1px solid rgba(243,237,224,0.08)" }}
+              style={{ background: "var(--bg-subtle)", border: "1px solid var(--border)" }}
             >
               <div className="flex items-center justify-between mb-2">
                 <p
                   className="text-[10px] font-semibold"
-                  style={{ color: "rgba(243,237,224,0.55)", letterSpacing: "0.24em", textTransform: "uppercase" }}
+                  style={{ color: "var(--fg-muted)", letterSpacing: "0.24em", textTransform: "uppercase" }}
                 >
                   Registration deadline
                 </p>
@@ -422,9 +418,50 @@ export default function MarketplacePage() {
     </div>
   );
 
+  const renderDesktopFilterPopover = () => (
+    <div className="absolute right-0 top-full mt-2 w-[380px] z-[70] pointer-events-auto">
+      <div
+        className="lux-card animate-slide-down"
+        style={{
+          background: "color-mix(in srgb, var(--bg) 94%, transparent 6%)",
+          border: "1px solid var(--border)",
+          backdropFilter: "blur(10px) saturate(112%)",
+          WebkitBackdropFilter: "blur(10px) saturate(112%)",
+        }}
+      >
+        {renderFilterPanelContent()}
+      </div>
+    </div>
+  );
+
+  const renderMobileFilterOverlay = () => (
+    <div className="sm:hidden fixed inset-0 z-[80]">
+      <button
+        type="button"
+        onClick={() => setFiltersOpenFor(null)}
+        className="absolute inset-0"
+        style={{ background: "color-mix(in srgb, var(--fg) 26%, transparent 74%)" }}
+        aria-label="Close filters overlay"
+      />
+      <div className="relative h-full px-4 pt-24 pb-6">
+        <div
+          ref={mobileFilterWrapRef}
+          className="lux-card animate-slide-down max-h-[75vh] overflow-y-auto overscroll-contain"
+          style={{
+            background: "color-mix(in srgb, var(--bg) 94%, transparent 6%)",
+            border: "1px solid var(--border)",
+            backdropFilter: "blur(10px) saturate(112%)",
+            WebkitBackdropFilter: "blur(10px) saturate(112%)",
+          }}
+        >
+          {renderFilterPanelContent()}
+        </div>
+      </div>
+    </div>
+  );
+
   return (
-    <div className="lux-shell lux-shell-immersive min-h-screen">
-      <div aria-hidden className="lux-backdrop" />
+    <div className="min-h-screen" style={{ background: "var(--bg)", color: "var(--fg)" }}>
 
       <Navbar openAuthModal={() => setAuthOpen(true)} />
       <AuthModal isOpen={authOpen} onClose={() => setAuthOpen(false)} />
@@ -438,7 +475,7 @@ export default function MarketplacePage() {
           </span>
           <h1
             className="lux-display mt-8 max-w-4xl"
-            style={{ color: "var(--fg-immersive)" }}
+            style={{ color: "var(--fg)" }}
           >
             Find your next{" "}
             <span
@@ -458,7 +495,7 @@ export default function MarketplacePage() {
             region, budget, and dates to find your perfect match.
           </p>
           {isOrganizerUser && (
-            <p className="mt-4 text-sm" style={{ color: "rgba(243,237,224,0.55)" }}>
+            <p className="mt-4 text-sm" style={{ color: "var(--fg-muted)" }}>
               Organizer accounts can browse and view conferences, but registration is disabled.
             </p>
           )}
@@ -467,8 +504,8 @@ export default function MarketplacePage() {
             <div
               className="flex items-center gap-3 max-w-2xl rounded-2xl overflow-hidden"
               style={{
-                background: "rgba(17,20,28,0.72)",
-                border: "1px solid rgba(243,237,224,0.12)",
+                background: "color-mix(in srgb, var(--bg) 86%, transparent 14%)",
+                border: "1px solid var(--border)",
                 backdropFilter: "blur(14px) saturate(118%)",
                 WebkitBackdropFilter: "blur(14px) saturate(118%)",
               }}
@@ -481,7 +518,7 @@ export default function MarketplacePage() {
                 viewBox="0 0 24 24"
                 stroke="currentColor"
                 strokeWidth="2"
-                style={{ color: "rgba(243,237,224,0.55)" }}
+                style={{ color: "var(--fg-muted)" }}
               >
                 <circle cx="11" cy="11" r="8" />
                 <path d="M21 21l-4.35-4.35" strokeLinecap="round" />
@@ -492,7 +529,7 @@ export default function MarketplacePage() {
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
                 className="flex-1 py-4 pr-4 bg-transparent outline-none text-sm"
-                style={{ color: "var(--fg-immersive)" }}
+                style={{ color: "var(--fg)" }}
               />
               {search && (
                 <button
@@ -500,8 +537,8 @@ export default function MarketplacePage() {
                   onClick={() => setSearch("")}
                   className="mr-3 w-7 h-7 rounded-lg flex items-center justify-center text-sm transition-all"
                   style={{
-                    background: "rgba(243,237,224,0.08)",
-                    color: "rgba(243,237,224,0.72)",
+                    background: "var(--bg-subtle)",
+                    color: "var(--fg-muted)",
                   }}
                 >
                   ✕
@@ -509,21 +546,18 @@ export default function MarketplacePage() {
               )}
             </div>
 
-            <div ref={mobileFilterWrapRef} className="sm:hidden relative">
+            <div className="sm:hidden">
               <button
                 type="button"
                 onClick={() => setFiltersOpenFor((prev) => (prev === "mobile" ? null : "mobile"))}
                 className="lux-button-ghost text-sm w-full justify-center gap-2"
-                style={{ padding: "12px 18px", color: "var(--fg-immersive)", borderColor: "rgba(243,237,224,0.22)", background: "rgba(243,237,224,0.04)" }}
+                style={{ padding: "12px 18px", color: "var(--fg)", borderColor: "var(--border)", background: "var(--bg-subtle)" }}
               >
                 <span>Filters</span>
                 {activeFilters.length > 0 && (
                   <span className="badge badge-blue text-[11px] px-2 py-0.5">{activeFilters.length}</span>
                 )}
               </button>
-              {filtersOpenFor === "mobile" && (
-                <div className="mt-2">{renderFilterPanel(true)}</div>
-              )}
             </div>
           </div>
         </div>
@@ -558,10 +592,10 @@ export default function MarketplacePage() {
           )}
 
           <div className="flex items-center justify-between gap-4 flex-wrap">
-            <p className="text-sm" style={{ color: "rgba(243,237,224,0.6)" }}>
+            <p className="text-sm" style={{ color: "var(--fg-muted)" }}>
               <span
                 className="font-semibold"
-                style={{ color: "var(--fg-immersive)" }}
+                style={{ color: "var(--fg)" }}
               >
                 {filtered.length}
               </span>{" "}
@@ -575,9 +609,9 @@ export default function MarketplacePage() {
                   className="lux-button-ghost text-sm gap-2"
                   style={{
                     padding: "10px 18px",
-                    color: "var(--fg-immersive)",
-                    borderColor: "rgba(243,237,224,0.22)",
-                    background: "rgba(243,237,224,0.04)",
+                    color: "var(--fg)",
+                    borderColor: "var(--border)",
+                    background: "var(--bg-subtle)",
                   }}
                 >
                   <span>Filters</span>
@@ -585,9 +619,9 @@ export default function MarketplacePage() {
                     <span className="badge badge-blue text-[11px] px-2 py-0.5">{activeFilters.length}</span>
                   )}
                 </button>
-                {filtersOpenFor === "desktop" && renderFilterPanel(false)}
+                {filtersOpenFor === "desktop" && renderDesktopFilterPopover()}
               </div>
-              <span className="text-xs tracking-[0.22em] uppercase" style={{ color: "rgba(243,237,224,0.5)" }}>
+              <span className="text-xs tracking-[0.22em] uppercase" style={{ color: "var(--fg-muted)" }}>
                 Sort
               </span>
               <select
@@ -616,19 +650,19 @@ export default function MarketplacePage() {
             >
               <p
                 className="lux-eyebrow"
-                style={{ color: "rgba(243,237,224,0.55)" }}
+                style={{ color: "var(--fg-muted)" }}
               >
                 Nothing matches
               </p>
               <p
                 className="mt-4 text-2xl font-semibold"
-                style={{ color: "var(--fg-immersive)", letterSpacing: "-0.02em" }}
+                style={{ color: "var(--fg)", letterSpacing: "-0.02em" }}
               >
                 No conferences found
               </p>
               <p
                 className="mt-3 max-w-md mx-auto"
-                style={{ color: "rgba(243,237,224,0.6)" }}
+                style={{ color: "var(--fg-muted)" }}
               >
                 Try adjusting your filters or search term to broaden the horizon.
               </p>
@@ -644,6 +678,8 @@ export default function MarketplacePage() {
           )}
         </div>
       </section>
+
+      {filtersOpenFor === "mobile" && renderMobileFilterOverlay()}
 
       <Footer />
     </div>
