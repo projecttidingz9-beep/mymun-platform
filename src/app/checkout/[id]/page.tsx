@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import Navbar from "@/components/Navbar";
+import Footer from "@/components/Footer";
 import { CONFERENCES } from "@/lib/data";
 import { useAuth } from "@/lib/auth-context";
 import { OrganizerCommittee, Registration, RegistrationCategory } from "@/lib/types";
@@ -197,23 +198,38 @@ export default function CheckoutPage() {
   return (
     <>
       <Navbar />
-      <div className="min-h-screen pt-24 pb-16 px-6" style={{ background: "var(--bg-subtle)" }}>
+      <div className="app-shell">
         <div className="max-w-2xl mx-auto">
-          <div className="mb-8">
-            <Link href={`/conference/${params.id}`} className="text-sm mb-4 flex items-center gap-1" style={{ color: "var(--fg-muted)" }}>
-              ← Back to {displayTitle}
-            </Link>
-            <h1 className="text-3xl font-black" style={{ color: "var(--fg)" }}>
-              {step === 5 ? "🎉 Registration Confirmed!" : "Complete Registration"}
-            </h1>
-          </div>
+          <header className="app-header">
+            <div className="app-header-copy">
+              <div className="section-label mb-3">
+                {step === 5 ? "Confirmation" : `Checkout · Step ${step}/4`}
+              </div>
+              <h1 className="app-title">
+                {step === 5 ? "Registration Confirmed" : "Complete Your Registration"}
+              </h1>
+              <p className="app-subtitle mt-2">
+                {step === 5
+                  ? "Your seat is reserved. A confirmation has been sent to your email."
+                  : displayTitle}
+              </p>
+            </div>
+            <div className="app-header-actions">
+              <Link href={`/conference/${params.id}`} className="btn btn-ghost text-sm">
+                ← Back to Conference
+              </Link>
+            </div>
+          </header>
 
           {step < 5 && (
-            <div className="p-5 rounded-2xl mb-6 flex items-center gap-4" style={{ background: "var(--bg)", border: "1.5px solid var(--border)" }}>
-              <div className={`w-14 h-14 rounded-2xl bg-gradient-to-br ${marketplaceConference?.color || "from-blue-600 to-indigo-700"} flex items-center justify-center flex-shrink-0`}>
+            <div className="app-card mb-6 flex items-center gap-4">
+              <div
+                className="w-14 h-14 rounded-2xl flex items-center justify-center flex-shrink-0"
+                style={{ background: "linear-gradient(135deg, var(--blue), var(--accent-warm))" }}
+              >
                 <span className="text-white font-black text-xl">M</span>
               </div>
-              <div className="flex-1">
+              <div className="flex-1 min-w-0">
                 <p className="font-bold" style={{ color: "var(--fg)" }}>{displayTitle}</p>
                 <p className="text-sm" style={{ color: "var(--fg-muted)" }}>{displayStartDate} · {displayCity}</p>
               </div>
@@ -236,11 +252,8 @@ export default function CheckoutPage() {
                 <button
                   key={category.id}
                   onClick={() => setSelectedCategoryId(category.id)}
-                  className="w-full text-left p-4 rounded-xl border transition-all"
-                  style={{
-                    background: selectedCategoryId === category.id ? "var(--blue-subtle)" : "var(--bg-subtle)",
-                    borderColor: selectedCategoryId === category.id ? "var(--blue)" : "var(--border)",
-                  }}
+                  className="app-card app-card-interactive app-card-tight"
+                  data-selected={selectedCategoryId === category.id ? "true" : "false"}
                 >
                   <div className="flex items-center justify-between">
                     <span className="font-bold text-sm" style={{ color: "var(--fg)" }}>{category.name}</span>
@@ -331,12 +344,14 @@ export default function CheckoutPage() {
                     </p>
                   )}
                   {!delegationSizeValid && (
-                    <p className="text-xs mt-1" style={{ color: "#dc2626" }}>
-                      Delegation size must be at least 1
-                      {selectedCategory?.maxDelegatesPerDelegation
-                        ? ` and at most ${selectedCategory.maxDelegatesPerDelegation}.`
-                        : "."}
-                    </p>
+                    <div className="alert alert-danger mt-2">
+                      <p>
+                        Delegation size must be at least 1
+                        {selectedCategory?.maxDelegatesPerDelegation
+                          ? ` and at most ${selectedCategory.maxDelegatesPerDelegation}.`
+                          : "."}
+                      </p>
+                    </div>
                   )}
                 </div>
               )}
@@ -455,7 +470,7 @@ export default function CheckoutPage() {
                 <div className="flex justify-between text-sm"><span style={{ color: "var(--fg-muted)" }}>Confirmation ID</span><span style={{ color: "var(--blue)" }}>{confirmationId}</span></div>
                 <div className="flex justify-between text-sm"><span style={{ color: "var(--fg-muted)" }}>Category</span><span style={{ color: "var(--fg)" }}>{selectedCategory?.name}</span></div>
                 <div className="flex justify-between text-sm"><span style={{ color: "var(--fg-muted)" }}>Committee</span><span style={{ color: "var(--fg)" }}>{selectedCommittee?.name || "N/A"}</span></div>
-                <div className="flex justify-between text-sm"><span style={{ color: "var(--fg-muted)" }}>Amount Paid</span><span style={{ color: "#16a34a" }}>{currencySymbol}{priceResult.amount}.00</span></div>
+                <div className="flex justify-between text-sm"><span style={{ color: "var(--fg-muted)" }}>Amount Paid</span><span style={{ color: "var(--success)", fontWeight: 700 }}>{currencySymbol}{priceResult.amount}.00</span></div>
               </div>
               <div className="flex flex-col sm:flex-row gap-3">
                 <Link href="/dashboard" className="btn btn-primary flex-1">Go to Dashboard →</Link>
@@ -465,6 +480,7 @@ export default function CheckoutPage() {
           )}
         </div>
       </div>
+      <Footer />
     </>
   );
 }

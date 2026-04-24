@@ -9,8 +9,20 @@ import Footer from "@/components/Footer";
 import { ensureServerSession } from "@/lib/client/session";
 import { downloadRegistrationInvoicePdf } from "@/lib/client/invoice-pdf";
 import { useAuth } from "@/lib/auth-context";
-import { CONFERENCES } from "@/lib/data";
 import { DelegateMunAward, DelegateMunParticipation, Registration } from "@/lib/types";
+
+type DelegateTabId = "conferences" | "profile" | "security" | "payments" | "notifications";
+
+const DELEGATE_TABS: Array<{ id: DelegateTabId; label: string; icon: string }> = [
+  { id: "conferences", label: "My Conferences", icon: "🌍" },
+  { id: "profile", label: "Profile", icon: "👤" },
+  { id: "security", label: "Security", icon: "🔒" },
+  { id: "payments", label: "Payments", icon: "💳" },
+  { id: "notifications", label: "Notifications", icon: "🔔" },
+];
+
+const isDelegateTabId = (value: string): value is DelegateTabId =>
+  DELEGATE_TABS.some((tab) => tab.id === value);
 
 export default function DashboardPage() {
   const { user, isLoggedIn, notifications, markNotificationRead, updateDelegateProfile, logout } = useAuth();
@@ -70,6 +82,7 @@ export default function DashboardPage() {
   const [changePasswordLoading, setChangePasswordLoading] = useState(false);
   const [deletePassword, setDeletePassword] = useState("");
   const [deleteLoading, setDeleteLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState<DelegateTabId>("conferences");
 
   useEffect(() => {
     if (!isLoggedIn) router.push("/");
@@ -77,6 +90,30 @@ export default function DashboardPage() {
       router.push("/organizers/dashboard");
     }
   }, [isLoggedIn, router]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const hash = window.location.hash.replace(/^#/, "");
+    if (hash && isDelegateTabId(hash)) {
+      setActiveTab(hash);
+    }
+    const onHashChange = () => {
+      const next = window.location.hash.replace(/^#/, "");
+      if (next && isDelegateTabId(next)) {
+        setActiveTab(next);
+      }
+    };
+    window.addEventListener("hashchange", onHashChange);
+    return () => window.removeEventListener("hashchange", onHashChange);
+  }, []);
+
+  const changeActiveTab = (next: DelegateTabId) => {
+    setActiveTab(next);
+    if (typeof window !== "undefined") {
+      const newUrl = `${window.location.pathname}${window.location.search}#${next}`;
+      window.history.replaceState(null, "", newUrl);
+    }
+  };
 
   useEffect(() => {
     if (!isLoggedIn || !user) return;
@@ -432,48 +469,74 @@ export default function DashboardPage() {
   return (
     <>
       <Navbar />
-      <div className="min-h-screen pt-24 pb-16 px-6" style={{ background: "var(--bg-subtle)" }}>
+      <div className="app-shell">
         <div className="max-w-7xl mx-auto">
-          {/* Header */}
-          <div className="mb-10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-            <div>
+          <header className="app-header">
+            <div className="app-header-copy">
               <div className="section-label mb-3">My Dashboard</div>
-              <h1 className="text-4xl font-black" style={{ color: "var(--fg)" }}>
+              <h1 className="app-title">
                 Welcome back, {user.name.split(" ")[0]} 👋
               </h1>
-              <p className="text-base mt-1" style={{ color: "var(--fg-muted)" }}>
+              <p className="app-subtitle mt-2">
                 {user.school} · {user.country}
               </p>
             </div>
-            <Link href="/marketplace" className="btn btn-primary text-sm">
-              + Find Conference
-            </Link>
-          </div>
+            <div className="app-header-actions">
+              <Link href="/marketplace" className="btn btn-primary text-sm">
+                + Find Conference
+              </Link>
+            </div>
+          </header>
 
-          {/* Stats */}
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-10">
             {[
-              { label: "Conferences", value: registrations.length, icon: "🌍", color: "#2563eb" },
-              { label: "Confirmed", value: confirmed, icon: "✅", color: "#16a34a" },
-              { label: "Countries Represented", value: [...new Set(registrations.map(r => r.country))].length, icon: "🏳️", color: "#7c3aed" },
-              { label: "Total Invested", value: `$${totalPaid}`, icon: "💳", color: "#d97706" },
+              { label: "Conferences", value: registrations.length, icon: "🌍", tone: "info" as const },
+              { label: "Confirmed", value: confirmed, icon: "✅", tone: "success" as const },
+              { label: "Countries Represented", value: [...new Set(registrations.map(r => r.country))].length, icon: "🏳️", tone: "accent" as const },
+              { label: "Total Invested", value: `$${totalPaid}`, icon: "💳", tone: "warning" as const },
             ].map((stat) => (
-              <div key={stat.label} className="card p-6 rounded-2xl">
-                <div className="flex items-center justify-between mb-3">
-                  <span className="text-2xl">{stat.icon}</span>
-                  <div className="w-2 h-2 rounded-full" style={{ background: stat.color }} />
+              <div key={stat.label} className="app-stat">
+                <div className="app-stat-head">
+                  <span className="app-stat-dot" data-tone={stat.tone} />
+                  <span className="app-stat-label">{stat.label}</span>
+                  <span className="ml-auto text-lg" aria-hidden>{stat.icon}</span>
                 </div>
-                <p className="text-3xl font-black" style={{ color: "var(--fg)" }}>{stat.value}</p>
-                <p className="text-sm mt-1" style={{ color: "var(--fg-muted)" }}>{stat.label}</p>
+                <p className="app-stat-value">{stat.value}</p>
               </div>
             ))}
           </div>
 
-          <div className="grid lg:grid-cols-3 gap-8">
-            {/* My Conferences */}
-            <div className="lg:col-span-2">
-              <h2 className="text-2xl font-bold mb-5" style={{ color: "var(--fg)" }}>My Conferences</h2>
+          <div className="app-tabs mb-6" role="tablist" aria-label="Dashboard sections">
+            {DELEGATE_TABS.map((tab) => {
+              const count =
+                tab.id === "notifications"
+                  ? mergedNotifications.filter((n) => !n.read).length
+                  : tab.id === "conferences"
+                    ? registrations.length
+                    : undefined;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={activeTab === tab.id}
+                  className="app-tab"
+                  data-active={activeTab === tab.id ? "true" : "false"}
+                  onClick={() => changeActiveTab(tab.id)}
+                >
+                  <span aria-hidden>{tab.icon}</span>
+                  <span>{tab.label}</span>
+                  {count !== undefined && count > 0 && (
+                    <span className="app-tab-count">{count}</span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
 
+          <div>
+            {activeTab === "conferences" && (
+              <div className="space-y-5">
               {delegatePasses.length > 0 && (
                 <div className="card p-6 rounded-2xl mb-5">
                   <h3 className="font-bold mb-3" style={{ color: "var(--fg)" }}>Digital Delegate Passes</h3>
@@ -529,23 +592,23 @@ export default function DashboardPage() {
 
               {registrations.length === 0 ? (
                 <div
-                  className="py-20 text-center rounded-3xl"
-                  style={{ border: "2px dashed var(--border)", background: "var(--bg)" }}
+                  className="app-card py-20 text-center"
+                  style={{ border: "2px dashed var(--border)" }}
                 >
                   <p className="text-5xl mb-4">🎓</p>
                   <h3 className="text-xl font-bold mb-2" style={{ color: "var(--fg)" }}>No conferences yet</h3>
-                  <p className="text-sm mb-5" style={{ color: "var(--fg-muted)" }}>Start your MUN journey by finding your first conference.</p>
+                  <p className="app-subtitle mb-5">Start your MUN journey by finding your first conference.</p>
                   <Link href="/marketplace" className="btn btn-primary text-sm">Browse Marketplace →</Link>
                 </div>
               ) : (
                 <div className="space-y-4">
                   {registrations.map((reg) => {
-                    const conf = CONFERENCES.find(c => c.id === reg.conferenceId);
                     return (
                       <div key={reg.id} className="card p-6 rounded-2xl">
                         <div className="flex items-start gap-4">
                           <div
-                            className={`w-14 h-14 rounded-2xl flex items-center justify-center flex-shrink-0 bg-gradient-to-br ${conf?.color ?? "from-blue-500 to-indigo-600"}`}
+                            className="w-14 h-14 rounded-2xl flex items-center justify-center flex-shrink-0"
+                            style={{ background: "linear-gradient(135deg, var(--blue), var(--accent-warm))" }}
                           >
                             <span className="text-white font-black text-xl">M</span>
                           </div>
@@ -582,10 +645,7 @@ export default function DashboardPage() {
                         </div>
                         <div className="flex items-center justify-between mt-4 pt-4" style={{ borderTop: "1px solid var(--border)" }}>
                           <div className="flex items-center gap-2">
-                            <span
-                              className="badge text-[10px]"
-                              style={{ background: reg.paid ? "#dcfce7" : "#fef2f2", color: reg.paid ? "#16a34a" : "#dc2626" }}
-                            >
+                            <span className={`badge text-[10px] ${reg.paid ? "badge-success" : "badge-danger"}`}>
                               {reg.paid ? "✓ Paid" : "Pending Payment"}
                             </span>
                             <span className="text-sm font-bold" style={{ color: "var(--fg)" }}>${reg.amount}</span>
@@ -612,11 +672,11 @@ export default function DashboardPage() {
                   })}
                 </div>
               )}
-            </div>
+              </div>
+            )}
 
-            {/* Right sidebar */}
-            <div className="space-y-6">
-              {/* Profile card */}
+            {activeTab === "profile" && (
+              <div className="space-y-6">
               <div className="card p-6 rounded-2xl">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="font-bold" style={{ color: "var(--fg)" }}>My Profile</h3>
@@ -641,7 +701,7 @@ export default function DashboardPage() {
                   ) : (
                     <div
                       className="w-14 h-14 rounded-xl flex items-center justify-center text-white font-black text-2xl"
-                      style={{ background: "linear-gradient(135deg, #2563eb, #60a5fa)" }}
+                      style={{ background: "linear-gradient(135deg, var(--blue), var(--accent-warm))" }}
                     >
                       {user.avatar}
                     </div>
@@ -1040,6 +1100,27 @@ export default function DashboardPage() {
                 )}
               </div>
 
+              {isEditingProfile && (
+                <div className="app-sticky-bar">
+                  <div>
+                    <p className="app-sticky-bar-copy">You have unsaved profile edits</p>
+                    <p className="app-sticky-bar-copy-muted">Review your changes, then save to apply.</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button type="button" onClick={() => setIsEditingProfile(false)} className="btn btn-ghost text-xs">
+                      Discard
+                    </button>
+                    <button type="button" onClick={saveProfile} className="btn btn-primary text-xs">
+                      Save changes
+                    </button>
+                  </div>
+                </div>
+              )}
+              </div>
+            )}
+
+            {activeTab === "security" && (
+              <div className="space-y-6">
               <div className="card p-6 rounded-2xl">
                 <h3 className="font-bold mb-4" style={{ color: "var(--fg)" }}>Account Security</h3>
                 <div className="space-y-3">
@@ -1074,7 +1155,7 @@ export default function DashboardPage() {
                   </button>
                 </div>
                 <div className="mt-5 pt-4" style={{ borderTop: "1px solid var(--border)" }}>
-                  <p className="text-xs font-semibold mb-2" style={{ color: "#dc2626" }}>Delete Account</p>
+                  <p className="text-xs font-semibold mb-2" style={{ color: "var(--danger)" }}>Delete Account</p>
                   <input
                     type="password"
                     value={deletePassword}
@@ -1084,15 +1165,18 @@ export default function DashboardPage() {
                   />
                   <button
                     onClick={onDeleteAccount}
-                    className="btn text-xs w-full mt-2"
-                    style={{ background: "#dc2626", color: "white" }}
+                    className="btn btn-danger text-xs w-full mt-2"
                     disabled={deleteLoading}
                   >
                     {deleteLoading ? "Deleting..." : "Delete My Account"}
                   </button>
                 </div>
               </div>
+              </div>
+            )}
 
+            {activeTab === "payments" && (
+              <div className="space-y-6">
               <div className="card p-6 rounded-2xl">
                 <h3 className="font-bold mb-4" style={{ color: "var(--fg)" }}>Payment History</h3>
                 {registrations.length === 0 ? (
@@ -1131,8 +1215,11 @@ export default function DashboardPage() {
                   </div>
                 )}
               </div>
+              </div>
+            )}
 
-              {/* Quick Actions */}
+            {activeTab === "notifications" && (
+              <div className="space-y-6">
               <div className="card p-6 rounded-2xl">
                 <h3 className="font-bold mb-4" style={{ color: "var(--fg)" }}>Quick Actions</h3>
                 <div className="space-y-2">
@@ -1177,24 +1264,33 @@ export default function DashboardPage() {
                 )}
               </div>
 
-              {/* MUN Tips */}
               <div
                 className="p-6 rounded-2xl"
-                style={{ background: "linear-gradient(135deg, var(--blue), #60a5fa)", border: "none" }}
+                style={{
+                  background: "linear-gradient(135deg, var(--blue), var(--accent-warm))",
+                  border: "none",
+                  boxShadow: "var(--card-shadow)",
+                }}
               >
                 <h3 className="font-bold mb-2 text-white">💡 Tip of the Day</h3>
-                <p className="text-white/80 text-sm leading-relaxed">
+                <p className="text-white/85 text-sm leading-relaxed">
                   Start preparing your position paper at least 2 weeks before the conference. Research your country&apos;s official UN voting history for strong arguments.
                 </p>
                 <Link
                   href="/resolution-copilot"
-                  className="mt-4 btn text-sm font-bold"
-                  style={{ background: "rgba(255,255,255,0.2)", color: "white", border: "1px solid rgba(255,255,255,0.3)", padding: "10px 20px" }}
+                  className="mt-4 inline-flex items-center btn text-sm font-bold"
+                  style={{
+                    background: "rgba(255,255,255,0.18)",
+                    color: "white",
+                    border: "1px solid rgba(255,255,255,0.35)",
+                    padding: "10px 20px",
+                  }}
                 >
                   Try AI Copilot →
                 </Link>
               </div>
-            </div>
+              </div>
+            )}
           </div>
         </div>
       </div>

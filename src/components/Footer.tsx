@@ -24,7 +24,7 @@ const FOOTER_LINKS = {
 
 export default function Footer() {
   return (
-    <footer style={{ background: "var(--bg-subtle)", borderTop: "1px solid var(--border)" }}>
+    <footer style={{ background: "rgba(10,9,8,0.97)", borderTop: "1px solid rgba(243,237,224,0.08)" }}>
       <div className="max-w-7xl mx-auto px-6 py-16">
         {/* Top row */}
         <div className="grid md:grid-cols-5 gap-12 mb-12">
@@ -37,11 +37,11 @@ export default function Footer() {
               >
                 <span className="text-white font-black text-lg italic">M</span>
               </div>
-              <span className="text-lg font-bold tracking-tight" style={{ color: "var(--fg)" }}>
+              <span className="text-lg font-bold tracking-tight" style={{ color: "rgba(243,237,224,0.92)" }}>
                 Tidingz
               </span>
             </Link>
-            <p className="text-sm leading-relaxed max-w-xs" style={{ color: "var(--fg-muted)" }}>
+            <p className="text-sm leading-relaxed max-w-xs" style={{ color: "rgba(243,237,224,0.48)" }}>
               The world&apos;s premier platform for Model UN delegates and conference organizers. Empowering the next generation of global leaders.
             </p>
             {/* Social icons */}
@@ -52,9 +52,9 @@ export default function Footer() {
                   href="#"
                   className="w-9 h-9 rounded-xl flex items-center justify-center text-sm font-bold transition-all"
                   style={{
-                    background: "var(--bg)",
-                    border: "1.5px solid var(--border)",
-                    color: "var(--fg-muted)",
+                    background: "rgba(243,237,224,0.06)",
+                    border: "1.5px solid rgba(243,237,224,0.14)",
+                    color: "rgba(243,237,224,0.55)",
                   }}
                 >
                   {s}
@@ -66,7 +66,7 @@ export default function Footer() {
           {/* Links */}
           {Object.entries(FOOTER_LINKS).map(([section, links]) => (
             <div key={section}>
-              <h4 className="text-xs font-black uppercase tracking-widest mb-4" style={{ color: "var(--fg)" }}>
+              <h4 className="text-xs font-black uppercase tracking-widest mb-4" style={{ color: "rgba(243,237,224,0.55)" }}>
                 {section}
               </h4>
               <ul className="space-y-3">
@@ -75,7 +75,7 @@ export default function Footer() {
                     <Link
                       href={l.href}
                       className="text-sm transition-colors"
-                      style={{ color: "var(--fg-muted)" }}
+                      style={{ color: "rgba(243,237,224,0.45)" }}
                     >
                       {l.label}
                     </Link>
@@ -89,11 +89,11 @@ export default function Footer() {
         {/* Newsletter */}
         <div
           className="rounded-2xl p-6 mb-10 flex flex-col sm:flex-row items-center justify-between gap-4"
-          style={{ background: "var(--bg)", border: "1.5px solid var(--border)" }}
+          style={{ background: "rgba(243,237,224,0.04)", border: "1.5px solid rgba(243,237,224,0.12)" }}
         >
           <div>
-            <p className="font-bold text-sm" style={{ color: "var(--fg)" }}>Get conference alerts 📬</p>
-            <p className="text-xs" style={{ color: "var(--fg-muted)" }}>New conferences and application deadlines, sent weekly.</p>
+            <p className="font-bold text-sm" style={{ color: "rgba(243,237,224,0.92)" }}>Get conference alerts 📬</p>
+            <p className="text-xs" style={{ color: "rgba(243,237,224,0.48)" }}>New conferences and application deadlines, sent weekly.</p>
           </div>
           <div className="flex gap-2 w-full sm:w-auto">
             <input
@@ -109,11 +109,11 @@ export default function Footer() {
         </div>
 
         {/* Bottom */}
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-6" style={{ borderTop: "1px solid var(--border)" }}>
-          <p className="text-xs" style={{ color: "var(--fg-muted)" }}>
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-6" style={{ borderTop: "1px solid rgba(243,237,224,0.08)" }}>
+          <p className="text-xs" style={{ color: "rgba(243,237,224,0.35)" }}>
             © 2026 Tidingz Technologies Inc. All rights reserved.
           </p>
-          <p className="text-xs" style={{ color: "var(--fg-muted)" }}>
+          <p className="text-xs" style={{ color: "rgba(243,237,224,0.35)" }}>
             Built with ❤️ for delegates worldwide 🌍
           </p>
         </div>

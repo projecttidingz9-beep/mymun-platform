@@ -246,9 +246,43 @@ export default function ResolutionCopilotPage() {
   };
 
   return (
-    <>
+    <div className="lux-shell lux-shell-immersive min-h-screen">
+      <div aria-hidden className="lux-backdrop" />
       <Navbar />
-      <div className="min-h-screen pt-[72px] flex" style={{ background: "var(--bg)" }}>
+
+      {/* Page header */}
+      <section className="relative lux-section pt-32 pb-10 px-6">
+        <div className="max-w-7xl mx-auto">
+          <span className="lux-pill">
+            <span className="lux-pill-dot" />
+            Resolution Copilot
+          </span>
+          <h1
+            className="lux-display mt-8 max-w-3xl"
+            style={{ color: "var(--fg-immersive)" }}
+          >
+            Draft resolutions with{" "}
+            <span
+              style={{
+                background:
+                  "linear-gradient(120deg, #e7c390 10%, #f4e2c6 50%, #b28b57 90%)",
+                WebkitBackgroundClip: "text",
+                backgroundClip: "text",
+                color: "transparent",
+              }}
+            >
+              AI precision
+            </span>
+            .
+          </h1>
+          <p className="lux-subdisplay mt-6 max-w-2xl">
+            Preamble, operative clauses, policy alignment — curated guidance,
+            drafted to pass, tailored to your country and committee.
+          </p>
+        </div>
+      </section>
+
+      <div className="relative flex" style={{ minHeight: "calc(100vh - 72px)" }}>
         {/* Sidebar */}
         <aside
           className="w-64 flex-shrink-0 flex flex-col border-r h-[calc(100vh-72px)] sticky top-[72px] overflow-y-auto hidden lg:flex"
@@ -292,11 +326,20 @@ export default function ResolutionCopilotPage() {
           </div>
           {!isLoggedIn && (
             <div className="p-4 border-t" style={{ borderColor: "var(--border)" }}>
-              <p className="text-xs text-center mb-2" style={{ color: "var(--fg-muted)" }}>
+              <p className="text-xs text-center mb-3" style={{ color: "var(--fg-muted)" }}>
                 Sign in to sync resolutions
               </p>
-              <Link href="/" className="btn btn-outline-blue w-full text-xs" style={{ padding: "8px", borderRadius: "8px" }}>
-                Sign In →
+              <Link
+                href="/"
+                className="lux-button-ghost w-full text-xs inline-flex justify-center"
+                style={{
+                  padding: "10px 14px",
+                  color: "var(--fg-immersive)",
+                  borderColor: "rgba(243,237,224,0.22)",
+                  background: "rgba(243,237,224,0.03)",
+                }}
+              >
+                Sign in →
               </Link>
             </div>
           )}
@@ -366,45 +409,61 @@ export default function ResolutionCopilotPage() {
           {/* AI Panel */}
           <div
             className="w-full lg:w-[380px] flex-shrink-0 flex flex-col border-l overflow-y-auto"
-            style={{ borderColor: "var(--border)", background: "var(--bg-subtle)", maxHeight: "calc(100vh - 72px)" }}
+            style={{
+              borderColor: "rgba(243,237,224,0.08)",
+              background: "rgba(11,13,18,0.5)",
+              backdropFilter: "blur(14px) saturate(118%)",
+              WebkitBackdropFilter: "blur(14px) saturate(118%)",
+              maxHeight: "calc(100vh - 72px)",
+            }}
           >
-            <div className="p-5 border-b" style={{ borderColor: "var(--border)" }}>
-              <div className="flex items-center gap-2 mb-1">
-                <div
-                  className="w-7 h-7 rounded-lg flex items-center justify-center text-sm"
-                  style={{ background: "linear-gradient(135deg, #7c3aed, #6d28d9)" }}
-                >
-                  ✨
-                </div>
-                <h3 className="font-bold text-sm" style={{ color: "var(--fg)" }}>AI Resolution Copilot</h3>
-              </div>
-              <p className="text-xs" style={{ color: "var(--fg-muted)" }}>
-                Select a prompt to get AI assistance
+            <div
+              className="p-5 border-b"
+              style={{ borderColor: "rgba(243,237,224,0.08)" }}
+            >
+              <p
+                className="lux-eyebrow"
+                style={{ color: "rgba(243,237,224,0.55)" }}
+              >
+                Copilot
+              </p>
+              <h3
+                className="mt-3 font-semibold text-lg"
+                style={{
+                  color: "var(--fg-immersive)",
+                  letterSpacing: "-0.01em",
+                }}
+              >
+                AI Resolution Copilot
+              </h3>
+              <p
+                className="mt-2 text-xs"
+                style={{ color: "rgba(243,237,224,0.6)" }}
+              >
+                Select a prompt to receive tailored drafting assistance.
               </p>
             </div>
 
-            <div className="p-4 space-y-2.5">
+            <div className="p-4 flex flex-wrap gap-2">
               {AI_PROMPTS.map((prompt) => (
                 <button
                   key={prompt.id}
+                  type="button"
                   onClick={() => runAiPrompt(prompt)}
                   disabled={aiLoading}
-                  className="w-full text-left p-4 rounded-xl border transition-all"
+                  className={`lux-chip ${activePrompt === prompt.id ? "lux-chip-active" : ""}`}
                   style={{
-                    background: activePrompt === prompt.id ? prompt.color + "10" : "var(--bg)",
-                    borderColor: activePrompt === prompt.id ? prompt.color : "var(--border)",
                     opacity: aiLoading && activePrompt !== prompt.id ? 0.5 : 1,
+                    cursor: aiLoading ? "wait" : "pointer",
                   }}
                 >
-                  <div className="flex items-center gap-3">
-                    <span className="text-xl">{prompt.emoji}</span>
-                    <span className="text-sm font-semibold" style={{ color: activePrompt === prompt.id ? prompt.color : "var(--fg)" }}>
-                      {prompt.label}
-                    </span>
-                    {aiLoading && activePrompt === prompt.id && (
-                      <span className="ml-auto w-4 h-4 border-2 border-current border-t-transparent rounded-full inline-block" style={{ animation: "spin 0.8s linear infinite", color: prompt.color }} />
-                    )}
-                  </div>
+                  <span>{prompt.label}</span>
+                  {aiLoading && activePrompt === prompt.id && (
+                    <span
+                      className="ml-1 w-3 h-3 border-2 border-current border-t-transparent rounded-full inline-block"
+                      style={{ animation: "spin 0.8s linear infinite" }}
+                    />
+                  )}
                 </button>
               ))}
             </div>
@@ -413,50 +472,64 @@ export default function ResolutionCopilotPage() {
             {aiOutput && (
               <div
                 ref={aiOutputRef}
-                className="mx-4 mb-4 p-5 rounded-xl text-xs space-y-1 leading-relaxed"
-                style={{
-                  background: "var(--bg)",
-                  border: "1.5px solid var(--border)",
-                  color: "var(--fg)",
-                }}
+                className="lux-card mx-4 mb-4 p-5 text-xs space-y-1 leading-relaxed"
+                style={{ color: "var(--fg-immersive)" }}
               >
-                <div className="flex items-center gap-2 mb-3 pb-2" style={{ borderBottom: "1px solid var(--border)" }}>
-                  <span
-                    className="w-5 h-5 rounded-md flex items-center justify-center text-white text-[10px]"
-                    style={{ background: "linear-gradient(135deg, #7c3aed, #6d28d9)" }}
-                  >✨</span>
-                  <span className="font-bold text-xs" style={{ color: "var(--fg)" }}>AI Suggestion</span>
+                <div
+                  className="flex items-center gap-2 mb-3 pb-2"
+                  style={{ borderBottom: "1px solid rgba(243,237,224,0.1)" }}
+                >
+                  <p
+                    className="text-[10px] font-semibold"
+                    style={{
+                      color: "var(--accent-warm)",
+                      letterSpacing: "0.28em",
+                      textTransform: "uppercase",
+                    }}
+                  >
+                    AI Suggestion
+                  </p>
                 </div>
                 {renderAIOutput(aiOutput)}
                 <button
+                  type="button"
                   onClick={() => {
                     const clean = aiOutput.replace(/\*\*(.*?)\*\*/g, "$1");
                     setContent(prev => prev + "\n\n" + clean);
                   }}
-                  className="btn btn-outline-blue w-full mt-3 text-xs"
-                  style={{ padding: "8px", borderRadius: "8px" }}
+                  className="lux-button-primary w-full mt-4 text-xs inline-flex justify-center"
+                  style={{ padding: "10px 14px" }}
                 >
-                  Insert into Resolution ↑
+                  Insert into resolution ↑
                 </button>
               </div>
             )}
 
-            <div className="px-4 pb-4">
-              <div
-                className="p-4 rounded-xl text-xs"
-                style={{ background: "rgba(124,58,237,0.06)", border: "1px solid rgba(124,58,237,0.2)" }}
-              >
-                <p className="font-bold mb-1" style={{ color: "#7c3aed" }}>💡 Pro Tips</p>
-                <ul className="space-y-1" style={{ color: "var(--fg-muted)" }}>
-                  <li>• Select text before clicking AI to get targeted suggestions</li>
-                  <li>• Fill in Country for policy-aligned responses</li>
-                  <li>• Download your resolution as .txt for offline editing</li>
+            <div className="px-4 pb-6">
+              <div className="lux-card p-4 text-xs">
+                <p
+                  className="text-[10px] font-semibold mb-2"
+                  style={{
+                    color: "var(--accent-warm)",
+                    letterSpacing: "0.28em",
+                    textTransform: "uppercase",
+                  }}
+                >
+                  Pro tips
+                </p>
+                <ul
+                  className="space-y-1.5"
+                  style={{ color: "rgba(243,237,224,0.68)" }}
+                >
+                  <li>· Select text before clicking AI for targeted suggestions</li>
+                  <li>· Fill in Country for policy-aligned responses</li>
+                  <li>· Download your resolution as .txt for offline editing</li>
                 </ul>
               </div>
             </div>
           </div>
         </div>
       </div>
-    </>
+    </div>
   );
 }

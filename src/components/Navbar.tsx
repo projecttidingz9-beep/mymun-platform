@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
+import { usePathname } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import AuthModal from "./AuthModal";
 
@@ -12,6 +13,7 @@ const NAV_LINKS = [
   { label: "For Organizers", href: "/organizers" },
   { label: "Dashboard", href: "/dashboard" },
 ];
+const INLINE_PRIORITY_HREFS = ["/marketplace", "/resolution-copilot"];
 
 interface NavbarProps {
   openAuthModal?: () => void;
@@ -19,6 +21,9 @@ interface NavbarProps {
 
 export default function Navbar({ openAuthModal }: NavbarProps) {
   const { user, isLoggedIn, logout } = useAuth();
+  const pathname = usePathname() || "/";
+  const isActive = (href: string) =>
+    href === "/" ? pathname === "/" : pathname.startsWith(href);
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [authOpen, setAuthOpen] = useState(false);
@@ -60,8 +65,11 @@ export default function Navbar({ openAuthModal }: NavbarProps) {
   };
 
   const handleAuthClick = () => {
-    if (openAuthModal) openAuthModal();
-    else setAuthOpen(true);
+    if (openAuthModal) {
+      openAuthModal();
+      return;
+    }
+    setAuthOpen(true);
   };
 
   const showLoggedInUi = hydrated && isLoggedIn;
@@ -81,6 +89,9 @@ export default function Navbar({ openAuthModal }: NavbarProps) {
         return true;
       })
     : NAV_LINKS;
+  const inlinePrimaryLinks = visibleNavLinks.filter((link) =>
+    INLINE_PRIORITY_HREFS.includes(link.href),
+  );
 
   return (
     <>
@@ -108,22 +119,28 @@ export default function Navbar({ openAuthModal }: NavbarProps) {
             </span>
           </Link>
 
-          {/* Desktop nav */}
-          <div className="hidden md:flex items-center gap-1">
+          {/* Mid-width inline nav (priority links) */}
+          <div className="hidden sm:flex lg:hidden items-center gap-1">
+            {inlinePrimaryLinks.map((l) => (
+              <Link
+                key={`${l.href}-inline`}
+                href={l.href}
+                data-active={isActive(l.href) ? "true" : "false"}
+                className="nav-link-lux px-3 py-2 rounded-xl text-sm font-medium transition-all"
+              >
+                {l.label}
+              </Link>
+            ))}
+          </div>
+
+          {/* Desktop nav (full links) */}
+          <div className="hidden lg:flex items-center gap-1">
             {visibleNavLinks.map((l) => (
               <Link
                 key={l.href}
                 href={l.href}
-                className="px-4 py-2 rounded-xl text-sm font-medium transition-all"
-                style={{ color: "var(--fg-muted)" }}
-                onMouseEnter={(e) => {
-                  (e.target as HTMLElement).style.color = "var(--fg)";
-                  (e.target as HTMLElement).style.background = "var(--bg-subtle)";
-                }}
-                onMouseLeave={(e) => {
-                  (e.target as HTMLElement).style.color = "var(--fg-muted)";
-                  (e.target as HTMLElement).style.background = "transparent";
-                }}
+                data-active={isActive(l.href) ? "true" : "false"}
+                className="nav-link-lux px-4 py-2 rounded-xl text-sm font-medium transition-all"
               >
                 {l.label}
               </Link>
@@ -137,7 +154,7 @@ export default function Navbar({ openAuthModal }: NavbarProps) {
               onClick={toggleDark}
               className="w-9 h-9 rounded-xl flex items-center justify-center transition-all"
               style={{
-                background: "var(--bg-subtle)",
+                background: "color-mix(in srgb, var(--bg) 86%, transparent 14%)",
                 border: "1.5px solid var(--border)",
                 color: "var(--fg-muted)",
               }}
@@ -159,11 +176,11 @@ export default function Navbar({ openAuthModal }: NavbarProps) {
                 <button
                   onClick={() => setUserMenuOpen((p) => !p)}
                   className="flex items-center gap-2 px-3 py-2 rounded-xl transition-all"
-                  style={{ background: "var(--bg-subtle)", border: "1.5px solid var(--border)" }}
+                  style={{ background: "color-mix(in srgb, var(--bg) 84%, transparent 16%)", border: "1.5px solid var(--border)" }}
                 >
                   <div
                     className="w-7 h-7 rounded-lg flex items-center justify-center text-white font-bold text-xs"
-                    style={{ background: "linear-gradient(135deg, #2563eb, #60a5fa)" }}
+                    style={{ background: "linear-gradient(135deg, #7f5d38, #b28b57)" }}
                   >
                     {user?.avatar}
                   </div>
@@ -243,15 +260,15 @@ export default function Navbar({ openAuthModal }: NavbarProps) {
               <>
                 <button
                   onClick={handleAuthClick}
-                  className="hidden sm:block px-4 py-2 rounded-xl text-sm font-medium transition-all"
-                  style={{ color: "var(--fg-muted)" }}
+                  className="hidden sm:block px-4 py-2 rounded-xl text-sm font-medium transition-all hover:-translate-y-0.5"
+                  style={{ color: "var(--fg-muted)", border: "1px solid transparent" }}
                 >
                   Sign In
                 </button>
                 <button
                   onClick={handleAuthClick}
-                  className="btn btn-primary text-sm"
-                  style={{ padding: "10px 20px", borderRadius: "10px" }}
+                  className="lux-button-primary text-sm hover:-translate-y-0.5"
+                  style={{ padding: "10px 20px" }}
                 >
                   Get Started
                 </button>
@@ -261,7 +278,7 @@ export default function Navbar({ openAuthModal }: NavbarProps) {
             {/* Mobile hamburger */}
             <button
               className="md:hidden w-9 h-9 rounded-xl flex items-center justify-center"
-              style={{ background: "var(--bg-subtle)", border: "1.5px solid var(--border)" }}
+              style={{ background: "color-mix(in srgb, var(--bg) 86%, transparent 14%)", border: "1.5px solid var(--border)" }}
               onClick={() => setMobileOpen((p) => !p)}
             >
               <div className="w-5 flex flex-col gap-1">
@@ -325,7 +342,7 @@ export default function Navbar({ openAuthModal }: NavbarProps) {
         )}
       </nav>
 
-      <AuthModal isOpen={authOpen} onClose={() => setAuthOpen(false)} />
+      {!openAuthModal && <AuthModal isOpen={authOpen} onClose={() => setAuthOpen(false)} />}
     </>
   );
 }

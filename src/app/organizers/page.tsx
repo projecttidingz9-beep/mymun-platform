@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import AuthModal from "@/components/AuthModal";
+import Reveal from "@/components/Reveal";
 import { useAuth } from "@/lib/auth-context";
 import { DynamicFieldType, RegistrationCategory } from "@/lib/types";
 import { hasOverlappingPhases } from "@/lib/pricing";
@@ -465,70 +466,81 @@ export default function OrganizersPage() {
   );
 
   return (
-    <>
+    <div className="lux-shell lux-shell-immersive min-h-screen">
+      <div aria-hidden className="lux-backdrop" />
+
       <Navbar openAuthModal={() => setAuthOpen(true)} />
       <AuthModal isOpen={authOpen} onClose={() => setAuthOpen(false)} />
 
       {/* Hero */}
-      <section
-        className="pt-36 pb-24 px-6 relative overflow-hidden"
-        style={{
-          background: "linear-gradient(160deg, #0f172a 0%, #1e1b4b 50%, #0f172a 100%)",
-        }}
-      >
-        <div
-          className="absolute inset-0 opacity-5"
-          style={{
-            backgroundImage: "radial-gradient(circle, white 1.5px, transparent 1.5px)",
-            backgroundSize: "50px 50px",
-          }}
-        />
-        <div
-          className="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[300px] rounded-full"
-          style={{ background: "radial-gradient(circle, rgba(99,102,241,0.3) 0%, transparent 70%)", filter: "blur(40px)" }}
-        />
-
-        <div className="max-w-4xl mx-auto text-center relative">
-          <span className="badge mb-6 mx-auto" style={{ background: "rgba(99,102,241,0.2)", color: "#a5b4fc" }}>
-            🏢 Conference Organizers
+      <section className="relative lux-section pt-36 pb-28 px-6 overflow-hidden">
+        <div className="max-w-5xl mx-auto text-center">
+          <span className="lux-pill">
+            <span className="lux-pill-dot" />
+            For Conference Organizers
           </span>
-          <h1 className="text-5xl md:text-6xl font-black text-white mb-6 leading-tight">
-            Run the world&apos;s next great{" "}
-            <span style={{ background: "linear-gradient(135deg, #818cf8, #c084fc)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
-              MUN Conference
-            </span>
-          </h1>
-          <p className="text-xl text-white/60 mb-10 max-w-2xl mx-auto leading-relaxed">
-            From a 50-person school conference to 3,000-delegate world summits — Tidingz gives organizers the tools to create unforgettable MUN experiences.
-          </p>
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <button
-              onClick={openWizard}
-              className="btn text-base font-bold px-8 py-4 rounded-2xl"
+
+          <h1
+            className="lux-display-xl mt-10"
+            style={{ color: "var(--fg-immersive)" }}
+          >
+            Run the world&apos;s next
+            <br />
+            great{" "}
+            <span
               style={{
-                background: "linear-gradient(135deg, #6366f1, #8b5cf6)",
-                color: "white",
-                boxShadow: "0 8px 32px rgba(99,102,241,0.4)",
-                borderRadius: "16px",
+                background:
+                  "linear-gradient(120deg, #e7c390 10%, #f4e2c6 50%, #b28b57 90%)",
+                WebkitBackgroundClip: "text",
+                backgroundClip: "text",
+                color: "transparent",
               }}
             >
-              🚀 Create Your Conference
+              MUN conference.
+            </span>
+          </h1>
+
+          <p className="lux-subdisplay mt-8 max-w-2xl mx-auto">
+            From a 50-delegate school conference to a 3,000-delegate world summit,
+            Tidingz gives organizers the tools to craft unforgettable experiences.
+          </p>
+
+          <div className="mt-12 flex flex-col sm:flex-row gap-4 justify-center">
+            <button
+              type="button"
+              onClick={openWizard}
+              className="lux-button-primary text-base"
+              style={{ padding: "16px 32px" }}
+            >
+              Create your conference
             </button>
             <button
+              type="button"
               onClick={openDashboard}
-              className="btn text-base font-bold px-8 py-4"
-              style={{ background: "rgba(255,255,255,0.08)", color: "white", border: "1.5px solid rgba(255,255,255,0.2)", borderRadius: "16px" }}
+              className="lux-button-ghost text-base"
+              style={{
+                padding: "16px 28px",
+                color: "var(--fg-immersive)",
+                borderColor: "rgba(243,237,224,0.28)",
+                background: "rgba(243,237,224,0.03)",
+              }}
             >
-              {showLoggedInCta ? "Open Organizer Dashboard" : "Sign In to Dashboard"}
+              {showLoggedInCta ? "Open organizer dashboard" : "Sign in to dashboard"}
             </button>
           </div>
 
-          <div className="flex flex-col sm:flex-row gap-8 justify-center mt-12 text-white/60 text-sm">
-            {["Free to start", "No credit card needed", "Setup in 10 minutes"].map((point) => (
-              <span key={point} className="flex items-center gap-2">
-                <span className="text-green-400">✓</span> {point}
-              </span>
-            ))}
+          <div
+            className="mt-14 flex flex-col sm:flex-row gap-8 justify-center text-xs tracking-[0.22em] uppercase"
+            style={{ color: "rgba(243,237,224,0.52)" }}
+          >
+            {["Free to start", "No credit card", "Setup in 10 minutes"].map(
+              (point) => (
+                <span key={point} className="flex items-center gap-2">
+                  <span style={{ color: "var(--accent-warm)" }}>◆</span>
+                  {point}
+                </span>
+              ),
+            )}
           </div>
         </div>
       </section>
@@ -1058,73 +1070,208 @@ export default function OrganizersPage() {
       )}
 
       {/* Features */}
-      <section className="py-24 px-6" style={{ background: "var(--bg)" }}>
+      <section className="relative lux-section py-32 px-6">
         <div className="max-w-7xl mx-auto">
-          <div className="text-center mb-16">
-            <div className="section-label mx-auto mb-4">Organizer Tools</div>
-            <h2 className="text-4xl font-black" style={{ color: "var(--fg)" }}>
-              Everything to run a <span className="text-gradient">world-class</span> conference
-            </h2>
+          <div className="text-center mb-20">
+            <Reveal>
+              <p
+                className="lux-eyebrow justify-center inline-flex"
+                style={{ color: "rgba(243,237,224,0.55)" }}
+              >
+                Organizer Tools
+              </p>
+            </Reveal>
+            <Reveal delay={0.1}>
+              <h2
+                className="lux-display mt-6 max-w-3xl mx-auto"
+                style={{ color: "var(--fg-immersive)" }}
+              >
+                Everything to run a world-class conference.
+              </h2>
+            </Reveal>
           </div>
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {FEATURES_FOR_ORGANIZERS.map((f, i) => (
-              <div key={i} className="card p-7 rounded-2xl">
-                <span className="text-3xl mb-5 block">{f.icon}</span>
-                <h3 className="font-bold text-lg mb-2" style={{ color: "var(--fg)" }}>{f.title}</h3>
-                <p className="text-sm leading-relaxed" style={{ color: "var(--fg-muted)" }}>{f.desc}</p>
-              </div>
+            {FEATURES_FOR_ORGANIZERS.map((feature, i) => (
+              <Reveal key={feature.title} delay={i * 0.06}>
+                <div className="lux-card lux-card-interactive p-8 h-full">
+                  <p
+                    className="text-xs font-semibold"
+                    style={{
+                      color: "var(--accent-warm)",
+                      letterSpacing: "0.28em",
+                      textTransform: "uppercase",
+                    }}
+                  >
+                    {String(i + 1).padStart(2, "0")}
+                  </p>
+                  <h3
+                    className="mt-5 text-xl font-semibold"
+                    style={{
+                      color: "var(--fg-immersive)",
+                      letterSpacing: "-0.01em",
+                    }}
+                  >
+                    {feature.title}
+                  </h3>
+                  <p
+                    className="mt-3 leading-relaxed text-sm"
+                    style={{ color: "rgba(243,237,224,0.68)" }}
+                  >
+                    {feature.desc}
+                  </p>
+                </div>
+              </Reveal>
             ))}
           </div>
         </div>
       </section>
 
       {/* Pricing */}
-      <section className="py-24 px-6" style={{ background: "var(--bg-subtle)", borderTop: "1px solid var(--border)" }}>
-        <div className="max-w-5xl mx-auto">
-          <div className="text-center mb-16">
-            <div className="section-label mx-auto mb-4">Pricing</div>
-            <h2 className="text-4xl font-black" style={{ color: "var(--fg)" }}>
-              Simple, <span className="text-gradient">transparent</span> pricing
-            </h2>
+      <section className="relative lux-section py-32 px-6">
+        <div className="max-w-6xl mx-auto">
+          <div className="text-center mb-20">
+            <Reveal>
+              <p
+                className="lux-eyebrow justify-center inline-flex"
+                style={{ color: "rgba(243,237,224,0.55)" }}
+              >
+                Pricing
+              </p>
+            </Reveal>
+            <Reveal delay={0.1}>
+              <h2
+                className="lux-display mt-6"
+                style={{ color: "var(--fg-immersive)" }}
+              >
+                Simple, transparent pricing.
+              </h2>
+            </Reveal>
           </div>
           <div className="grid md:grid-cols-3 gap-6">
-            {TIERS.map((tier) => (
-              <div
-                key={tier.name}
-                className="card p-8 rounded-2xl relative"
-                style={{
-                  border: tier.highlight ? "2px solid var(--blue)" : undefined,
-                  boxShadow: tier.highlight ? "var(--card-shadow-hover)" : undefined,
-                }}
-              >
-                {tier.highlight && (
-                  <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                    <span className="badge badge-blue text-[10px] px-3">Most Popular</span>
-                  </div>
-                )}
-                <h3 className="font-bold text-lg mb-1" style={{ color: "var(--fg)" }}>{tier.name}</h3>
-                <p className="text-3xl font-black my-3" style={{ color: "var(--fg)" }}>{tier.price}</p>
-                <p className="text-xs mb-4" style={{ color: "var(--fg-muted)" }}>{tier.limit}</p>
-                <div className="space-y-2 mb-6">
-                  {tier.features.map((f) => (
-                    <div key={f} className="flex items-center gap-2 text-sm" style={{ color: "var(--fg)" }}>
-                      <span className="text-green-500">✓</span> {f}
-                    </div>
-                  ))}
-                </div>
-                <button
-                  onClick={() => tier.name === "Enterprise" ? null : openWizard()}
-                  className={`btn w-full text-sm ${tier.highlight ? "btn-primary" : "btn-ghost"}`}
+            {TIERS.map((tier, i) => (
+              <Reveal key={tier.name} delay={i * 0.08}>
+                <div
+                  className={`lux-card p-9 h-full relative ${
+                    tier.highlight ? "lux-card-accent" : ""
+                  }`}
                 >
-                  {tier.cta}
-                </button>
-              </div>
+                  {tier.highlight && (
+                    <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+                      <span
+                        className="text-[10px] font-semibold px-3 py-1 rounded-full"
+                        style={{
+                          background:
+                            "linear-gradient(120deg, #e7c390 0%, #d8ac72 55%, #b8925a 100%)",
+                          color: "#1a1108",
+                          letterSpacing: "0.22em",
+                          textTransform: "uppercase",
+                        }}
+                      >
+                        Most Popular
+                      </span>
+                    </div>
+                  )}
+                  <p
+                    className="text-[10px] font-semibold"
+                    style={{
+                      color: "var(--accent-warm)",
+                      letterSpacing: "0.28em",
+                      textTransform: "uppercase",
+                    }}
+                  >
+                    {tier.name}
+                  </p>
+                  <p
+                    className="mt-4 text-4xl font-semibold"
+                    style={{
+                      color: "var(--fg-immersive)",
+                      letterSpacing: "-0.02em",
+                    }}
+                  >
+                    {tier.price}
+                  </p>
+                  <p
+                    className="mt-2 text-sm"
+                    style={{ color: "rgba(243,237,224,0.6)" }}
+                  >
+                    {tier.desc} · {tier.limit}
+                  </p>
+                  <div className="lux-divider my-7" />
+                  <div className="space-y-3 mb-8">
+                    {tier.features.map((f) => (
+                      <div
+                        key={f}
+                        className="flex items-start gap-3 text-sm"
+                        style={{ color: "rgba(243,237,224,0.82)" }}
+                      >
+                        <span style={{ color: "var(--accent-warm)" }}>◆</span>
+                        <span>{f}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => (tier.name === "Enterprise" ? null : openWizard())}
+                    className={
+                      tier.highlight ? "lux-button-primary" : "lux-button-ghost"
+                    }
+                    style={{
+                      width: "100%",
+                      padding: "14px 20px",
+                      fontSize: "14px",
+                      ...(tier.highlight
+                        ? {}
+                        : {
+                            color: "var(--fg-immersive)",
+                            borderColor: "rgba(243,237,224,0.22)",
+                            background: "rgba(243,237,224,0.03)",
+                          }),
+                    }}
+                  >
+                    {tier.cta}
+                  </button>
+                </div>
+              </Reveal>
             ))}
           </div>
         </div>
       </section>
 
+      {/* Closing CTA */}
+      <section className="relative lux-section py-32 px-6">
+        <div className="max-w-4xl mx-auto text-center">
+          <Reveal>
+            <p
+              className="lux-eyebrow justify-center inline-flex"
+              style={{ color: "rgba(243,237,224,0.55)" }}
+            >
+              Begin
+            </p>
+          </Reveal>
+          <Reveal delay={0.1}>
+            <h2
+              className="lux-display mt-6"
+              style={{ color: "var(--fg-immersive)" }}
+            >
+              Ready when you are.
+            </h2>
+          </Reveal>
+          <Reveal delay={0.2}>
+            <div className="mt-10 flex justify-center">
+              <button
+                type="button"
+                onClick={openWizard}
+                className="lux-button-primary text-base"
+                style={{ padding: "16px 34px" }}
+              >
+                Create your conference
+              </button>
+            </div>
+          </Reveal>
+        </div>
+      </section>
+
       <Footer />
-    </>
+    </div>
   );
 }

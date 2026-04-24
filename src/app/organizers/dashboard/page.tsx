@@ -142,6 +142,136 @@ const buildDefaultStatusEmailTemplates = (conferenceTitle: string) => ({
   },
 });
 
+type OrganizerSectionId =
+  | "overview"
+  | "conferences"
+  | "preview"
+  | "applications"
+  | "participants"
+  | "committees"
+  | "pricing"
+  | "transactions"
+  | "communications"
+  | "awards"
+  | "team"
+  | "settings";
+
+type OrganizerNavItem = {
+  id: OrganizerSectionId;
+  label: string;
+  icon: string;
+  scope: "global" | "conference";
+};
+
+type OrganizerNavGroup = {
+  label: string;
+  items: OrganizerNavItem[];
+};
+
+const ORGANIZER_NAV: OrganizerNavGroup[] = [
+  {
+    label: "Workspace",
+    items: [
+      { id: "overview", label: "Overview", icon: "◎", scope: "global" },
+      { id: "conferences", label: "Conferences", icon: "▤", scope: "global" },
+    ],
+  },
+  {
+    label: "This conference",
+    items: [
+      { id: "preview", label: "Preview & Content", icon: "▣", scope: "conference" },
+      { id: "applications", label: "Applications", icon: "◉", scope: "conference" },
+      { id: "participants", label: "Participants", icon: "◈", scope: "conference" },
+      { id: "committees", label: "Committees", icon: "◇", scope: "conference" },
+      { id: "pricing", label: "Categories & Pricing", icon: "◆", scope: "conference" },
+      { id: "transactions", label: "Transactions", icon: "❖", scope: "conference" },
+      { id: "communications", label: "Communications", icon: "◐", scope: "conference" },
+      { id: "awards", label: "Awards & Reviews", icon: "★", scope: "conference" },
+      { id: "team", label: "Team", icon: "⚇", scope: "conference" },
+      { id: "settings", label: "Settings", icon: "⚙", scope: "conference" },
+    ],
+  },
+];
+
+const CONFERENCE_SCOPED_SECTIONS: ReadonlySet<OrganizerSectionId> = new Set<OrganizerSectionId>([
+  "preview",
+  "applications",
+  "participants",
+  "committees",
+  "pricing",
+  "transactions",
+  "communications",
+  "awards",
+  "team",
+  "settings",
+]);
+
+const ORGANIZER_SECTION_META: Record<OrganizerSectionId, { label: string; eyebrow: string; subtitle: string }> = {
+  overview: {
+    label: "Overview",
+    eyebrow: "Workspace",
+    subtitle: "Headline stats across every conference you organize.",
+  },
+  conferences: {
+    label: "Conferences",
+    eyebrow: "Workspace",
+    subtitle: "Select a conference to manage its operations, or create a new one.",
+  },
+  preview: {
+    label: "Preview & Content",
+    eyebrow: "This conference",
+    subtitle: "Edit the public conference page, policies, and marketing copy.",
+  },
+  applications: {
+    label: "Applications",
+    eyebrow: "This conference",
+    subtitle: "Review, allot, and communicate with incoming delegate applications.",
+  },
+  participants: {
+    label: "Participants",
+    eyebrow: "This conference",
+    subtitle: "Track allotments and monitor country-by-country assignments.",
+  },
+  committees: {
+    label: "Committees",
+    eyebrow: "This conference",
+    subtitle: "Configure committees, chairs, members, and background guides.",
+  },
+  pricing: {
+    label: "Categories & Pricing",
+    eyebrow: "This conference",
+    subtitle: "Registration categories, phases, and discount rules.",
+  },
+  transactions: {
+    label: "Transactions",
+    eyebrow: "This conference",
+    subtitle: "Payments, refunds, and financial reporting for this conference.",
+  },
+  communications: {
+    label: "Communications",
+    eyebrow: "This conference",
+    subtitle: "Broadcasts, status emails, and outbound messaging.",
+  },
+  awards: {
+    label: "Awards & Reviews",
+    eyebrow: "This conference",
+    subtitle: "Manage awards, sponsors, and moderate conference reviews.",
+  },
+  team: {
+    label: "Team",
+    eyebrow: "This conference",
+    subtitle: "Co-organizers and role-based permissions.",
+  },
+  settings: {
+    label: "Settings",
+    eyebrow: "This conference",
+    subtitle: "Partners, documents, past editions, and banking details.",
+  },
+};
+
+const isOrganizerSectionId = (value: string): value is OrganizerSectionId =>
+  Object.prototype.hasOwnProperty.call(ORGANIZER_SECTION_META, value);
+
 
 export default function OrganizerDashboardPage() {
   const router = useRouter();
@@ -175,6 +305,8 @@ export default function OrganizerDashboardPage() {
   } = useAuth();
 
   const [selectedConferenceId, setSelectedConferenceId] = useState<string>("");
+  const [activeSection, setActiveSection] = useState<OrganizerSectionId>("overview");
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [announcementTitle, setAnnouncementTitle] = useState("");
   const [announcementMessage, setAnnouncementMessage] = useState("");
   const [assignmentCommittee, setAssignmentCommittee] = useState<Record<string, string>>({});
@@ -262,6 +394,7 @@ export default function OrganizerDashboardPage() {
   const [previewDraft, setPreviewDraft] = useState(() =>
     buildPreviewDraft(organizerConferences[0] || null)
   );
+  const [previewSaveStatus, setPreviewSaveStatus] = useState("");
   const [partnerRelationships, setPartnerRelationships] = useState<PartnerRelationship[]>([]);
   const [partnerInviteTargetId, setPartnerInviteTargetId] = useState("");
   const [partnerActionStatus, setPartnerActionStatus] = useState("");
@@ -599,6 +732,31 @@ export default function OrganizerDashboardPage() {
   }, [isLoggedIn, user, router]);
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+    const hash = window.location.hash.replace(/^#/, "");
+    if (hash && isOrganizerSectionId(hash)) {
+      setActiveSection(hash);
+    }
+    const onHashChange = () => {
+      const next = window.location.hash.replace(/^#/, "");
+      if (next && isOrganizerSectionId(next)) {
+        setActiveSection(next);
+      }
+    };
+    window.addEventListener("hashchange", onHashChange);
+    return () => window.removeEventListener("hashchange", onHashChange);
+  }, []);
+
+  const changeActiveSection = (section: OrganizerSectionId) => {
+    setActiveSection(section);
+    setMobileNavOpen(false);
+    if (typeof window !== "undefined") {
+      const newUrl = `${window.location.pathname}${window.location.search}#${section}`;
+      window.history.replaceState(null, "", newUrl);
+    }
+  };
+
+  useEffect(() => {
     if (!isLoggedIn || !user) return;
     void ensureServerSession({
       email: user.email,
@@ -612,6 +770,52 @@ export default function OrganizerDashboardPage() {
     }
     return organizerConferences[0];
   }, [organizerConferences, selectedConferenceId]);
+
+  const savePreviewSettings = async () => {
+    if (!selectedConference) return;
+    try {
+      updateOrganizerConferenceConfig(selectedConference.id, {
+        title: previewDraft.title,
+        city: previewDraft.city,
+        country: previewDraft.country,
+        organizerName: previewDraft.organizerName,
+        venue: previewDraft.venue || undefined,
+        description: previewDraft.description || undefined,
+        termsAndConditions: previewDraft.termsAndConditions.trim() || undefined,
+        refundPolicy: previewDraft.refundPolicy.trim() || undefined,
+        codeOfConduct: previewDraft.codeOfConduct.trim() || undefined,
+        faqNotes: previewDraft.faqNotes.trim() || undefined,
+        logoImageUrl: previewDraft.logoImageUrl || undefined,
+        bannerImageUrl: previewDraft.bannerImageUrl || undefined,
+        socialLinks: {
+          website: previewDraft.website || undefined,
+          instagram: previewDraft.instagram || undefined,
+          linkedin: previewDraft.linkedin || undefined,
+          twitter: previewDraft.twitter || undefined,
+        },
+        brandPrimaryColor: previewDraft.brandPrimaryColor || undefined,
+        brandSecondaryColor: previewDraft.brandSecondaryColor || undefined,
+      });
+      await fetch(`/api/organizers/conference-config/${selectedConference.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(previewDraft),
+      }).catch(() => null);
+      setPreviewSaveStatus("Preview and policy changes saved.");
+      window.setTimeout(() => setPreviewSaveStatus(""), 3500);
+    } catch {
+      setPreviewSaveStatus("Unable to save preview settings. Please try again.");
+    }
+  };
+
+  const previewHasUnsavedChanges = (() => {
+    if (!selectedConference) return false;
+    const base = buildPreviewDraft(selectedConference);
+    return (Object.keys(base) as Array<keyof typeof base>).some(
+      (key) => (previewDraft[key] ?? "") !== (base[key] ?? "")
+    );
+  })();
 
   useEffect(() => {
     if (!selectedConference) return;
@@ -1262,42 +1466,171 @@ export default function OrganizerDashboardPage() {
   return (
     <>
       <Navbar />
-      <div className="min-h-screen pt-24 pb-16 px-6" style={{ background: "var(--bg-subtle)" }}>
+      <div className="app-shell">
         <div className="max-w-7xl mx-auto">
-          <div className="mb-10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-            <div>
+          <header className="app-header">
+            <div className="app-header-copy">
               <div className="section-label mb-3">Organizer Control Center</div>
-              <h1 className="text-4xl font-black" style={{ color: "var(--fg)" }}>
+              <h1 className="app-title">
                 {user.name.split(" ")[0]}&apos;s Organizer Dashboard
               </h1>
-              <p className="text-base mt-1" style={{ color: "var(--fg-muted)" }}>
+              <p className="app-subtitle mt-2">
                 Manage your conferences, delegate applications, and communications from one place.
               </p>
             </div>
-            <Link href="/organizers" className="btn btn-primary text-sm">
-              + Create New Conference
-            </Link>
-          </div>
+            <div className="app-header-actions">
+              <Link href="/organizers" className="btn btn-primary text-sm">
+                + Create New Conference
+              </Link>
+            </div>
+          </header>
 
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-10">
-            {[
-              { label: "Active Conferences", value: organizerConferences.length, icon: "🏛️", color: "#2563eb" },
-              { label: "Total Applicants", value: totalApplicants, icon: "🧾", color: "#7c3aed" },
-              { label: "Accepted Delegates", value: totalAccepted, icon: "✅", color: "#16a34a" },
-              { label: "Collected Revenue", value: `$${totalRevenue}`, icon: "💰", color: "#d97706" },
-            ].map((stat) => (
-              <div key={stat.label} className="card p-6 rounded-2xl">
-                <div className="flex items-center justify-between mb-3">
-                  <span className="text-2xl">{stat.icon}</span>
-                  <div className="w-2 h-2 rounded-full" style={{ background: stat.color }} />
-                </div>
-                <p className="text-3xl font-black" style={{ color: "var(--fg)" }}>{stat.value}</p>
-                <p className="text-sm mt-1" style={{ color: "var(--fg-muted)" }}>{stat.label}</p>
+          <button
+            type="button"
+            className="app-sidebar-mobile-trigger mb-4"
+            onClick={() => setMobileNavOpen(true)}
+            aria-label="Open dashboard navigation"
+          >
+            <span aria-hidden>≡</span>
+            <span>{ORGANIZER_SECTION_META[activeSection].label}</span>
+          </button>
+
+          <div className="app-layout">
+            <aside className="app-sidebar hidden lg:flex">
+              <div className="app-sidebar-picker">
+                <span className="app-sidebar-picker-label">Active conference</span>
+                <select
+                  className="input-base text-sm"
+                  value={selectedConferenceId}
+                  onChange={(event) => {
+                    const nextId = event.target.value;
+                    setSelectedConferenceId(nextId);
+                    const nextConf = organizerConferences.find((c) => c.id === nextId) || null;
+                    setPreviewDraft(buildPreviewDraft(nextConf));
+                  }}
+                >
+                  <option value="">
+                    {organizerConferences.length === 0 ? "No conferences yet" : "Select a conference"}
+                  </option>
+                  {organizerConferences.map((conference) => (
+                    <option key={conference.id} value={conference.id}>
+                      {conference.title}
+                    </option>
+                  ))}
+                </select>
+                {selectedConference && (
+                  <p className="text-[11px]" style={{ color: "var(--fg-muted)" }}>
+                    {selectedConference.city}, {selectedConference.country} · {selectedConference.status}
+                  </p>
+                )}
               </div>
-            ))}
-          </div>
 
-          {selectedConference && selectedConferenceAnalytics && (
+              {ORGANIZER_NAV.map((group) => (
+                <div key={group.label} className="app-sidebar-section">
+                  <span className="app-sidebar-section-label">{group.label}</span>
+                  {group.items.map((item) => {
+                    const disabled = item.scope === "conference" && !selectedConference;
+                    const count =
+                      item.id === "applications" && selectedConference
+                        ? selectedConference.applicants.filter((a) => a.status === "Pending").length
+                        : undefined;
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        className="app-sidebar-item"
+                        data-active={activeSection === item.id ? "true" : "false"}
+                        disabled={disabled}
+                        onClick={() => changeActiveSection(item.id)}
+                      >
+                        <span className="app-sidebar-item-icon" aria-hidden>{item.icon}</span>
+                        <span className="app-sidebar-item-label">{item.label}</span>
+                        {count !== undefined && count > 0 && (
+                          <span className="app-sidebar-item-count">{count}</span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              ))}
+            </aside>
+
+            <main className="min-w-0">
+              <nav className="app-breadcrumb" aria-label="Breadcrumb">
+                <span>Organizer</span>
+                <span className="app-breadcrumb-separator" aria-hidden>/</span>
+                <span>{selectedConference ? selectedConference.title : "Workspace"}</span>
+                <span className="app-breadcrumb-separator" aria-hidden>/</span>
+                <span className="app-breadcrumb-current">{ORGANIZER_SECTION_META[activeSection].label}</span>
+              </nav>
+
+              {activeSection === "overview" && (
+                <>
+                  <header className="app-header" style={{ marginBottom: 24 }}>
+                    <div className="app-header-copy">
+                      <div className="section-label mb-2">{ORGANIZER_SECTION_META.overview.eyebrow}</div>
+                      <h2 className="app-title">{ORGANIZER_SECTION_META.overview.label}</h2>
+                      <p className="app-subtitle mt-2">{ORGANIZER_SECTION_META.overview.subtitle}</p>
+                    </div>
+                  </header>
+
+                  <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+                    {[
+                      { label: "Active Conferences", value: organizerConferences.length, icon: "🏛️", tone: "info" as const },
+                      { label: "Total Applicants", value: totalApplicants, icon: "🧾", tone: "accent" as const },
+                      { label: "Accepted Delegates", value: totalAccepted, icon: "✅", tone: "success" as const },
+                      { label: "Collected Revenue", value: `$${totalRevenue}`, icon: "💰", tone: "warning" as const },
+                    ].map((stat) => (
+                      <div key={stat.label} className="app-stat">
+                        <div className="app-stat-head">
+                          <span className="app-stat-dot" data-tone={stat.tone} />
+                          <span className="app-stat-label">{stat.label}</span>
+                          <span className="ml-auto text-lg" aria-hidden>{stat.icon}</span>
+                        </div>
+                        <p className="app-stat-value">{stat.value}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  {!selectedConference && (
+                    <div className="app-card">
+                      <div className="app-card-header">
+                        <div>
+                          <h3 className="app-card-title">No conference selected</h3>
+                          <p className="app-card-subtitle">
+                            Use the sidebar picker or open the Conferences section to choose one.
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          className="btn btn-ghost text-sm"
+                          onClick={() => changeActiveSection("conferences")}
+                        >
+                          Go to Conferences
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {!selectedConference && (
+                    <div className="grid md:grid-cols-3 gap-3 mt-4">
+                      <div className="skeleton" style={{ height: 90 }} />
+                      <div className="skeleton" style={{ height: 90 }} />
+                      <div className="skeleton" style={{ height: 90 }} />
+                    </div>
+                  )}
+
+                  {selectedConference && !selectedConferenceAnalytics && (
+                    <div className="grid md:grid-cols-3 gap-3">
+                      <div className="skeleton" style={{ height: 120 }} />
+                      <div className="skeleton" style={{ height: 120 }} />
+                      <div className="skeleton" style={{ height: 120 }} />
+                    </div>
+                  )}
+                </>
+              )}
+
+          {activeSection === "overview" && selectedConference && selectedConferenceAnalytics && (
             <div className="card p-6 rounded-2xl mb-8">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-xl font-bold" style={{ color: "var(--fg)" }}>Dashboard Overview</h2>
@@ -1328,8 +1661,8 @@ export default function OrganizerDashboardPage() {
                           <span>{entry.name}</span>
                           <span>{entry.fillPercent}%</span>
                         </div>
-                        <div className="h-2 rounded-full" style={{ background: "var(--border)" }}>
-                          <div className="h-2 rounded-full" style={{ width: `${entry.fillPercent}%`, background: "var(--blue)" }} />
+                        <div className="progress-bar">
+                          <div className="progress-bar-fill" style={{ width: `${entry.fillPercent}%` }} />
                         </div>
                       </div>
                     ))}
@@ -1366,63 +1699,118 @@ export default function OrganizerDashboardPage() {
             </div>
           )}
 
-          <div className="grid lg:grid-cols-12 gap-8">
-            <div className="lg:col-span-4 space-y-4">
-              <h2 className="text-xl font-bold" style={{ color: "var(--fg)" }}>Your Conferences</h2>
-              {organizerConferences.map((conference) => (
-                <button
-                  key={conference.id}
-                  onClick={() => {
-                    setSelectedConferenceId(conference.id);
-                    setPreviewDraft(buildPreviewDraft(conference));
-                  }}
-                  className="card p-5 rounded-2xl w-full text-left"
-                  style={{
-                    border: selectedConferenceId === conference.id ? "2px solid var(--blue)" : "1.5px solid var(--border)",
-                  }}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <h3 className="font-bold text-sm" style={{ color: "var(--fg)" }}>{conference.title}</h3>
-                    <span className={`badge ${STATUS_STYLES[conference.status]}`}>{conference.status}</span>
-                  </div>
-                  <p className="text-xs mt-2" style={{ color: "var(--fg-muted)" }}>
-                    {conference.city}, {conference.country} · {conference.level}
-                  </p>
-                  <p className="text-xs mt-1" style={{ color: "var(--fg-muted)" }}>
-                    {conference.applicants.length} applicants · {conference.capacity} capacity
-                  </p>
-                </button>
-              ))}
-            </div>
-
-            <div className="lg:col-span-8 space-y-6">
-              {!selectedConference ? (
-                <div className="card p-8 rounded-2xl text-sm" style={{ color: "var(--fg-muted)" }}>
-                  Select a conference to manage operations.
-                </div>
-              ) : (
+              {activeSection === "conferences" && (
                 <>
+                  <header className="app-header" style={{ marginBottom: 20 }}>
+                    <div className="app-header-copy">
+                      <div className="section-label mb-2">{ORGANIZER_SECTION_META.conferences.eyebrow}</div>
+                      <h2 className="app-title">{ORGANIZER_SECTION_META.conferences.label}</h2>
+                      <p className="app-subtitle mt-2">{ORGANIZER_SECTION_META.conferences.subtitle}</p>
+                    </div>
+                    <div className="app-header-actions">
+                      <Link href="/organizers" className="btn btn-primary text-sm">
+                        + Create New Conference
+                      </Link>
+                    </div>
+                  </header>
+                  {organizerConferences.length === 0 ? (
+                    <div className="app-card">
+                      <div className="app-card-header">
+                        <div>
+                          <h3 className="app-card-title">No conferences yet</h3>
+                          <p className="app-card-subtitle">
+                            Create your first conference to unlock all sections in the sidebar.
+                          </p>
+                        </div>
+                        <Link href="/organizers" className="btn btn-primary text-sm">
+                          + Create Conference
+                        </Link>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="grid md:grid-cols-2 gap-4">
+                      {organizerConferences.map((conference) => (
+                        <button
+                          key={conference.id}
+                          onClick={() => {
+                            setSelectedConferenceId(conference.id);
+                            setPreviewDraft(buildPreviewDraft(conference));
+                            changeActiveSection("preview");
+                          }}
+                          className="app-card app-card-interactive rounded-2xl text-left"
+                          data-selected={selectedConferenceId === conference.id ? "true" : "false"}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <h3 className="font-bold text-sm" style={{ color: "var(--fg)" }}>{conference.title}</h3>
+                            <span className={`badge ${STATUS_STYLES[conference.status]}`}>{conference.status}</span>
+                          </div>
+                          <p className="text-xs mt-2" style={{ color: "var(--fg-muted)" }}>
+                            {conference.city}, {conference.country} · {conference.level}
+                          </p>
+                          <p className="text-xs mt-1" style={{ color: "var(--fg-muted)" }}>
+                            {conference.applicants.length} applicants · {conference.capacity} capacity
+                          </p>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+
+              {CONFERENCE_SCOPED_SECTIONS.has(activeSection) && !selectedConference && (
+                <div className="app-card">
+                  <div className="app-card-header">
+                    <div>
+                      <h3 className="app-card-title">Select a conference</h3>
+                      <p className="app-card-subtitle">
+                        Choose a conference from the sidebar picker to open {ORGANIZER_SECTION_META[activeSection].label}.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      className="btn btn-ghost text-sm"
+                      onClick={() => changeActiveSection("conferences")}
+                    >
+                      Browse conferences
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {CONFERENCE_SCOPED_SECTIONS.has(activeSection) && selectedConference && (
+                <>
+                  <header className="app-header" style={{ marginBottom: 20 }}>
+                    <div className="app-header-copy">
+                      <div className="section-label mb-2">{ORGANIZER_SECTION_META[activeSection].eyebrow}</div>
+                      <h2 className="app-title">{ORGANIZER_SECTION_META[activeSection].label}</h2>
+                      <p className="app-subtitle mt-2">{ORGANIZER_SECTION_META[activeSection].subtitle}</p>
+                    </div>
+                    {activeSection === "preview" && (
+                      <div className="app-header-actions">
+                        <div className="segmented-control" role="group" aria-label="Conference status">
+                          {(["Draft", "Review", "Published"] as OrganizerConference["status"][]).map((status) => (
+                            <button
+                              key={status}
+                              type="button"
+                              onClick={() => updateOrganizerConferenceStatus(selectedConference.id, status)}
+                              className="segmented-control-item"
+                              data-active={selectedConference.status === status ? "true" : "false"}
+                            >
+                              {status}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </header>
+
+                  {activeSection === "preview" && (
                   <div className="card p-6 rounded-2xl">
                     <div className="flex items-center justify-between gap-4 flex-wrap mb-4">
                       <h2 className="text-2xl font-bold" style={{ color: "var(--fg)" }}>
                         {selectedConference.title}
                       </h2>
-                      <div className="flex gap-2">
-                        {(["Draft", "Review", "Published"] as OrganizerConference["status"][]).map((status) => (
-                          <button
-                            key={status}
-                            onClick={() => updateOrganizerConferenceStatus(selectedConference.id, status)}
-                            className="btn btn-ghost text-xs"
-                            style={{
-                              background: selectedConference.status === status ? "var(--blue-subtle)" : "var(--bg-subtle)",
-                              borderColor: selectedConference.status === status ? "var(--blue)" : "var(--border)",
-                              color: selectedConference.status === status ? "var(--blue)" : "var(--fg-muted)",
-                            }}
-                          >
-                            {status}
-                          </button>
-                        ))}
-                      </div>
+                      <div className="badge badge-blue">Editing page content</div>
                     </div>
                     <div className="grid sm:grid-cols-3 gap-3 text-sm">
                       <p style={{ color: "var(--fg-muted)" }}><strong style={{ color: "var(--fg)" }}>Dates:</strong> {selectedConference.startDate} → {selectedConference.endDate}</p>
@@ -1432,42 +1820,15 @@ export default function OrganizerDashboardPage() {
                       <p style={{ color: "var(--fg-muted)" }}><strong style={{ color: "var(--fg)" }}>Capacity:</strong> {selectedConference.capacity}</p>
                     </div>
                   </div>
+                  )}
 
+                  {activeSection === "preview" && (
                   <div className="card p-6 rounded-2xl">
                     <div className="flex items-center justify-between mb-4">
                       <h3 className="text-lg font-bold" style={{ color: "var(--fg)" }}>Conference Page Preview</h3>
                       <button
                         className="btn btn-primary text-xs"
-                        onClick={async () => {
-                          updateOrganizerConferenceConfig(selectedConference.id, {
-                            title: previewDraft.title,
-                            city: previewDraft.city,
-                            country: previewDraft.country,
-                            organizerName: previewDraft.organizerName,
-                            venue: previewDraft.venue || undefined,
-                            description: previewDraft.description || undefined,
-                            termsAndConditions: previewDraft.termsAndConditions.trim() || undefined,
-                            refundPolicy: previewDraft.refundPolicy.trim() || undefined,
-                            codeOfConduct: previewDraft.codeOfConduct.trim() || undefined,
-                            faqNotes: previewDraft.faqNotes.trim() || undefined,
-                            logoImageUrl: previewDraft.logoImageUrl || undefined,
-                            bannerImageUrl: previewDraft.bannerImageUrl || undefined,
-                            socialLinks: {
-                              website: previewDraft.website || undefined,
-                              instagram: previewDraft.instagram || undefined,
-                              linkedin: previewDraft.linkedin || undefined,
-                              twitter: previewDraft.twitter || undefined,
-                            },
-                            brandPrimaryColor: previewDraft.brandPrimaryColor || undefined,
-                            brandSecondaryColor: previewDraft.brandSecondaryColor || undefined,
-                          });
-                          await fetch(`/api/organizers/conference-config/${selectedConference.id}`, {
-                            method: "PATCH",
-                            headers: { "Content-Type": "application/json" },
-                            credentials: "include",
-                            body: JSON.stringify(previewDraft),
-                          }).catch(() => null);
-                        }}
+                        onClick={savePreviewSettings}
                       >
                         Save Preview Settings
                       </button>
@@ -1511,7 +1872,9 @@ export default function OrganizerDashboardPage() {
                       </div>
                     </div>
                   </div>
+                  )}
 
+                  {activeSection === "preview" && (
                   <div className="card p-6 rounded-2xl">
                     <h3 className="text-lg font-bold mb-4" style={{ color: "var(--fg)" }}>Conference Policies & Info</h3>
                     <div className="space-y-3">
@@ -1556,7 +1919,43 @@ export default function OrganizerDashboardPage() {
                       </p>
                     </div>
                   </div>
+                  )}
 
+                  {activeSection === "preview" && previewSaveStatus && (
+                    <div
+                      className={`alert ${/unable|fail|error/i.test(previewSaveStatus) ? "alert-danger" : "alert-success"}`}
+                      role="status"
+                    >
+                      <span>{previewSaveStatus}</span>
+                    </div>
+                  )}
+
+                  {activeSection === "preview" && previewHasUnsavedChanges && (
+                    <div className="app-sticky-bar">
+                      <div>
+                        <p className="app-sticky-bar-copy">You have unsaved preview edits.</p>
+                        <p className="app-sticky-bar-copy-muted">Save to publish changes to your conference page.</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          className="btn btn-ghost text-xs"
+                          onClick={() => setPreviewDraft(buildPreviewDraft(selectedConference))}
+                        >
+                          Discard
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-primary text-xs"
+                          onClick={savePreviewSettings}
+                        >
+                          Save changes
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {activeSection === "applications" && (
                   <div className="card p-6 rounded-2xl">
                     <h3 className="text-lg font-bold mb-4" style={{ color: "var(--fg)" }}>Applications</h3>
                     <div className="grid md:grid-cols-5 gap-2 mb-4">
@@ -1763,8 +2162,11 @@ export default function OrganizerDashboardPage() {
                       </div>
                     )}
                   </div>
+                  )}
 
-                  <div className="card p-6 rounded-2xl mt-6">
+                  {activeSection === "participants" && (
+                  <>
+                  <div className="card p-6 rounded-2xl">
                     <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
                       <h3 className="text-lg font-bold" style={{ color: "var(--fg)" }}>Participants &amp; Allotments</h3>
                       <div className="text-xs" style={{ color: "var(--fg-muted)" }}>
@@ -1849,12 +2251,8 @@ export default function OrganizerDashboardPage() {
                     </div>
 
                     <div className="flex items-center gap-2 mb-4 flex-wrap text-xs">
-                      <span className="px-2 py-1 rounded-full" style={{ background: "#f0fdf4", color: "#166534" }}>
-                        Green = Available
-                      </span>
-                      <span className="px-2 py-1 rounded-full" style={{ background: "#fef2f2", color: "#991b1b" }}>
-                        Red = Allotted / Full
-                      </span>
+                      <span className="badge badge-success">Green = Available</span>
+                      <span className="badge badge-danger">Red = Allotted / Full</span>
                     </div>
 
                     <div className="grid md:grid-cols-[1.2fr_1fr_180px] gap-2 mb-4">
@@ -1902,38 +2300,46 @@ export default function OrganizerDashboardPage() {
                               <p className="text-[11px]" style={{ color: "var(--fg-muted)" }}>{group.committeeType}</p>
                             </div>
                             <div className="flex flex-wrap gap-2">
-                              {group.entries.map((entry) => (
-                                <div
-                                  key={entry.id}
-                                  className="rounded-lg px-3 py-2 min-w-[180px]"
-                                  style={
-                                    entry.seatState === "available"
-                                      ? { background: "#f0fdf4", border: "1px solid #86efac" }
-                                      : { background: "#fef2f2", border: "1px solid #fca5a5" }
-                                  }
-                                >
-                                  <p
-                                    className="text-xs font-semibold"
-                                    style={entry.seatState === "available" ? { color: "#166534" } : { color: "#991b1b" }}
+                              {group.entries.map((entry) => {
+                                const available = entry.seatState === "available";
+                                return (
+                                  <div
+                                    key={entry.id}
+                                    className="rounded-lg px-3 py-2 min-w-[180px]"
+                                    style={{
+                                      background: available ? "var(--success-subtle)" : "var(--danger-subtle)",
+                                      border: `1px solid ${
+                                        available
+                                          ? "color-mix(in srgb, var(--success) 30%, transparent)"
+                                          : "color-mix(in srgb, var(--danger) 30%, transparent)"
+                                      }`,
+                                    }}
                                   >
-                                    {entry.name}
-                                  </p>
-                                  <p
-                                    className="text-[11px]"
-                                    style={entry.seatState === "available" ? { color: "#15803d" } : { color: "#b91c1c" }}
-                                  >
-                                    {entry.allottedCount}/{entry.seatCount} allotted · {entry.availableCount} available
-                                  </p>
-                                </div>
-                              ))}
+                                    <p
+                                      className="text-xs font-semibold"
+                                      style={{ color: available ? "var(--success-fg)" : "var(--danger-fg)" }}
+                                    >
+                                      {entry.name}
+                                    </p>
+                                    <p
+                                      className="text-[11px]"
+                                      style={{ color: available ? "var(--success-fg)" : "var(--danger-fg)", opacity: 0.85 }}
+                                    >
+                                      {entry.allottedCount}/{entry.seatCount} allotted · {entry.availableCount} available
+                                    </p>
+                                  </div>
+                                );
+                              })}
                             </div>
                           </div>
                         ))}
                       </div>
                     )}
                   </div>
+                  </>
+                  )}
 
-                  <div className="grid md:grid-cols-2 gap-6">
+                  {activeSection === "committees" && (
                     <div className="card p-6 rounded-2xl">
                       <h3 className="text-lg font-bold mb-4" style={{ color: "var(--fg)" }}>Committees</h3>
                       <div className="flex items-center gap-2 mb-3">
@@ -2087,9 +2493,8 @@ export default function OrganizerDashboardPage() {
                                     onChange={(event) => updateDraftMember(member.id, { seatCount: event.target.value })}
                                   />
                                   <button
-                                    className="btn btn-ghost text-xs"
+                                    className="btn btn-danger-ghost text-xs"
                                     onClick={() => removeDraftMember(member.id)}
-                                    style={{ color: "#dc2626" }}
                                   >
                                     Remove
                                   </button>
@@ -2232,8 +2637,7 @@ export default function OrganizerDashboardPage() {
                               {committee.isPublic === false ? "Set Public" : "Set Private"}
                             </button>
                             <button
-                              className="btn btn-ghost text-xs mt-2"
-                              style={{ color: "#dc2626" }}
+                              className="btn btn-danger-ghost text-xs mt-2"
                               onClick={() => tryDeleteCommittee(selectedConference, committee)}
                             >
                               Delete Committee
@@ -2242,7 +2646,9 @@ export default function OrganizerDashboardPage() {
                         ))}
                       </div>
                     </div>
+                  )}
 
+                  {activeSection === "communications" && (
                     <div className="card p-6 rounded-2xl">
                       <h3 className="text-lg font-bold mb-4" style={{ color: "var(--fg)" }}>Broadcast Announcement</h3>
                       <div className="space-y-3">
@@ -2283,9 +2689,9 @@ export default function OrganizerDashboardPage() {
                         ))}
                       </div>
                     </div>
-                  </div>
+                  )}
 
-                  <div>
+                  {activeSection === "transactions" && (
                     <div className="card p-6 rounded-2xl">
                       <h3 className="text-lg font-bold mb-4" style={{ color: "var(--fg)" }}>Transactions</h3>
                       {!financeSummary ? (
@@ -2308,47 +2714,57 @@ export default function OrganizerDashboardPage() {
                           <p className="text-xs mb-2" style={{ color: "var(--fg-muted)" }}>
                             Net after fees (6%): <strong style={{ color: "var(--fg)" }}>${financeSummary.netAfterFees}</strong>
                           </p>
-                          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-2 mb-3">
+                          <div className="flex flex-col gap-3 mb-3">
                             <input
                               className="input-base text-xs"
                               placeholder="Search name, category, committee..."
                               value={transactionSearchQuery}
                               onChange={(event) => setTransactionSearchQuery(event.target.value)}
                             />
-                            <select
-                              className="input-base text-xs"
-                              value={transactionPaymentFilter}
-                              onChange={(event) => setTransactionPaymentFilter(event.target.value as "all" | "paid" | "pending")}
-                            >
-                              <option value="all">All payment states</option>
-                              <option value="paid">Paid</option>
-                              <option value="pending">Pending</option>
-                            </select>
-                            <select
-                              className="input-base text-xs"
-                              value={transactionRefundFilter}
-                              onChange={(event) => setTransactionRefundFilter(event.target.value as "all" | "active" | "refunded")}
-                            >
-                              <option value="all">All refund states</option>
-                              <option value="active">Active</option>
-                              <option value="refunded">Refunded</option>
-                            </select>
-                            <select
-                              className="input-base text-xs"
-                              value={transactionApplicantStatusFilter}
-                              onChange={(event) =>
-                                setTransactionApplicantStatusFilter(
-                                  event.target.value as "all" | "Pending" | "Invited" | "Allotted" | "Waitlisted" | "Rejected"
-                                )
-                              }
-                            >
-                              <option value="all">All applicant statuses</option>
-                              <option value="Pending">Pending</option>
-                              <option value="Invited">Invited</option>
-                              <option value="Allotted">Allotted</option>
-                              <option value="Waitlisted">Waitlisted</option>
-                              <option value="Rejected">Rejected</option>
-                            </select>
+                            <div className="flex flex-wrap gap-2">
+                              <div className="segmented-control" role="group" aria-label="Payment state filter">
+                                {(["all", "paid", "pending"] as const).map((value) => (
+                                  <button
+                                    key={value}
+                                    type="button"
+                                    className="segmented-control-item"
+                                    data-active={transactionPaymentFilter === value ? "true" : "false"}
+                                    onClick={() => setTransactionPaymentFilter(value)}
+                                  >
+                                    {value === "all" ? "All payments" : value === "paid" ? "Paid" : "Pending"}
+                                  </button>
+                                ))}
+                              </div>
+                              <div className="segmented-control" role="group" aria-label="Refund filter">
+                                {(["all", "active", "refunded"] as const).map((value) => (
+                                  <button
+                                    key={value}
+                                    type="button"
+                                    className="segmented-control-item"
+                                    data-active={transactionRefundFilter === value ? "true" : "false"}
+                                    onClick={() => setTransactionRefundFilter(value)}
+                                  >
+                                    {value === "all" ? "All refunds" : value === "active" ? "Active" : "Refunded"}
+                                  </button>
+                                ))}
+                              </div>
+                              <select
+                                className="input-base text-xs"
+                                value={transactionApplicantStatusFilter}
+                                onChange={(event) =>
+                                  setTransactionApplicantStatusFilter(
+                                    event.target.value as "all" | "Pending" | "Invited" | "Allotted" | "Waitlisted" | "Rejected"
+                                  )
+                                }
+                              >
+                                <option value="all">All applicant statuses</option>
+                                <option value="Pending">Pending</option>
+                                <option value="Invited">Invited</option>
+                                <option value="Allotted">Allotted</option>
+                                <option value="Waitlisted">Waitlisted</option>
+                                <option value="Rejected">Rejected</option>
+                              </select>
+                            </div>
                           </div>
                           <p className="text-[11px] mb-2" style={{ color: "var(--fg-muted)" }}>
                             Showing {transactionRows.length} of {selectedConference.applicants.length} transactions
@@ -2419,9 +2835,9 @@ export default function OrganizerDashboardPage() {
                         </>
                       )}
                     </div>
-                  </div>
+                  )}
 
-                  <div className="grid md:grid-cols-2 gap-6">
+                  {activeSection === "settings" && (
                     <div className="card p-6 rounded-2xl">
                       <h3 className="text-lg font-bold mb-4" style={{ color: "var(--fg)" }}>Conference Settings</h3>
                       <div className="space-y-3">
@@ -2451,9 +2867,12 @@ export default function OrganizerDashboardPage() {
                             </button>
                           </div>
                           {partnerActionStatus && (
-                            <p className="text-[11px]" style={{ color: "var(--fg-muted)" }}>
-                              {partnerActionStatus}
-                            </p>
+                            <div
+                              className={`alert ${/fail|error|unable|cannot|invalid/i.test(partnerActionStatus) ? "alert-danger" : "alert-success"}`}
+                              role="status"
+                            >
+                              <span>{partnerActionStatus}</span>
+                            </div>
                           )}
                           <div className="space-y-2">
                             <p className="text-[11px] font-semibold" style={{ color: "var(--fg-muted)" }}>
@@ -2701,9 +3120,12 @@ export default function OrganizerDashboardPage() {
                           </div>
                         </div>
                         {documentActionStatus && (
-                          <p className="text-[11px]" style={{ color: "var(--fg-muted)" }}>
-                            {documentActionStatus}
-                          </p>
+                          <div
+                            className={`alert ${/fail|error|unable|cannot|invalid/i.test(documentActionStatus) ? "alert-danger" : "alert-success"}`}
+                            role="status"
+                          >
+                            <span>{documentActionStatus}</span>
+                          </div>
                         )}
                         <div className="p-3 rounded-xl" style={{ background: "var(--bg-subtle)" }}>
                           <p className="text-xs font-semibold mb-2" style={{ color: "var(--fg)" }}>Previous editions</p>
@@ -2747,7 +3169,7 @@ export default function OrganizerDashboardPage() {
                             <p className="text-xs font-semibold" style={{ color: "var(--fg)" }}>
                               Banking Details (Payout Account)
                             </p>
-                            <button className="btn btn-ghost text-xs" style={{ color: "#dc2626" }} onClick={clearBankingDetails}>
+                            <button className="btn btn-danger-ghost text-xs" onClick={clearBankingDetails}>
                               Clear
                             </button>
                           </div>
@@ -2756,8 +3178,15 @@ export default function OrganizerDashboardPage() {
                           </p>
                           <p className="text-[11px]" style={{ color: "var(--fg-muted)" }}>
                             Last updated: {selectedConferenceBankingDetails.updatedAt || "Not updated yet"}
-                            {bankingSaveStatus ? ` · ${bankingSaveStatus}` : ""}
                           </p>
+                          {bankingSaveStatus && (
+                            <div
+                              className={`alert ${/fail|error|unable|cannot|invalid/i.test(bankingSaveStatus) ? "alert-danger" : "alert-success"}`}
+                              role="status"
+                            >
+                              <span>{bankingSaveStatus}</span>
+                            </div>
+                          )}
 
                           <p className="text-xs font-semibold mt-2" style={{ color: "var(--fg)" }}>Account Info</p>
                           <div className="grid grid-cols-2 gap-2">
@@ -2865,9 +3294,9 @@ export default function OrganizerDashboardPage() {
                             />
                           </div>
                           {bankingWarnings.length > 0 && (
-                            <div className="rounded-lg p-2" style={{ background: "#fffbeb", border: "1px solid #fcd34d" }}>
+                            <div className="alert alert-warning flex-col gap-1">
                               {bankingWarnings.map((warning) => (
-                                <p key={warning} className="text-[11px]" style={{ color: "#92400e" }}>
+                                <p key={warning} className="text-[11px]">
                                   {warning}
                                 </p>
                               ))}
@@ -2876,7 +3305,9 @@ export default function OrganizerDashboardPage() {
                         </div>
                       </div>
                     </div>
+                  )}
 
+                  {activeSection === "team" && (
                     <div className="card p-6 rounded-2xl">
                       <h3 className="text-lg font-bold mb-4" style={{ color: "var(--fg)" }}>Organizer Team</h3>
                       <div className="grid grid-cols-2 gap-2 mb-2">
@@ -2939,8 +3370,9 @@ export default function OrganizerDashboardPage() {
                         ))}
                       </div>
                     </div>
-                  </div>
+                  )}
 
+                  {activeSection === "awards" && (
                   <div className="grid md:grid-cols-2 gap-6">
                     <div className="card p-6 rounded-2xl">
                       <h3 className="text-lg font-bold mb-4" style={{ color: "var(--fg)" }}>Awards Module</h3>
@@ -3071,7 +3503,9 @@ export default function OrganizerDashboardPage() {
                       </div>
                     </div>
                   </div>
+                  )}
 
+                  {activeSection === "pricing" && (
                   <div className="card p-6 rounded-2xl">
                     <h3 className="text-lg font-bold mb-4" style={{ color: "var(--fg)" }}>Registration Categories</h3>
                     <div className="space-y-4">
@@ -3234,8 +3668,7 @@ export default function OrganizerDashboardPage() {
                                       </div>
                                       <div className="flex justify-end mt-2">
                                         <button
-                                          className="btn btn-ghost text-xs"
-                                          style={{ color: "#dc2626" }}
+                                          className="btn btn-danger-ghost text-xs"
                                           onClick={() => removeCategoryPricingPhase(selectedConference.id, category, phase.id)}
                                         >
                                           Remove Phase
@@ -3332,8 +3765,7 @@ export default function OrganizerDashboardPage() {
                                       )}
                                       <div className="flex justify-end">
                                         <button
-                                          className="btn btn-ghost text-xs"
-                                          style={{ color: "#dc2626" }}
+                                          className="btn btn-danger-ghost text-xs"
                                           onClick={() => removeCategoryQuestion(selectedConference.id, category, field.id)}
                                         >
                                           Remove Question
@@ -3349,7 +3781,9 @@ export default function OrganizerDashboardPage() {
                       })}
                     </div>
                   </div>
+                  )}
 
+                  {activeSection === "communications" && (
                   <div className="card p-6 rounded-2xl mt-6">
                     <h3 className="text-lg font-bold mb-4" style={{ color: "var(--fg)" }}>Status Email Templates</h3>
                     <p className="text-xs mb-3" style={{ color: "var(--fg-muted)" }}>
@@ -3392,20 +3826,80 @@ export default function OrganizerDashboardPage() {
                       </div>
                     </div>
                   </div>
+                  )}
 
-                  <QrScannerPanel />
+                  {activeSection === "settings" && (
+                    <QrScannerPanel />
+                  )}
                 </>
               )}
-            </div>
+            </main>
           </div>
         </div>
       </div>
+      {mobileNavOpen && (
+        <div
+          className="app-drawer app-drawer-left"
+          onClick={(event) => {
+            if (event.target === event.currentTarget) setMobileNavOpen(false);
+          }}
+        >
+          <aside className="app-drawer-panel p-5 flex flex-col gap-5" style={{ maxWidth: 320 }}>
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold" style={{ color: "var(--fg)" }}>Dashboard</h3>
+              <button className="btn btn-ghost text-xs" onClick={() => setMobileNavOpen(false)}>
+                Close
+              </button>
+            </div>
+            <div className="app-sidebar-picker">
+              <span className="app-sidebar-picker-label">Active conference</span>
+              <select
+                className="input-base text-sm"
+                value={selectedConferenceId}
+                onChange={(event) => {
+                  const nextId = event.target.value;
+                  setSelectedConferenceId(nextId);
+                  const nextConf = organizerConferences.find((c) => c.id === nextId) || null;
+                  setPreviewDraft(buildPreviewDraft(nextConf));
+                }}
+              >
+                <option value="">
+                  {organizerConferences.length === 0 ? "No conferences yet" : "Select a conference"}
+                </option>
+                {organizerConferences.map((conference) => (
+                  <option key={conference.id} value={conference.id}>
+                    {conference.title}
+                  </option>
+                ))}
+              </select>
+            </div>
+            {ORGANIZER_NAV.map((group) => (
+              <div key={`mobile-${group.label}`} className="app-sidebar-section">
+                <span className="app-sidebar-section-label">{group.label}</span>
+                {group.items.map((item) => {
+                  const disabled = item.scope === "conference" && !selectedConference;
+                  return (
+                    <button
+                      key={`mobile-${item.id}`}
+                      type="button"
+                      className="app-sidebar-item"
+                      data-active={activeSection === item.id ? "true" : "false"}
+                      disabled={disabled}
+                      onClick={() => changeActiveSection(item.id)}
+                    >
+                      <span className="app-sidebar-item-icon" aria-hidden>{item.icon}</span>
+                      <span className="app-sidebar-item-label">{item.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            ))}
+          </aside>
+        </div>
+      )}
       {applicantProfileDrawerOpen && selectedApplicant && (
-        <div className="fixed inset-0 z-[999] bg-black/40 flex justify-end">
-          <div
-            className="w-full max-w-2xl h-full overflow-y-auto p-5"
-            style={{ background: "var(--bg)", borderLeft: "1px solid var(--border)" }}
-          >
+        <div className="app-drawer">
+          <div className="app-drawer-panel app-drawer-panel-wide p-5">
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h3 className="text-lg font-bold" style={{ color: "var(--fg)" }}>
@@ -3512,11 +4006,8 @@ export default function OrganizerDashboardPage() {
         </div>
       )}
       {countryEditorOpen && selectedConference && selectedCountryEditorCommittee && (
-        <div className="fixed inset-0 z-[999] bg-black/40 flex justify-end">
-          <div
-            className="w-full max-w-xl h-full overflow-y-auto p-5"
-            style={{ background: "var(--bg)", borderLeft: "1px solid var(--border)" }}
-          >
+        <div className="app-drawer">
+          <div className="app-drawer-panel p-5">
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h3 className="text-lg font-bold" style={{ color: "var(--fg)" }}>
@@ -3547,9 +4038,8 @@ export default function OrganizerDashboardPage() {
                     <div key={country.id} className="flex items-center justify-between rounded-lg px-2 py-1" style={{ background: "var(--bg)" }}>
                       <span className="text-xs" style={{ color: "var(--fg)" }}>{country.name}</span>
                       <button
-                        className="btn btn-ghost text-xs"
+                        className="btn btn-danger-ghost text-xs"
                         onClick={() => removeCountryFromEditor(country.id)}
-                        style={{ color: "#dc2626" }}
                       >
                         Remove
                       </button>
@@ -3645,11 +4135,8 @@ export default function OrganizerDashboardPage() {
         </div>
       )}
       {detailsEditorOpen && selectedConference && selectedDetailsEditorCommittee && (
-        <div className="fixed inset-0 z-[999] bg-black/40 flex justify-end">
-          <div
-            className="w-full max-w-xl h-full overflow-y-auto p-5"
-            style={{ background: "var(--bg)", borderLeft: "1px solid var(--border)" }}
-          >
+        <div className="app-drawer">
+          <div className="app-drawer-panel p-5">
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h3 className="text-lg font-bold" style={{ color: "var(--fg)" }}>Edit Committee Details</h3>
@@ -3705,7 +4192,7 @@ export default function OrganizerDashboardPage() {
                 type="file"
                 accept="image/png,image/jpeg,image/webp,image/gif"
                 onChange={onCommitteeLogoFileSelected}
-                className="input-base text-xs file:mr-3 file:rounded-lg file:border-0 file:bg-blue-600 file:px-3 file:py-1.5 file:text-white"
+                className="input-base text-xs file:mr-3 file:rounded-lg file:border-0 file:bg-[color:var(--blue)] file:px-3 file:py-1.5 file:text-white"
               />
               {detailsEditorDraft.logoImageUrl && (
                 <div className="rounded-lg h-24 bg-cover bg-center" style={{ backgroundImage: `url("${detailsEditorDraft.logoImageUrl}")` }} />
@@ -3736,8 +4223,7 @@ export default function OrganizerDashboardPage() {
                       onChange={(event) => updateChairDraftRow(chair.id, { email: event.target.value })}
                     />
                     <button
-                      className="btn btn-ghost text-xs"
-                      style={{ color: "#dc2626" }}
+                      className="btn btn-danger-ghost text-xs"
                       onClick={() => removeChairDraftRow(chair.id)}
                     >
                       Remove

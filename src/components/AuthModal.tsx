@@ -104,21 +104,22 @@ export default function AuthModal({ isOpen, onClose, defaultTab = "signin" }: Au
       ref={overlayRef}
       onClick={(e) => { if (e.target === overlayRef.current) closeModal(); }}
       className="fixed inset-0 z-[999] flex items-center justify-center p-4"
-      style={{ background: "rgba(0,0,0,0.5)", backdropFilter: "blur(8px)" }}
+      style={{ background: "rgba(0,0,0,0.58)", backdropFilter: "blur(10px)" }}
     >
       <div
-        className="w-full max-w-md rounded-3xl overflow-hidden animate-fade-up"
+        className="w-full max-w-md rounded-3xl overflow-hidden animate-soft-scale"
         style={{
-          background: "var(--bg)",
-          border: "1.5px solid var(--border)",
-          boxShadow: "0 24px 80px rgba(0,0,0,0.2)",
+          background: "linear-gradient(180deg, color-mix(in srgb, var(--bg) 86%, #0f1218 14%), var(--bg))",
+          border: "1.5px solid color-mix(in srgb, var(--border) 70%, #d3b07f 30%)",
+          boxShadow: "0 24px 80px rgba(0,0,0,0.32)",
         }}
       >
         {/* Header */}
         <div
           className="p-8 pb-6"
           style={{
-            background: "linear-gradient(135deg, #1e40af 0%, #2563eb 100%)",
+            background: "linear-gradient(130deg, #151922 0%, #242d3b 65%, #2f3747 100%)",
+            borderBottom: "1px solid rgba(244, 226, 198, 0.2)",
           }}
         >
           <div className="flex items-center justify-between mb-6">
@@ -128,21 +129,21 @@ export default function AuthModal({ isOpen, onClose, defaultTab = "signin" }: Au
                 alt="Tidingz logo"
                 width={32}
                 height={32}
-                className="w-8 h-8 rounded-xl object-cover border border-white/25"
+                className="w-8 h-8 rounded-xl object-cover border border-[#f4e2c6]/30"
               />
-              <span className="text-white font-bold">Tidingz</span>
+              <span className="text-[#f8f4ec] font-bold tracking-wide uppercase text-sm">Tidingz</span>
             </div>
             <button
               onClick={closeModal}
-              className="w-8 h-8 rounded-xl flex items-center justify-center text-white/70 hover:text-white hover:bg-white/10 transition-all"
+              className="w-8 h-8 rounded-xl flex items-center justify-center text-white/70 hover:text-white hover:bg-white/10 transition-all hover:scale-105"
             >
               ✕
             </button>
           </div>
-          <h2 className="text-2xl font-bold text-white">
-            {tab === "signin" ? "Welcome back 👋" : "Join Tidingz 🌍"}
+          <h2 className="text-2xl font-bold text-[#f8f4ec] uppercase" style={{ letterSpacing: "0.03em" }}>
+            {tab === "signin" ? "Welcome Back" : "Create Account"}
           </h2>
-          <p className="text-white/70 text-sm mt-1">
+          <p className="text-[#f8f4ec]/72 text-sm mt-1">
             {tab === "signin"
               ? "Sign in to your delegate account"
               : "Create your account and start your MUN journey"}
@@ -241,17 +242,17 @@ export default function AuthModal({ isOpen, onClose, defaultTab = "signin" }: Au
           {error && (
             <div
               className="flex items-center gap-2 text-sm px-4 py-3 rounded-xl"
-              style={{ background: "rgba(220,38,38,0.08)", color: "#dc2626" }}
+              style={{ background: "rgba(157, 46, 46, 0.12)", color: "#c84f4f", border: "1px solid rgba(157, 46, 46, 0.28)" }}
             >
-              <span>⚠️</span> {error}
+              <span>!</span> {error}
             </div>
           )}
 
           <button
             type="submit"
             disabled={loading}
-            className="btn btn-primary w-full mt-2 text-base"
-            style={{ padding: "14px", borderRadius: "12px", opacity: loading ? 0.7 : 1 }}
+            className="lux-button-primary w-full mt-2 text-base hover:-translate-y-0.5"
+            style={{ padding: "14px", opacity: loading ? 0.7 : 1 }}
           >
             {loading ? (
               <span className="flex items-center gap-2">

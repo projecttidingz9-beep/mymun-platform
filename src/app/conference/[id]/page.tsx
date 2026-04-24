@@ -46,11 +46,28 @@ export default function ConferenceDetailPage() {
 
   if (!conference) {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: "var(--bg)" }}>
-        <div className="text-center">
-          <p className="text-6xl mb-4">😕</p>
-          <h1 className="text-2xl font-bold mb-2" style={{ color: "var(--fg)" }}>Conference Not Found</h1>
-          <Link href="/marketplace" className="btn btn-primary mt-4">Back to Marketplace</Link>
+      <div className="lux-shell lux-shell-immersive min-h-screen flex items-center justify-center">
+        <div aria-hidden className="lux-backdrop" />
+        <div className="relative text-center">
+          <p
+            className="lux-eyebrow justify-center inline-flex"
+            style={{ color: "rgba(243,237,224,0.55)" }}
+          >
+            Not found
+          </p>
+          <h1
+            className="mt-5 text-3xl font-semibold"
+            style={{ color: "var(--fg-immersive)", letterSpacing: "-0.02em" }}
+          >
+            We couldn&apos;t find that conference.
+          </h1>
+          <Link
+            href="/marketplace"
+            className="lux-button-primary inline-block mt-8"
+            style={{ padding: "12px 22px" }}
+          >
+            Back to marketplace
+          </Link>
         </div>
       </div>
     );
@@ -172,125 +189,235 @@ export default function ConferenceDetailPage() {
   ];
 
   return (
-    <>
+    <div className="lux-shell lux-shell-immersive min-h-screen">
+      <div aria-hidden className="lux-backdrop" />
+
       <Navbar openAuthModal={() => setAuthOpen(true)} />
       <AuthModal isOpen={authOpen} onClose={() => setAuthOpen(false)} />
 
       {/* Hero Banner */}
       <div
-        className={`pt-20 ${heroBannerImage ? "" : `bg-gradient-to-br ${c.color}`} relative overflow-hidden`}
+        className="pt-24 relative overflow-hidden"
         style={
           heroBannerImage
             ? {
-                backgroundImage: `linear-gradient(135deg, rgba(2, 6, 23, 0.72), rgba(15, 23, 42, 0.6)), url("${heroBannerImage}")`,
+                backgroundImage: `linear-gradient(180deg, rgba(11,13,18,0.55) 0%, rgba(11,13,18,0.78) 65%, rgba(11,13,18,0.94) 100%), url("${heroBannerImage}")`,
                 backgroundSize: "cover",
                 backgroundPosition: "center",
               }
-            : undefined
+            : {
+                background:
+                  "linear-gradient(180deg, rgba(11,13,18,0.4) 0%, rgba(11,13,18,0.85) 100%)",
+              }
         }
       >
-        <div
-          className="absolute inset-0 opacity-10"
-          style={{
-            backgroundImage: "radial-gradient(circle, white 1.5px, transparent 1.5px)",
-            backgroundSize: "40px 40px",
-          }}
-        />
-        <div className="max-w-7xl mx-auto px-6 py-16 pb-12 relative">
+        <div className="max-w-7xl mx-auto px-6 py-20 pb-16 relative">
           {/* Breadcrumb */}
-          <div className="flex items-center gap-2 text-white/60 text-sm mb-6">
-            <Link href="/" className="hover:text-white transition-colors">Home</Link>
-            <span>/</span>
-            <Link href="/marketplace" className="hover:text-white transition-colors">Marketplace</Link>
-            <span>/</span>
-            <span className="text-white">{displayTitle}</span>
+          <div
+            className="flex items-center gap-2 text-xs tracking-[0.22em] uppercase mb-10"
+            style={{ color: "rgba(243,237,224,0.55)" }}
+          >
+            <Link href="/" className="hover:text-white transition-colors">
+              Home
+            </Link>
+            <span>·</span>
+            <Link href="/marketplace" className="hover:text-white transition-colors">
+              Marketplace
+            </Link>
+            <span>·</span>
+            <span style={{ color: "var(--fg-immersive)" }}>{displayTitle}</span>
           </div>
 
-          <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-8">
+          <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-10">
             <div className="flex-1">
-              <div className="flex flex-wrap gap-2 mb-4">
-                <span className="badge" style={{ background: "rgba(255,255,255,0.2)", color: "white" }}>
-                  🎓 {c.level}
+              <div className="flex flex-wrap gap-2 mb-6">
+                <span
+                  className="text-[10px] font-semibold px-3 py-1 rounded-full"
+                  style={{
+                    background: "rgba(243,237,224,0.1)",
+                    color: "var(--fg-immersive)",
+                    letterSpacing: "0.22em",
+                    textTransform: "uppercase",
+                    border: "1px solid rgba(243,237,224,0.18)",
+                  }}
+                >
+                  {c.level}
                 </span>
                 {c.featured && (
-                  <span className="badge" style={{ background: "rgba(255,255,255,0.2)", color: "white" }}>
-                    ⭐ Featured
+                  <span
+                    className="text-[10px] font-semibold px-3 py-1 rounded-full"
+                    style={{
+                      background:
+                        "linear-gradient(120deg, #e7c390 0%, #d8ac72 55%, #b8925a 100%)",
+                      color: "#1a1108",
+                      letterSpacing: "0.22em",
+                      textTransform: "uppercase",
+                    }}
+                  >
+                    Featured
                   </span>
                 )}
-                <span className="badge" style={{ background: "rgba(255,255,255,0.2)", color: "white" }}>
-                  🌍 {c.region}
+                <span
+                  className="text-[10px] font-semibold px-3 py-1 rounded-full"
+                  style={{
+                    background: "rgba(243,237,224,0.1)",
+                    color: "var(--fg-immersive)",
+                    letterSpacing: "0.22em",
+                    textTransform: "uppercase",
+                    border: "1px solid rgba(243,237,224,0.18)",
+                  }}
+                >
+                  {c.region}
                 </span>
               </div>
 
-              <h1 className="text-4xl md:text-5xl font-black text-white mb-4 leading-tight">
+              <h1
+                className="lux-display max-w-3xl"
+                style={{ color: "var(--fg-immersive)" }}
+              >
                 {displayTitle}
               </h1>
+
               {acceptedPartnerConferences.length > 0 && (
-                <p className="text-white/80 text-sm mb-3">
-                  Co-hosted by {acceptedPartnerConferences.map((entry) => entry.title).join(", ")}
+                <p
+                  className="mt-5 text-sm"
+                  style={{ color: "rgba(243,237,224,0.72)" }}
+                >
+                  Co-hosted by{" "}
+                  {acceptedPartnerConferences.map((entry) => entry.title).join(", ")}
                 </p>
               )}
 
-              <div className="flex flex-wrap gap-5 text-white/80 text-sm">
-                <span className="flex items-center gap-2">📍 {displayLocation}</span>
-                <span className="flex items-center gap-2">📅 {c.startDate} – {c.endDate}</span>
-                <span className="flex items-center gap-2">⏰ Deadline: {c.registrationDeadline}</span>
+              <div
+                className="mt-8 flex flex-wrap gap-6 text-sm"
+                style={{ color: "rgba(243,237,224,0.75)" }}
+              >
+                <span className="flex items-center gap-2">
+                  <span style={{ color: "var(--accent-warm)" }}>◆</span>
+                  {displayLocation}
+                </span>
+                <span className="flex items-center gap-2">
+                  <span style={{ color: "var(--accent-warm)" }}>◆</span>
+                  {c.startDate} – {c.endDate}
+                </span>
+                <span className="flex items-center gap-2">
+                  <span style={{ color: "var(--accent-warm)" }}>◆</span>
+                  Deadline {c.registrationDeadline}
+                </span>
               </div>
             </div>
 
             {/* Registration Card */}
-            <div
-              className="w-full lg:w-80 rounded-2xl p-6 flex-shrink-0"
-              style={{
-                background: "rgba(255,255,255,0.15)",
-                backdropFilter: "blur(16px)",
-                border: "1.5px solid rgba(255,255,255,0.25)",
-              }}
-            >
-              <div className="flex items-baseline gap-1 mb-1">
-                <span className="text-4xl font-black text-white">{currencySymbol}{dynamicStartingPrice}</span>
-                <span className="text-white/60 text-sm">/ starts from</span>
+            <div className="w-full lg:w-[340px] lux-card p-7 flex-shrink-0 lg:sticky lg:top-28">
+              <p
+                className="text-[10px] font-semibold"
+                style={{
+                  color: "rgba(243,237,224,0.55)",
+                  letterSpacing: "0.28em",
+                  textTransform: "uppercase",
+                }}
+              >
+                Starting from
+              </p>
+              <div className="flex items-baseline gap-2 mt-3">
+                <span
+                  className="text-4xl font-semibold"
+                  style={{
+                    color: "var(--fg-immersive)",
+                    letterSpacing: "-0.02em",
+                  }}
+                >
+                  {currencySymbol}
+                  {dynamicStartingPrice}
+                </span>
+                <span className="text-xs" style={{ color: "rgba(243,237,224,0.55)" }}>
+                  per delegate
+                </span>
               </div>
-              <p className="text-white/60 text-xs mb-5">
-                {activeCategoryPhase ? `${activeCategoryPhase.name} phase is active` : "Base pricing currently active"}
+              <p
+                className="mt-2 text-xs"
+                style={{ color: "rgba(243,237,224,0.55)" }}
+              >
+                {activeCategoryPhase
+                  ? `${activeCategoryPhase.name} phase is active`
+                  : "Base pricing currently active"}
               </p>
 
-              {/* Seats */}
-              <div className="mb-4">
-                <div className="flex justify-between text-white/70 text-xs mb-1.5">
-                  <span>{seatsLeft} seats remaining</span>
-                  <span>{pct}% filled</span>
+              <div className="lux-divider my-5" />
+
+              <div className="space-y-4">
+                <div className="lux-stat">
+                  <span className="lux-stat-label">Seats</span>
+                  <span className="lux-stat-value">
+                    {seatsLeft}
+                    <span
+                      className="text-sm font-normal ml-1"
+                      style={{ color: "rgba(243,237,224,0.55)" }}
+                    >
+                      / {derivedCapacity}
+                    </span>
+                  </span>
                 </div>
-                <div className="h-2 rounded-full" style={{ background: "rgba(255,255,255,0.2)" }}>
+                <div>
                   <div
-                    className="h-full rounded-full transition-all"
-                    style={{
-                      width: `${pct}%`,
-                      background: pct > 85 ? "#ef4444" : pct > 65 ? "#f59e0b" : "#22c55e",
-                    }}
-                  />
+                    className="flex justify-between text-[11px] mb-1.5"
+                    style={{ color: "rgba(243,237,224,0.6)" }}
+                  >
+                    <span>{seatsLeft} remaining</span>
+                    <span>{pct}% filled</span>
+                  </div>
+                  <div
+                    className="h-1.5 rounded-full"
+                    style={{ background: "rgba(243,237,224,0.08)" }}
+                  >
+                    <div
+                      className="h-full rounded-full transition-all"
+                      style={{
+                        width: `${pct}%`,
+                        background:
+                          pct > 85
+                            ? "linear-gradient(90deg, #f0a3a3, #dc6e6e)"
+                            : pct > 65
+                              ? "linear-gradient(90deg, #f3d8a8, #d8ac72)"
+                              : "linear-gradient(90deg, #e7c390, #b8925a)",
+                      }}
+                    />
+                  </div>
                 </div>
               </div>
 
               <button
+                type="button"
                 onClick={handleRegister}
-                className="btn w-full text-sm font-bold mb-3"
+                className={isOrganizerUser ? "lux-button-ghost" : "lux-button-primary"}
                 disabled={isOrganizerUser}
                 style={{
-                  background: isOrganizerUser ? "rgba(255,255,255,0.7)" : "white",
-                  color: isOrganizerUser ? "#6b7280" : "#1e40af",
-                  padding: "14px",
-                  borderRadius: "12px",
+                  width: "100%",
+                  marginTop: "22px",
+                  padding: "14px 18px",
+                  fontSize: "14px",
                   cursor: isOrganizerUser ? "not-allowed" : "pointer",
+                  opacity: isOrganizerUser ? 0.6 : 1,
+                  ...(isOrganizerUser
+                    ? {
+                        color: "var(--fg-immersive)",
+                        borderColor: "rgba(243,237,224,0.22)",
+                        background: "rgba(243,237,224,0.04)",
+                      }
+                    : {}),
                 }}
               >
                 {isOrganizerUser
-                  ? "Organizer accounts cannot register"
+                  ? "Organizers cannot register"
                   : isLoggedIn
-                    ? "Register Now →"
-                    : "Sign In to Register →"}
+                    ? "Register now →"
+                    : "Sign in to register →"}
               </button>
-              <p className="text-white/50 text-xs text-center">
+
+              <p
+                className="mt-4 text-[11px] text-center"
+                style={{ color: "rgba(243,237,224,0.5)" }}
+              >
                 Free cancellation before {c.registrationDeadline}
               </p>
             </div>
@@ -301,21 +428,36 @@ export default function ConferenceDetailPage() {
       {/* Tab Navigation */}
       <div
         className="sticky top-[72px] z-40"
-        style={{ background: "var(--bg)", borderBottom: "1px solid var(--border)" }}
+        style={{
+          background: "rgba(11,13,18,0.85)",
+          backdropFilter: "blur(14px) saturate(118%)",
+          WebkitBackdropFilter: "blur(14px) saturate(118%)",
+          borderBottom: "1px solid rgba(243,237,224,0.08)",
+        }}
       >
         <div className="max-w-7xl mx-auto px-6">
           <div className="flex gap-1 py-2 overflow-x-auto">
             {tabs.map((t) => (
               <button
                 key={t.key}
+                type="button"
                 onClick={() => setTab(t.key)}
-                className="tab whitespace-nowrap"
+                className="whitespace-nowrap transition-colors"
                 style={{
-                  color: tab === t.key ? "var(--blue)" : "var(--fg-muted)",
-                  fontWeight: tab === t.key ? 700 : 500,
-                  borderBottom: tab === t.key ? "2px solid var(--blue)" : "2px solid transparent",
+                  color:
+                    tab === t.key
+                      ? "var(--fg-immersive)"
+                      : "rgba(243,237,224,0.55)",
+                  fontWeight: 500,
+                  letterSpacing: "0.04em",
+                  fontSize: "13px",
+                  borderBottom:
+                    tab === t.key
+                      ? "2px solid var(--accent-warm)"
+                      : "2px solid transparent",
                   borderRadius: 0,
-                  padding: "12px 16px",
+                  padding: "14px 16px",
+                  background: "transparent",
                 }}
               >
                 {t.label}
@@ -572,12 +714,29 @@ export default function ConferenceDetailPage() {
 
         {tab === "schedule" && (
           <div>
-            <h2 className="text-2xl font-bold mb-6" style={{ color: "var(--fg)" }}>Conference Schedule</h2>
-            <div className="space-y-6">
+            <p className="lux-eyebrow" style={{ color: "rgba(243,237,224,0.55)" }}>
+              Programme
+            </p>
+            <h2
+              className="lux-display mt-4 mb-10"
+              style={{ color: "var(--fg-immersive)" }}
+            >
+              Conference schedule.
+            </h2>
+            <div className="space-y-5">
               {SCHEDULE.map((day) => (
-                <div key={day.day} className="card p-6 rounded-2xl">
-                  <h3 className="font-bold text-lg mb-4 flex items-center gap-3" style={{ color: "var(--fg)" }}>
-                    <span className="w-10 h-10 rounded-xl flex items-center justify-center text-sm font-bold" style={{ background: "var(--blue-subtle)", color: "var(--blue)" }}>
+                <div key={day.day} className="lux-card p-7">
+                  <h3
+                    className="text-lg font-semibold mb-5 flex items-center gap-4"
+                    style={{ color: "var(--fg-immersive)" }}
+                  >
+                    <span
+                      className="w-10 h-10 rounded-xl flex items-center justify-center text-sm font-semibold"
+                      style={{
+                        background: "rgba(216,172,114,0.16)",
+                        color: "var(--accent-warm)",
+                      }}
+                    >
                       {day.day.split(" ")[1]}
                     </span>
                     {day.day}
@@ -585,8 +744,20 @@ export default function ConferenceDetailPage() {
                   <div className="space-y-3">
                     {day.events.map((event, i) => (
                       <div key={i} className="flex items-start gap-4">
-                        <div className="w-1 h-1 rounded-full mt-2.5 flex-shrink-0" style={{ background: "var(--blue)", width: "6px", height: "6px" }} />
-                        <p className="text-sm" style={{ color: "var(--fg-muted)" }}>{event}</p>
+                        <div
+                          className="rounded-full mt-2 flex-shrink-0"
+                          style={{
+                            background: "var(--accent-warm)",
+                            width: "6px",
+                            height: "6px",
+                          }}
+                        />
+                        <p
+                          className="text-sm"
+                          style={{ color: "rgba(243,237,224,0.72)" }}
+                        >
+                          {event}
+                        </p>
                       </div>
                     ))}
                   </div>
@@ -697,6 +868,6 @@ export default function ConferenceDetailPage() {
       </div>
 
       <Footer />
-    </>
+    </div>
   );
 }

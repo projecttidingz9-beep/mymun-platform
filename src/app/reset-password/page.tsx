@@ -46,9 +46,10 @@ function ResetPasswordForm() {
   };
 
   return (
-    <div className="max-w-md mx-auto card p-6 rounded-2xl">
-      <h1 className="text-xl font-bold mb-2" style={{ color: "var(--fg)" }}>Reset Password</h1>
-      <p className="text-sm mb-4" style={{ color: "var(--fg-muted)" }}>
+    <div className="max-w-md mx-auto card p-7 rounded-2xl animate-soft-scale" style={{ background: "color-mix(in srgb, var(--bg) 88%, transparent 12%)" }}>
+      <p className="lux-eyebrow mb-3">Account Recovery</p>
+      <h1 className="text-xl font-bold mb-2 uppercase" style={{ color: "var(--fg)", letterSpacing: "0.04em" }}>Reset Password</h1>
+      <p className="text-sm mb-5" style={{ color: "var(--fg-muted)" }}>
         Set a new password for your account.
       </p>
       <div className="space-y-3">
@@ -66,7 +67,7 @@ function ResetPasswordForm() {
           onChange={(event) => setConfirmPassword(event.target.value)}
           placeholder="Confirm new password"
         />
-        <button onClick={onSubmit} className="btn btn-primary w-full" disabled={loading}>
+        <button onClick={onSubmit} className="lux-button-primary w-full py-3.5" disabled={loading}>
           {loading ? "Updating..." : "Reset Password"}
         </button>
       </div>
@@ -78,10 +79,22 @@ export default function ResetPasswordPage() {
   return (
     <>
       <Navbar />
-      <div className="min-h-screen pt-24 pb-16 px-6" style={{ background: "var(--bg-subtle)" }}>
-        <Suspense fallback={<div className="max-w-md mx-auto card p-6 rounded-2xl">Loading...</div>}>
-          <ResetPasswordForm />
-        </Suspense>
+      <div className="app-shell relative overflow-hidden">
+        <div className="absolute inset-0 pointer-events-none" style={{ background: "radial-gradient(circle at 80% 20%, var(--overlay-warm) 0%, transparent 35%)" }} />
+        <div className="relative flex items-center justify-center min-h-[70vh]">
+          <Suspense
+            fallback={
+              <div className="app-card max-w-md w-full mx-auto space-y-3">
+                <div className="skeleton h-4 w-32" />
+                <div className="skeleton h-9 w-full" />
+                <div className="skeleton h-9 w-full" />
+                <div className="skeleton h-10 w-full" />
+              </div>
+            }
+          >
+            <ResetPasswordForm />
+          </Suspense>
+        </div>
       </div>
       <Footer />
     </>

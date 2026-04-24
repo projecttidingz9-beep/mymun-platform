@@ -31,14 +31,19 @@ export default function NotificationsPage() {
   return (
     <>
       <Navbar />
-      <div className="min-h-screen pt-24 pb-16 px-6" style={{ background: "var(--bg-subtle)" }}>
+      <div className="app-shell">
         <div className="max-w-4xl mx-auto">
-          <div className="mb-8">
-            <div className="section-label mb-3">Updates</div>
-            <h1 className="text-3xl font-black" style={{ color: "var(--fg)" }}>Notification Center</h1>
-          </div>
+          <header className="app-header">
+            <div className="app-header-copy">
+              <div className="section-label mb-3">Updates</div>
+              <h1 className="app-title">Notification Center</h1>
+              <p className="app-subtitle mt-2">
+                Stay on top of applications, payments, and conference updates.
+              </p>
+            </div>
+          </header>
 
-          <div className="card p-6 rounded-2xl">
+          <div className="app-card">
             {myNotifications.length === 0 ? (
               <p className="text-sm" style={{ color: "var(--fg-muted)" }}>No notifications yet.</p>
             ) : (

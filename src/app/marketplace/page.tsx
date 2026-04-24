@@ -185,27 +185,35 @@ export default function MarketplacePage() {
 
   const renderFilterPanel = (isMobile: boolean) => (
     <div
-      className={`rounded-2xl p-4 space-y-4 animate-slide-down ${
-        isMobile ? "w-full" : "absolute right-0 top-full mt-2 w-[360px] z-40"
+      className={`lux-card p-5 space-y-4 animate-slide-down ${
+        isMobile ? "w-full" : "absolute right-0 top-full mt-2 w-[380px] z-40"
       }`}
-      style={{
-        background: "var(--bg)",
-        border: "1.5px solid var(--border)",
-        boxShadow: "var(--card-shadow)",
-      }}
     >
       <div className="flex items-center justify-between">
-        <p className="text-sm font-bold" style={{ color: "var(--fg)" }}>Filters</p>
+        <p
+          className="text-xs font-semibold"
+          style={{
+            color: "rgba(243,237,224,0.98)",
+            letterSpacing: "0.2em",
+            textTransform: "uppercase",
+          }}
+        >
+          Filters
+        </p>
         <div className="flex items-center gap-3">
           {activeFilters.length > 0 && (
-            <button onClick={clearAll} className="text-xs font-semibold" style={{ color: "var(--blue)" }}>
+            <button
+              onClick={clearAll}
+              className="text-[11px] font-semibold"
+              style={{ color: "var(--accent-warm)", letterSpacing: "0.14em", textTransform: "uppercase" }}
+            >
               Clear all
             </button>
           )}
           <button
             onClick={() => setFiltersOpenFor(null)}
-            className="text-xs"
-            style={{ color: "var(--fg-muted)" }}
+            className="text-sm"
+            style={{ color: "rgba(243,237,224,0.55)" }}
             aria-label="Close filters"
           >
             ✕
@@ -216,15 +224,20 @@ export default function MarketplacePage() {
       <div className="grid grid-cols-2 gap-3">
         <div>
           <div className="flex items-center justify-between mb-1.5">
-            <p className="text-[11px] font-bold uppercase tracking-widest" style={{ color: "var(--fg-muted)" }}>Level</p>
+            <p
+              className="text-[10px] font-semibold"
+              style={{ color: "rgba(243,237,224,0.55)", letterSpacing: "0.24em", textTransform: "uppercase" }}
+            >
+              Level
+            </p>
             {level !== "All" && (
-              <button onClick={() => setLevel("All")} className="text-[11px]" style={{ color: "var(--blue)" }}>Clear</button>
+              <button onClick={() => setLevel("All")} className="text-[11px]" style={{ color: "var(--accent-warm)" }}>Clear</button>
             )}
           </div>
           <select
             value={level}
             onChange={(event) => setLevel(event.target.value)}
-            className="input-base text-xs"
+            className="lux-select text-xs"
           >
             {LEVELS.map((entry) => (
               <option key={entry} value={entry}>{entry}</option>
@@ -233,15 +246,20 @@ export default function MarketplacePage() {
         </div>
         <div>
           <div className="flex items-center justify-between mb-1.5">
-            <p className="text-[11px] font-bold uppercase tracking-widest" style={{ color: "var(--fg-muted)" }}>Region</p>
+            <p
+              className="text-[10px] font-semibold"
+              style={{ color: "rgba(243,237,224,0.55)", letterSpacing: "0.24em", textTransform: "uppercase" }}
+            >
+              Region
+            </p>
             {region !== "All" && (
-              <button onClick={() => setRegion("All")} className="text-[11px]" style={{ color: "var(--blue)" }}>Clear</button>
+              <button onClick={() => setRegion("All")} className="text-[11px]" style={{ color: "var(--accent-warm)" }}>Clear</button>
             )}
           </div>
           <select
             value={region}
             onChange={(event) => setRegion(event.target.value)}
-            className="input-base text-xs"
+            className="lux-select text-xs"
           >
             {REGIONS.map((entry) => (
               <option key={entry} value={entry}>{entry}</option>
@@ -252,11 +270,14 @@ export default function MarketplacePage() {
 
       <div>
         <div className="flex items-center justify-between mb-1.5">
-          <p className="text-[11px] font-bold uppercase tracking-widest" style={{ color: "var(--fg-muted)" }}>
-            Max Price: <span style={{ color: "var(--blue)" }}>${maxPrice}</span>
+          <p
+            className="text-[10px] font-semibold"
+            style={{ color: "rgba(243,237,224,0.55)", letterSpacing: "0.24em", textTransform: "uppercase" }}
+          >
+            Max Price <span style={{ color: "var(--accent-warm)" }}>${maxPrice}</span>
           </p>
           {maxPrice < 250 && (
-            <button onClick={clearPrice} className="text-[11px]" style={{ color: "var(--blue)" }}>Clear</button>
+            <button onClick={clearPrice} className="text-[11px]" style={{ color: "var(--accent-warm)" }}>Clear</button>
           )}
         </div>
         <input
@@ -267,37 +288,45 @@ export default function MarketplacePage() {
           value={maxPrice}
           onChange={(event) => setMaxPrice(Number(event.target.value))}
           className="w-full"
-          style={{ accentColor: "var(--blue)" }}
+          style={{ accentColor: "var(--accent-warm)" }}
         />
-        <div className="flex justify-between text-xs mt-1" style={{ color: "var(--fg-muted)" }}>
+        <div className="flex justify-between text-xs mt-1" style={{ color: "rgba(243,237,224,0.5)" }}>
           <span>$0</span><span>$250+</span>
         </div>
       </div>
 
-      <div className="flex items-center justify-between rounded-xl p-3" style={{ background: "var(--bg-subtle)" }}>
-        <label className="flex items-center gap-2 text-sm" style={{ color: "var(--fg)" }}>
+      <div
+        className="flex items-center justify-between rounded-xl p-3"
+        style={{ background: "rgba(243,237,224,0.04)", border: "1px solid rgba(243,237,224,0.08)" }}
+      >
+        <label className="flex items-center gap-2 text-sm" style={{ color: "var(--fg-immersive)" }}>
           <input
             type="checkbox"
             checked={featuredOnly}
             onChange={(event) => setFeaturedOnly(event.target.checked)}
+            style={{ accentColor: "var(--accent-warm)" }}
           />
           Featured only
         </label>
         {featuredOnly && (
-          <button onClick={() => setFeaturedOnly(false)} className="text-[11px]" style={{ color: "var(--blue)" }}>Clear</button>
+          <button onClick={() => setFeaturedOnly(false)} className="text-[11px]" style={{ color: "var(--accent-warm)" }}>Clear</button>
         )}
       </div>
 
       <div>
         <button
           onClick={() => setMoreFiltersOpen((prev) => !prev)}
-          className="w-full flex items-center justify-between rounded-xl px-3 py-2 text-sm font-semibold"
-          style={{ background: "var(--bg-subtle)", color: "var(--fg)" }}
+          className="w-full flex items-center justify-between rounded-xl px-3 py-2 text-sm font-medium"
+          style={{
+            background: "rgba(243,237,224,0.04)",
+            border: "1px solid rgba(243,237,224,0.08)",
+            color: "var(--fg-immersive)",
+          }}
         >
           <span>More filters</span>
           <span
             className="inline-block transition-transform duration-200"
-            style={{ color: "var(--fg-muted)", transform: moreFiltersOpen ? "rotate(180deg)" : "rotate(0deg)" }}
+            style={{ color: "rgba(243,237,224,0.55)", transform: moreFiltersOpen ? "rotate(180deg)" : "rotate(0deg)" }}
           >
             ⌄
           </span>
@@ -305,13 +334,19 @@ export default function MarketplacePage() {
 
         {moreFiltersOpen && (
           <div className="mt-3 space-y-3">
-            <div className="rounded-xl p-3" style={{ background: "var(--bg-subtle)" }}>
+            <div
+              className="rounded-xl p-3"
+              style={{ background: "rgba(243,237,224,0.04)", border: "1px solid rgba(243,237,224,0.08)" }}
+            >
               <div className="flex items-center justify-between mb-2">
-                <p className="text-[11px] font-bold uppercase tracking-widest" style={{ color: "var(--fg-muted)" }}>
+                <p
+                  className="text-[10px] font-semibold"
+                  style={{ color: "rgba(243,237,224,0.55)", letterSpacing: "0.24em", textTransform: "uppercase" }}
+                >
                   Availability
                 </p>
                 {(seatsMin > 0 || seatsMax < 3000) && (
-                  <button onClick={clearSeats} className="text-[11px]" style={{ color: "var(--blue)" }}>Clear</button>
+                  <button onClick={clearSeats} className="text-[11px]" style={{ color: "var(--accent-warm)" }}>Clear</button>
                 )}
               </div>
               <div className="grid grid-cols-2 gap-2">
@@ -320,7 +355,7 @@ export default function MarketplacePage() {
                   min={0}
                   value={seatsMin}
                   onChange={(event) => setSeatsMin(Math.max(0, Number(event.target.value) || 0))}
-                  className="input-base text-xs"
+                  className="lux-input text-xs"
                   placeholder="Min seats"
                 />
                 <input
@@ -328,39 +363,51 @@ export default function MarketplacePage() {
                   min={0}
                   value={seatsMax}
                   onChange={(event) => setSeatsMax(Math.max(0, Number(event.target.value) || 0))}
-                  className="input-base text-xs"
+                  className="lux-input text-xs"
                   placeholder="Max seats"
                 />
               </div>
             </div>
 
-            <div className="rounded-xl p-3" style={{ background: "var(--bg-subtle)" }}>
+            <div
+              className="rounded-xl p-3"
+              style={{ background: "rgba(243,237,224,0.04)", border: "1px solid rgba(243,237,224,0.08)" }}
+            >
               <div className="flex items-center justify-between mb-2">
-                <p className="text-[11px] font-bold uppercase tracking-widest" style={{ color: "var(--fg-muted)" }}>
+                <p
+                  className="text-[10px] font-semibold"
+                  style={{ color: "rgba(243,237,224,0.55)", letterSpacing: "0.24em", textTransform: "uppercase" }}
+                >
                   Conference dates
                 </p>
                 {(startDateFrom || startDateTo) && (
-                  <button onClick={clearStartDateRange} className="text-[11px]" style={{ color: "var(--blue)" }}>Clear</button>
+                  <button onClick={clearStartDateRange} className="text-[11px]" style={{ color: "var(--accent-warm)" }}>Clear</button>
                 )}
               </div>
               <div className="grid grid-cols-2 gap-2">
-                <input type="date" value={startDateFrom} onChange={(event) => setStartDateFrom(event.target.value)} className="input-base text-xs" />
-                <input type="date" value={startDateTo} onChange={(event) => setStartDateTo(event.target.value)} className="input-base text-xs" />
+                <input type="date" value={startDateFrom} onChange={(event) => setStartDateFrom(event.target.value)} className="lux-input text-xs" />
+                <input type="date" value={startDateTo} onChange={(event) => setStartDateTo(event.target.value)} className="lux-input text-xs" />
               </div>
             </div>
 
-            <div className="rounded-xl p-3" style={{ background: "var(--bg-subtle)" }}>
+            <div
+              className="rounded-xl p-3"
+              style={{ background: "rgba(243,237,224,0.04)", border: "1px solid rgba(243,237,224,0.08)" }}
+            >
               <div className="flex items-center justify-between mb-2">
-                <p className="text-[11px] font-bold uppercase tracking-widest" style={{ color: "var(--fg-muted)" }}>
+                <p
+                  className="text-[10px] font-semibold"
+                  style={{ color: "rgba(243,237,224,0.55)", letterSpacing: "0.24em", textTransform: "uppercase" }}
+                >
                   Registration deadline
                 </p>
                 {(deadlineFrom || deadlineTo) && (
-                  <button onClick={clearDeadlineRange} className="text-[11px]" style={{ color: "var(--blue)" }}>Clear</button>
+                  <button onClick={clearDeadlineRange} className="text-[11px]" style={{ color: "var(--accent-warm)" }}>Clear</button>
                 )}
               </div>
               <div className="grid grid-cols-2 gap-2">
-                <input type="date" value={deadlineFrom} onChange={(event) => setDeadlineFrom(event.target.value)} className="input-base text-xs" />
-                <input type="date" value={deadlineTo} onChange={(event) => setDeadlineTo(event.target.value)} className="input-base text-xs" />
+                <input type="date" value={deadlineFrom} onChange={(event) => setDeadlineFrom(event.target.value)} className="lux-input text-xs" />
+                <input type="date" value={deadlineTo} onChange={(event) => setDeadlineTo(event.target.value)} className="lux-input text-xs" />
               </div>
             </div>
           </div>
@@ -370,43 +417,68 @@ export default function MarketplacePage() {
   );
 
   return (
-    <>
+    <div className="lux-shell lux-shell-immersive min-h-screen">
+      <div aria-hidden className="lux-backdrop" />
+
       <Navbar openAuthModal={() => setAuthOpen(true)} />
       <AuthModal isOpen={authOpen} onClose={() => setAuthOpen(false)} />
 
       {/* Page Header */}
-      <div
-        className="pt-28 pb-12 px-6"
-        style={{
-          background: "linear-gradient(180deg, var(--blue-subtle) 0%, var(--bg) 100%)",
-          borderBottom: "1px solid var(--border)",
-        }}
-      >
+      <section className="relative lux-section pt-36 pb-14 px-6">
         <div className="max-w-7xl mx-auto">
-          <div className="section-label mb-4">Global Marketplace</div>
-          <h1 className="text-4xl font-black tracking-tight mb-3" style={{ color: "var(--fg)" }}>
-            Find your next <span className="text-gradient">Conference</span>
+          <span className="lux-pill">
+            <span className="lux-pill-dot" />
+            Global Marketplace
+          </span>
+          <h1
+            className="lux-display mt-8 max-w-4xl"
+            style={{ color: "var(--fg-immersive)" }}
+          >
+            Find your next{" "}
+            <span
+              style={{
+                background: "linear-gradient(120deg, #e7c390 10%, #f4e2c6 50%, #b28b57 90%)",
+                WebkitBackgroundClip: "text",
+                backgroundClip: "text",
+                color: "transparent",
+              }}
+            >
+              conference
+            </span>
+            .
           </h1>
-          <p className="text-base" style={{ color: "var(--fg-muted)" }}>
-            {CONFERENCES.length} conferences available worldwide — filter to find your perfect match.
+          <p className="lux-subdisplay mt-6 max-w-2xl">
+            {CONFERENCES.length} conferences available worldwide — filter by level,
+            region, budget, and dates to find your perfect match.
           </p>
           {isOrganizerUser && (
-            <p className="text-sm mt-3" style={{ color: "var(--fg-muted)" }}>
+            <p className="mt-4 text-sm" style={{ color: "rgba(243,237,224,0.55)" }}>
               Organizer accounts can browse and view conferences, but registration is disabled.
             </p>
           )}
 
-          <div className="mt-6 flex flex-col gap-3">
+          <div className="mt-10 flex flex-col gap-3">
             <div
               className="flex items-center gap-3 max-w-2xl rounded-2xl overflow-hidden"
               style={{
-                background: "var(--bg)",
-                border: "1.5px solid var(--border-strong)",
-                boxShadow: "var(--card-shadow)",
+                background: "rgba(17,20,28,0.72)",
+                border: "1px solid rgba(243,237,224,0.12)",
+                backdropFilter: "blur(14px) saturate(118%)",
+                WebkitBackdropFilter: "blur(14px) saturate(118%)",
               }}
             >
-              <svg className="ml-5 flex-shrink-0" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" style={{ color: "var(--fg-muted)" }}>
-                <circle cx="11" cy="11" r="8" /><path d="M21 21l-4.35-4.35" strokeLinecap="round" />
+              <svg
+                className="ml-5 flex-shrink-0"
+                width="18"
+                height="18"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth="2"
+                style={{ color: "rgba(243,237,224,0.55)" }}
+              >
+                <circle cx="11" cy="11" r="8" />
+                <path d="M21 21l-4.35-4.35" strokeLinecap="round" />
               </svg>
               <input
                 type="text"
@@ -414,13 +486,17 @@ export default function MarketplacePage() {
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
                 className="flex-1 py-4 pr-4 bg-transparent outline-none text-sm"
-                style={{ color: "var(--fg)" }}
+                style={{ color: "var(--fg-immersive)" }}
               />
               {search && (
                 <button
+                  type="button"
                   onClick={() => setSearch("")}
                   className="mr-3 w-7 h-7 rounded-lg flex items-center justify-center text-sm transition-all"
-                  style={{ background: "var(--bg-subtle)", color: "var(--fg-muted)" }}
+                  style={{
+                    background: "rgba(243,237,224,0.08)",
+                    color: "rgba(243,237,224,0.72)",
+                  }}
                 >
                   ✕
                 </button>
@@ -429,9 +505,10 @@ export default function MarketplacePage() {
 
             <div ref={mobileFilterWrapRef} className="sm:hidden relative">
               <button
+                type="button"
                 onClick={() => setFiltersOpenFor((prev) => (prev === "mobile" ? null : "mobile"))}
-                className="btn btn-ghost text-sm w-full justify-center gap-2"
-                style={{ border: "1.5px solid var(--border)" }}
+                className="lux-button-ghost text-sm w-full justify-center gap-2"
+                style={{ padding: "12px 18px", color: "var(--fg-immersive)", borderColor: "rgba(243,237,224,0.22)", background: "rgba(243,237,224,0.04)" }}
               >
                 <span>Filters</span>
                 {activeFilters.length > 0 && (
@@ -439,38 +516,63 @@ export default function MarketplacePage() {
                 )}
               </button>
               {filtersOpenFor === "mobile" && (
-                <div className="mt-2">
-                  {renderFilterPanel(true)}
-                </div>
+                <div className="mt-2">{renderFilterPanel(true)}</div>
               )}
             </div>
           </div>
         </div>
-      </div>
+      </section>
 
-      <div className="max-w-7xl mx-auto px-6 py-10">
-        <div className="space-y-6">
+      <section className="relative lux-section max-w-7xl mx-auto px-6 py-16">
+        <div className="space-y-8">
           {activeFilters.length > 0 && (
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               {activeFilters.map((value) => (
-                <span key={value} className="badge badge-blue">{value}</span>
+                <span
+                  key={value}
+                  className="lux-chip lux-chip-active"
+                  style={{ cursor: "default" }}
+                >
+                  {value}
+                </span>
               ))}
-              <button onClick={clearAll} className="text-xs font-semibold ml-1" style={{ color: "var(--blue)" }}>
+              <button
+                type="button"
+                onClick={clearAll}
+                className="text-xs font-semibold ml-2"
+                style={{
+                  color: "var(--accent-warm)",
+                  letterSpacing: "0.18em",
+                  textTransform: "uppercase",
+                }}
+              >
                 Clear all
               </button>
             </div>
           )}
 
-          <div className="flex items-center justify-between gap-4">
-            <p className="text-sm font-medium" style={{ color: "var(--fg-muted)" }}>
-              <span className="font-bold" style={{ color: "var(--fg)" }}>{filtered.length}</span> conferences found
+          <div className="flex items-center justify-between gap-4 flex-wrap">
+            <p className="text-sm" style={{ color: "rgba(243,237,224,0.6)" }}>
+              <span
+                className="font-semibold"
+                style={{ color: "var(--fg-immersive)" }}
+              >
+                {filtered.length}
+              </span>{" "}
+              conferences found
             </p>
             <div className="flex items-center gap-2">
               <div ref={desktopFilterWrapRef} className="hidden sm:block relative">
                 <button
+                  type="button"
                   onClick={() => setFiltersOpenFor((prev) => (prev === "desktop" ? null : "desktop"))}
-                  className="btn btn-ghost text-sm gap-2"
-                  style={{ border: "1.5px solid var(--border)" }}
+                  className="lux-button-ghost text-sm gap-2"
+                  style={{
+                    padding: "10px 18px",
+                    color: "var(--fg-immersive)",
+                    borderColor: "rgba(243,237,224,0.22)",
+                    background: "rgba(243,237,224,0.04)",
+                  }}
                 >
                   <span>Filters</span>
                   {activeFilters.length > 0 && (
@@ -479,12 +581,14 @@ export default function MarketplacePage() {
                 </button>
                 {filtersOpenFor === "desktop" && renderFilterPanel(false)}
               </div>
-              <span className="text-sm" style={{ color: "var(--fg-muted)" }}>Sort:</span>
+              <span className="text-xs tracking-[0.22em] uppercase" style={{ color: "rgba(243,237,224,0.5)" }}>
+                Sort
+              </span>
               <select
                 value={sort}
                 onChange={(event) => setSort(event.target.value)}
-                className="input-base text-sm"
-                style={{ width: "auto", padding: "8px 12px", borderRadius: "10px" }}
+                className="lux-select text-sm"
+                style={{ width: "auto", padding: "10px 36px 10px 14px" }}
               >
                 {SORT_OPTIONS.map((entry) => (
                   <option key={entry.value} value={entry.value}>{entry.label}</option>
@@ -494,26 +598,48 @@ export default function MarketplacePage() {
           </div>
 
           {filtered.length > 0 ? (
-            <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-5">
+            <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-6">
               {filtered.map((conference) => (
                 <ConferenceCard key={conference.id} conference={conference} />
               ))}
             </div>
           ) : (
             <div
-              className="py-24 text-center rounded-3xl"
-              style={{ border: "2px dashed var(--border)" }}
+              className="lux-card py-24 text-center"
+              style={{ borderStyle: "dashed" }}
             >
-              <p className="text-4xl mb-4">🔍</p>
-              <p className="font-bold text-lg mb-2" style={{ color: "var(--fg)" }}>No conferences found</p>
-              <p className="text-sm mb-4" style={{ color: "var(--fg-muted)" }}>Try adjusting your filters or search term</p>
-              <button onClick={clearAll} className="btn btn-primary text-sm">Clear Filters</button>
+              <p
+                className="lux-eyebrow"
+                style={{ color: "rgba(243,237,224,0.55)" }}
+              >
+                Nothing matches
+              </p>
+              <p
+                className="mt-4 text-2xl font-semibold"
+                style={{ color: "var(--fg-immersive)", letterSpacing: "-0.02em" }}
+              >
+                No conferences found
+              </p>
+              <p
+                className="mt-3 max-w-md mx-auto"
+                style={{ color: "rgba(243,237,224,0.6)" }}
+              >
+                Try adjusting your filters or search term to broaden the horizon.
+              </p>
+              <button
+                type="button"
+                onClick={clearAll}
+                className="lux-button-primary text-sm mt-8"
+                style={{ padding: "12px 22px" }}
+              >
+                Clear filters
+              </button>
             </div>
           )}
         </div>
-      </div>
+      </section>
 
       <Footer />
-    </>
+    </div>
   );
 }

@@ -44,10 +44,22 @@ export default function DelegateProfilePage() {
     return (
       <>
         <Navbar />
-        <div className="min-h-screen pt-28 pb-16 px-6" style={{ background: "var(--bg-subtle)" }}>
-          <div className="max-w-3xl mx-auto text-center">
-            <h1 className="text-3xl font-black mb-3" style={{ color: "var(--fg)" }}>Delegate Profile Not Found</h1>
-            <p className="text-sm" style={{ color: "var(--fg-muted)" }}>This delegate profile is unavailable.</p>
+        <div className="app-shell">
+          <div className="max-w-3xl mx-auto">
+            <div className="app-card text-center py-16 space-y-4">
+              <h1 className="app-title">Delegate Profile Not Found</h1>
+              <p className="app-subtitle">
+                This delegate profile is unavailable or may have been set to private.
+              </p>
+              <div className="flex justify-center gap-3 pt-2">
+                <Link href="/marketplace" className="btn btn-primary text-sm">
+                  Browse Marketplace
+                </Link>
+                <Link href="/dashboard" className="btn btn-ghost text-sm">
+                  ← Back to Dashboard
+                </Link>
+              </div>
+            </div>
           </div>
         </div>
         <Footer />
@@ -58,28 +70,42 @@ export default function DelegateProfilePage() {
   return (
     <>
       <Navbar />
-      <div className="min-h-screen pt-28 pb-16 px-6" style={{ background: "var(--bg-subtle)" }}>
+      <div className="app-shell">
         <div className="max-w-4xl mx-auto space-y-6">
-          <div className="card p-6 rounded-2xl">
+          <header className="app-header">
+            <div className="app-header-copy">
+              <div className="section-label mb-3">Delegate Profile</div>
+              <h1 className="app-title">{profile.name}</h1>
+              <p className="app-subtitle mt-2">
+                {profile.school} · {profile.country}
+              </p>
+            </div>
+            <div className="app-header-actions">
+              <span className={`badge ${isVisible ? "badge-success" : "badge-warning"}`}>
+                {isVisible ? "Public Profile" : "Private Profile"}
+              </span>
+            </div>
+          </header>
+
+          <div className="app-card">
             <div className="flex items-center gap-4">
               <div
-                className="w-16 h-16 rounded-2xl flex items-center justify-center text-white text-2xl font-black"
-                style={{ background: "linear-gradient(135deg, #2563eb, #60a5fa)" }}
+                className="w-16 h-16 rounded-2xl flex items-center justify-center text-white text-2xl font-black flex-shrink-0"
+                style={{ background: "linear-gradient(135deg, var(--blue), var(--accent-warm))" }}
               >
                 {profile.avatar}
               </div>
-              <div>
-                <h1 className="text-3xl font-black" style={{ color: "var(--fg)" }}>{profile.name}</h1>
-                <p className="text-sm" style={{ color: "var(--fg-muted)" }}>{profile.school} · {profile.country}</p>
+              <div className="min-w-0">
+                <p className="font-bold" style={{ color: "var(--fg)" }}>{profile.name}</p>
+                <p className="text-xs" style={{ color: "var(--fg-muted)" }}>
+                  {profile.profileHeadline || "MUN delegate"}
+                </p>
               </div>
-              <span className="badge badge-blue ml-auto">
-                {isVisible ? "Public Profile" : "Private Profile"}
-              </span>
             </div>
           </div>
 
           {!isVisible ? (
-            <div className="card p-6 rounded-2xl">
+            <div className="app-card">
               <p className="text-sm" style={{ color: "var(--fg-muted)" }}>
                 This delegate has set their profile to private.
               </p>
@@ -87,24 +113,30 @@ export default function DelegateProfilePage() {
           ) : (
             <>
               <div className="grid md:grid-cols-2 gap-6">
-                <div className="card p-6 rounded-2xl">
-                  <h2 className="text-lg font-bold mb-3" style={{ color: "var(--fg)" }}>MUN Experience Summary</h2>
+                <div className="app-card">
+                  <div className="app-card-header">
+                    <h2 className="app-card-title">MUN Experience Summary</h2>
+                  </div>
                   <p className="text-sm leading-relaxed" style={{ color: "var(--fg-muted)" }}>
                     {profile.munExperienceSummary || "No experience summary added yet."}
                   </p>
                 </div>
-                <div className="card p-6 rounded-2xl">
-                  <h2 className="text-lg font-bold mb-3" style={{ color: "var(--fg)" }}>Awards Summary</h2>
+                <div className="app-card">
+                  <div className="app-card-header">
+                    <h2 className="app-card-title">Awards Summary</h2>
+                  </div>
                   <p className="text-sm leading-relaxed" style={{ color: "var(--fg-muted)" }}>
                     {profile.munAwardsSummary || "No awards summary added yet."}
                   </p>
                 </div>
               </div>
 
-              <div className="card p-6 rounded-2xl">
-                <h2 className="text-lg font-bold mb-3" style={{ color: "var(--fg)" }}>
-                  Participation History ({profile.munParticipations?.length || 0})
-                </h2>
+              <div className="app-card">
+                <div className="app-card-header">
+                  <h2 className="app-card-title">
+                    Participation History ({profile.munParticipations?.length || 0})
+                  </h2>
+                </div>
                 {(profile.munParticipations || []).length === 0 ? (
                   <p className="text-sm" style={{ color: "var(--fg-muted)" }}>No participations added.</p>
                 ) : (
@@ -137,10 +169,12 @@ export default function DelegateProfilePage() {
                 )}
               </div>
 
-              <div className="card p-6 rounded-2xl">
-                <h2 className="text-lg font-bold mb-3" style={{ color: "var(--fg)" }}>
-                  Awards ({profile.munAwards?.length || 0})
-                </h2>
+              <div className="app-card">
+                <div className="app-card-header">
+                  <h2 className="app-card-title">
+                    Awards ({profile.munAwards?.length || 0})
+                  </h2>
+                </div>
                 {(profile.munAwards || []).length === 0 ? (
                   <p className="text-sm" style={{ color: "var(--fg-muted)" }}>No awards added.</p>
                 ) : (
