@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useParams } from "next/navigation";
 import { useMemo, useSyncExternalStore } from "react";
 import Navbar from "@/components/Navbar";
@@ -183,11 +184,14 @@ export default function DelegateProfilePage() {
                       <div key={entry.id} className="rounded-xl p-4" style={{ background: "var(--bg-subtle)" }}>
                         <div className="flex items-center gap-3">
                           {entry.logoUrl && (
-                            <img
+                            <Image
                               src={entry.logoUrl}
                               alt={`${entry.title} logo`}
+                              width={32}
+                              height={32}
                               className="w-8 h-8 rounded object-cover"
                               style={{ border: "1px solid var(--border)" }}
+                              unoptimized
                             />
                           )}
                           <p className="text-sm font-semibold" style={{ color: "var(--fg)" }}>

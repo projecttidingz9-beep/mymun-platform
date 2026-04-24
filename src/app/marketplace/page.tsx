@@ -5,8 +5,8 @@ import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import ConferenceCard from "@/components/ConferenceCard";
 import AuthModal from "@/components/AuthModal";
-import { CONFERENCES } from "@/lib/data";
 import { useAuth } from "@/lib/auth-context";
+import { getMarketplaceConferences } from "@/lib/marketplace-conferences";
 
 const LEVELS = ["All", "High School", "University", "Elite", "Open", "Hybrid"];
 const REGIONS = ["All", "Asia", "Europe", "Americas", "Africa", "Oceania"];
@@ -30,7 +30,7 @@ function parseDayValue(value: string): number | null {
 }
 
 export default function MarketplacePage() {
-  const { user } = useAuth();
+  const { user, organizerConferences } = useAuth();
   const isOrganizerUser = user?.role === "organizer";
   const [search, setSearch] = useState("");
   const [level, setLevel] = useState("All");
@@ -50,6 +50,11 @@ export default function MarketplacePage() {
   const desktopFilterWrapRef = useRef<HTMLDivElement>(null);
   const mobileFilterWrapRef = useRef<HTMLDivElement>(null);
 
+  const allConferences = useMemo(
+    () => getMarketplaceConferences(organizerConferences),
+    [organizerConferences]
+  );
+
   const filtered = useMemo(() => {
     const normalizedSeatsMin = Math.min(seatsMin, seatsMax);
     const normalizedSeatsMax = Math.max(seatsMin, seatsMax);
@@ -58,7 +63,7 @@ export default function MarketplacePage() {
     const deadlineFromValue = parseDayValue(deadlineFrom);
     const deadlineToValue = parseDayValue(deadlineTo);
 
-    let result = CONFERENCES.filter((c) => {
+    let result = allConferences.filter((c) => {
       const matchSearch =
         !search ||
         c.title.toLowerCase().includes(search.toLowerCase()) ||
@@ -110,6 +115,7 @@ export default function MarketplacePage() {
 
     return result;
   }, [
+    allConferences,
     search,
     level,
     region,
@@ -448,7 +454,7 @@ export default function MarketplacePage() {
             .
           </h1>
           <p className="lux-subdisplay mt-6 max-w-2xl">
-            {CONFERENCES.length} conferences available worldwide — filter by level,
+            {allConferences.length} conferences available worldwide — filter by level,
             region, budget, and dates to find your perfect match.
           </p>
           {isOrganizerUser && (

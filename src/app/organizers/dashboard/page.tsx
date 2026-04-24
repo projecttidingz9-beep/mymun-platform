@@ -1,6 +1,7 @@
 "use client";
 
 import { ChangeEvent, useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Navbar from "@/components/Navbar";
@@ -3465,11 +3466,14 @@ export default function OrganizerDashboardPage() {
                               </p>
                             </div>
                             {award.sponsorLogoUrl && (
-                              <img
+                              <Image
                                 src={award.sponsorLogoUrl}
                                 alt={`${award.category} logo`}
+                                width={32}
+                                height={32}
                                 className="w-8 h-8 rounded object-cover"
                                 style={{ border: "1px solid var(--border)" }}
+                                unoptimized
                               />
                             )}
                             <button className="btn btn-ghost text-xs" onClick={() => removeConferenceAward(selectedConference.id, award.id)}>Remove</button>

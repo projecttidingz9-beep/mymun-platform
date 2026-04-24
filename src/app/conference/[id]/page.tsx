@@ -6,9 +6,12 @@ import Link from "next/link";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import AuthModal from "@/components/AuthModal";
-import { CONFERENCES } from "@/lib/data";
 import { useAuth } from "@/lib/auth-context";
 import { getCategoryStartingPrice, getActivePhase } from "@/lib/pricing";
+import {
+  getMarketplaceConferences,
+  mapOrganizerConferenceToMarketplaceConference,
+} from "@/lib/marketplace-conferences";
 
 type Tab = "overview" | "committees" | "schedule" | "organizer" | "reviews";
 
@@ -32,7 +35,11 @@ export default function ConferenceDetailPage() {
     comment: "",
   });
 
-  const conference = CONFERENCES.find((c) => c.id === params.id);
+  const mergedConferences = useMemo(
+    () => getMarketplaceConferences(organizerConferences),
+    [organizerConferences]
+  );
+  const conference = mergedConferences.find((c) => c.id === params.id);
   const organizerConference = organizerConferences.find((event) => event.id === params.id);
   const acceptedPartnerConferences = useMemo(() => {
     if (!organizerConference) return [];
@@ -44,7 +51,7 @@ export default function ConferenceDetailPage() {
     [organizerConference, acceptedPartnerConferences]
   );
 
-  if (!conference) {
+  if (!conference && !organizerConference) {
     return (
       <div className="lux-shell lux-shell-immersive min-h-screen flex items-center justify-center">
         <div aria-hidden className="lux-backdrop" />
@@ -73,7 +80,12 @@ export default function ConferenceDetailPage() {
     );
   }
 
-  const c = conference;
+  const c =
+    conference ||
+    (organizerConference
+      ? mapOrganizerConferenceToMarketplaceConference(organizerConference)
+      : null);
+  if (!c) return null;
   const derivedRegistered = organizerConference
     ? mergedOrganizerConferences.reduce((sum, entry) => sum + entry.applicants.length, 0)
     : c.registered;

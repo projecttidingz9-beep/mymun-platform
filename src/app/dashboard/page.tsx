@@ -89,7 +89,7 @@ export default function DashboardPage() {
     if (isLoggedIn && user?.role === "organizer") {
       router.push("/organizers/dashboard");
     }
-  }, [isLoggedIn, router]);
+  }, [isLoggedIn, router, user?.role]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
