@@ -81,7 +81,7 @@ export default function ConferenceCard({ conference: c }: ConferenceCardProps) {
             }}
             aria-label={`${c.title} logo`}
           >
-            {hasLogo ? (
+            {hasLogo && c.logoImageUrl ? (
               <Image
                 src={c.logoImageUrl}
                 alt={`${c.title} logo`}

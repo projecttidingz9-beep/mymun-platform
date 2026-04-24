@@ -861,11 +861,6 @@ html.dark .conference-detail-page .conference-hero-card {
   color: var(--fg-immersive) !important;
 }
 
-.lux-shell-immersive .card .group-hover\\:text-blue-600:hover,
-.lux-shell-immersive .card h3.group-hover\\:text-blue-600:hover {
-  color: #efcd9c !important;
-}
-
 .lux-shell-immersive .card p,
 .lux-shell-immersive .card span:not(.badge) {
   color: rgba(243, 237, 224, 0.72);
