@@ -121,7 +121,13 @@ export default function CheckoutPage() {
         delegationSizeRaw <= selectedCategory.maxDelegatesPerDelegation));
   const priceResult = selectedCategory
     ? resolveRegistrationPrice(selectedCategory, selectedCommitteeId || undefined)
-    : { amount: 0, phaseId: undefined, phaseName: undefined };
+    : {
+        amount: 0,
+        phaseId: undefined,
+        phaseName: undefined,
+        source: "category-base" as const,
+        status: "base" as const,
+      };
 
   const committeeQuestionsValid = (() => {
     if (!selectedCommittee) return true;

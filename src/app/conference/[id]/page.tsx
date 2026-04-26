@@ -237,7 +237,7 @@ export default function ConferenceDetailPage() {
     : [];
   const fallbackOverviewAwards =
     organizerConference && (organizerConference.awards ?? []).length > 0
-      ? organizerConference.awards.map(
+      ? (organizerConference.awards ?? []).map(
           (award) => `${award.category}: ${award.prizeTitle || "Award"}`
         )
       : DEFAULT_OVERVIEW_AWARDS;
@@ -1112,7 +1112,9 @@ export default function ConferenceDetailPage() {
                         <p className="text-sm font-bold" style={{ color: "var(--fg)" }}>{review.userName}</p>
                         <span className="badge badge-blue">{review.rating}/5</span>
                       </div>
-                      <p className="text-[11px]" style={{ color: "var(--fg-muted)" }}>{review.sourceConferenceTitle}</p>
+                      <p className="text-[11px]" style={{ color: "var(--fg-muted)" }}>
+                        {"sourceConferenceTitle" in review ? review.sourceConferenceTitle : displayTitle}
+                      </p>
                       <p className="text-sm mt-2" style={{ color: "var(--fg-muted)" }}>{review.comment}</p>
                       {review.featured && <p className="text-xs mt-2" style={{ color: "var(--blue)" }}>Featured testimonial</p>}
                     </div>

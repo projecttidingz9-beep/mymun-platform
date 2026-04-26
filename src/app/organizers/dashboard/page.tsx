@@ -1000,7 +1000,10 @@ export default function OrganizerDashboardPage() {
           twitter: String((cfg.socialLinks as { twitter?: string } | undefined)?.twitter ?? prev.twitter),
           tags: Array.isArray(cfg.tags) ? cfg.tags.map((entry) => String(entry)).join(", ") : prev.tags,
           capacity: Number(cfg.capacity ?? prev.capacity),
-          level: String(cfg.level ?? prev.level),
+          level:
+            cfg.level === "High School" || cfg.level === "University" || cfg.level === "Open"
+              ? cfg.level
+              : prev.level,
         }));
       })
       .catch(() => null);
@@ -2164,7 +2167,12 @@ export default function OrganizerDashboardPage() {
                           <select
                             className="input-base text-sm mt-1 app-select-modern"
                             value={previewDraft.level}
-                            onChange={(event) => setPreviewDraft((prev) => ({ ...prev, level: event.target.value }))}
+                            onChange={(event) =>
+                              setPreviewDraft((prev) => ({
+                                ...prev,
+                                level: event.target.value as OrganizerConference["level"],
+                              }))
+                            }
                           >
                             <option value="High School">High School</option>
                             <option value="University">University</option>

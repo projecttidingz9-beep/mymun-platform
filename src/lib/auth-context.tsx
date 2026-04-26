@@ -710,6 +710,8 @@ interface AuthContextType {
       Pick<
         OrganizerConference,
         | "title"
+        | "capacity"
+        | "level"
         | "city"
         | "country"
         | "organizerName"
