@@ -8,24 +8,11 @@ import Footer from "@/components/Footer";
 import { CONFERENCES } from "@/lib/data";
 import { useAuth } from "@/lib/auth-context";
 import { OrganizerCommittee, Registration, RegistrationCategory } from "@/lib/types";
-import { resolveRegistrationPrice } from "@/lib/pricing";
+import { getPhaseStatus, resolveRegistrationPrice } from "@/lib/pricing";
 
 type Step = 1 | 2 | 3 | 4 | 5;
 
-const COUNTRIES = [
-  "Argentina", "Australia", "Brazil", "Canada", "China", "Egypt", "France",
-  "Germany", "India", "Indonesia", "Japan", "Kenya", "Mexico", "Nigeria",
-  "Pakistan", "Russia", "Saudi Arabia", "South Africa", "United Kingdom",
-  "United States", "Italy", "Spain", "South Korea", "Turkey", "Iran",
-];
-
 const createConfirmationId = () => `MYM-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
-
-const parseDayNumber = (value?: string) => {
-  if (!value) return null;
-  const parsed = new Date(value).setHours(0, 0, 0, 0);
-  return Number.isNaN(parsed) ? null : parsed;
-};
 
 const getCategoryTypeLabel = (applicationType?: RegistrationCategory["applicationType"]) => {
   if (applicationType === "delegation") return "Delegation";
@@ -58,7 +45,6 @@ export default function CheckoutPage() {
   const [thirdPreferenceCommitteeId, setThirdPreferenceCommitteeId] = useState("");
   const [portfolioPreferencePrimary, setPortfolioPreferencePrimary] = useState("");
   const [portfolioPreferenceSecondary, setPortfolioPreferenceSecondary] = useState("");
-  const [selectedCountry, setSelectedCountry] = useState("");
   const [answers, setAnswers] = useState<Record<string, string | number | boolean>>({});
   const [cardNumber, setCardNumber] = useState("");
   const [cardName, setCardName] = useState(user?.name || "");
@@ -108,13 +94,7 @@ export default function CheckoutPage() {
           pricingPhases: [],
         },
       ];
-  const todayDay = new Date().setHours(0, 0, 0, 0);
-  const categories = rawCategories.filter((category) => {
-    if (category.isOpen === false) return false;
-    const deadline = parseDayNumber(category.deadlineOverride);
-    if (deadline !== null && todayDay > deadline) return false;
-    return true;
-  });
+  const categories = rawCategories.filter((category) => category.isOpen !== false);
 
   const committees: OrganizerCommittee[] = organizerConference
     ? organizerConference.committees
@@ -143,6 +123,13 @@ export default function CheckoutPage() {
     ? resolveRegistrationPrice(selectedCategory, selectedCommitteeId || undefined)
     : { amount: 0, phaseId: undefined, phaseName: undefined };
 
+  const committeeQuestionsValid = (() => {
+    if (!selectedCommittee) return true;
+    return (selectedCommittee.customQuestions ?? []).every(
+      (q) => !q.required || (answers[`cq-${selectedCommittee.id}-${q.id}`] !== undefined && String(answers[`cq-${selectedCommittee.id}-${q.id}`]).trim() !== "")
+    );
+  })();
+
   const formatCardNumber = (value: string) =>
     value.replace(/\D/g, "").slice(0, 16).replace(/(.{4})/g, "$1 ").trim();
   const formatExpiry = (value: string) =>
@@ -169,8 +156,10 @@ export default function CheckoutPage() {
             [selectedCommitteeId]: [portfolioPreferencePrimary, portfolioPreferenceSecondary].filter(Boolean),
           }
         : {},
-      country: selectedCountry || undefined,
-      formAnswers: answers,
+      country: undefined,
+      formAnswers: Object.fromEntries(
+        Object.entries(answers).filter(([key]) => !key.startsWith("cq-"))
+      ),
       pricingPhaseId: priceResult.phaseId,
       pricingPhaseName: priceResult.phaseName,
       status: "Confirmed",
@@ -188,7 +177,7 @@ export default function CheckoutPage() {
   const isStep2Valid = !!selectedCategory && selectedCategory.formFields.every(
     (field) => !field.required || answers[field.id] !== undefined
   ) && delegationSizeValid;
-  const isStep3Valid = !selectedCategory?.requiresCommitteeSelection || !!selectedCommitteeId;
+  const isStep3Valid = (!selectedCategory?.requiresCommitteeSelection || !!selectedCommitteeId) && committeeQuestionsValid;
   const isStep4Valid = cardNumber.replace(/\s/g, "").length === 16 && !!cardName && expiry.length === 5 && cvv.length >= 3;
 
   if (user?.role === "organizer") return null;
@@ -263,6 +252,20 @@ export default function CheckoutPage() {
                     {getCategoryTypeLabel(category.applicationType)}
                   </p>
                   <p className="text-xs mt-1" style={{ color: "var(--fg-muted)" }}>{category.description || "No description provided."}</p>
+                  {category.pricingPhases.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {category.pricingPhases.map((phase) => {
+                        const status = getPhaseStatus(phase, new Date());
+                        const badgeClass =
+                          status === "Active" ? "badge-green" : status === "Upcoming" ? "badge-blue" : "badge-gray";
+                        return (
+                          <span key={phase.id} className={`badge ${badgeClass}`}>
+                            {phase.name} · {status}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  )}
                 </button>
               ))}
               <button
@@ -355,10 +358,6 @@ export default function CheckoutPage() {
                   )}
                 </div>
               )}
-              <select value={selectedCountry} onChange={(event) => setSelectedCountry(event.target.value)} className="input-base">
-                <option value="">Country Preference...</option>
-                {COUNTRIES.map((country) => <option key={country} value={country}>{country}</option>)}
-              </select>
               <div className="flex gap-3">
                 <button onClick={() => setStep(1)} className="btn btn-ghost flex-1">← Back</button>
                 <button onClick={() => setStep(3)} disabled={!isStep2Valid} className="btn btn-primary flex-[2]" style={{ opacity: isStep2Valid ? 1 : 0.5 }}>
@@ -375,13 +374,50 @@ export default function CheckoutPage() {
                 <div className="space-y-4">
                   <div>
                     <label className="block text-sm font-semibold mb-1.5" style={{ color: "var(--fg)" }}>First Preference *</label>
-                    <select value={selectedCommitteeId} onChange={(event) => setSelectedCommitteeId(event.target.value)} className="input-base">
+                    <select
+                      value={selectedCommitteeId}
+                      onChange={(event) => {
+                        const nextId = event.target.value;
+                        setSelectedCommitteeId(nextId);
+                        // Clean up old answers for other committees to avoid bloat, 
+                        // but keep standard fields.
+                        setAnswers((prev) => {
+                          const next = { ...prev };
+                          Object.keys(next).forEach((key) => {
+                            if (key.startsWith("cq-") && !key.startsWith(`cq-${nextId}-`)) {
+                              delete next[key];
+                            }
+                          });
+                          return next;
+                        });
+                      }}
+                      className="input-base"
+                    >
                       <option value="">Select first preference</option>
                       {committees.map((committee) => (
                         <option key={committee.id} value={committee.id}>{committee.name}</option>
                       ))}
                     </select>
                   </div>
+                  {selectedCommittee && (selectedCommittee.customQuestions ?? []).length > 0 && (
+                    <div className="p-4 rounded-xl space-y-4" style={{ background: "var(--bg-subtle)", border: "1px solid var(--border)" }}>
+                      <p className="text-sm font-bold" style={{ color: "var(--fg)" }}>{selectedCommittee.name} Questions</p>
+                      {(selectedCommittee.customQuestions ?? []).map((q) => (
+                        <div key={q.id}>
+                          <label className="block text-xs font-semibold mb-1.5" style={{ color: "var(--fg)" }}>
+                            {q.question} {q.required ? "*" : ""}
+                          </label>
+                          <textarea
+                            className="input-base text-xs"
+                            rows={2}
+                            value={String(answers[`cq-${selectedCommittee.id}-${q.id}`] ?? "")}
+                            onChange={(event) => setAnswers((prev) => ({ ...prev, [`cq-${selectedCommittee.id}-${q.id}`]: event.target.value }))}
+                            placeholder="Your answer..."
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  )}
                   <div>
                     <label className="block text-sm font-semibold mb-1.5" style={{ color: "var(--fg)" }}>Second Preference</label>
                     <select value={secondPreferenceCommitteeId} onChange={(event) => setSecondPreferenceCommitteeId(event.target.value)} className="input-base">
@@ -453,6 +489,11 @@ export default function CheckoutPage() {
                   <span style={{ color: "var(--fg-muted)" }}>Pricing phase</span>
                   <span style={{ color: "var(--fg)" }}>{priceResult.phaseName || "Base price"}</span>
                 </div>
+                {priceResult.status === "ended-phase" && (
+                  <p className="text-xs" style={{ color: "var(--warning)" }}>
+                    Active phase ended. Using latest ended phase pricing fallback.
+                  </p>
+                )}
               </div>
               <div className="flex gap-3">
                 <button onClick={() => setStep(3)} className="btn btn-ghost flex-1">← Back</button>

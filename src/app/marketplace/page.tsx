@@ -461,13 +461,13 @@ export default function MarketplacePage() {
   );
 
   return (
-    <div className="min-h-screen" style={{ background: "var(--bg)", color: "var(--fg)" }}>
+    <div className="marketplace-page min-h-screen" style={{ background: "var(--bg)", color: "var(--fg)" }}>
 
       <Navbar openAuthModal={() => setAuthOpen(true)} />
       <AuthModal isOpen={authOpen} onClose={() => setAuthOpen(false)} />
 
       {/* Page Header */}
-      <section className="relative lux-section pt-36 pb-14 px-6">
+      <section className="relative lux-section pt-36 pb-10 px-6">
         <div className="max-w-7xl mx-auto">
           <span className="lux-pill">
             <span className="lux-pill-dot" />
@@ -500,9 +500,9 @@ export default function MarketplacePage() {
             </p>
           )}
 
-          <div className="mt-10 flex flex-col gap-3">
+          <div className="mt-8 flex flex-col gap-3">
             <div
-              className="flex items-center gap-3 max-w-2xl rounded-2xl overflow-hidden"
+              className="marketplace-search-shell flex items-center gap-3 max-w-2xl rounded-2xl overflow-hidden"
               style={{
                 background: "color-mix(in srgb, var(--bg) 86%, transparent 14%)",
                 border: "1px solid var(--border)",
@@ -528,7 +528,7 @@ export default function MarketplacePage() {
                 placeholder="Search by conference name, city, country, or committee..."
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
-                className="flex-1 py-4 pr-4 bg-transparent outline-none text-sm"
+                className="marketplace-search-input flex-1 py-4 pr-4 bg-transparent outline-none text-sm"
                 style={{ color: "var(--fg)" }}
               />
               {search && (
@@ -563,8 +563,8 @@ export default function MarketplacePage() {
         </div>
       </section>
 
-      <section className="relative lux-section max-w-7xl mx-auto px-6 py-16">
-        <div className="space-y-8">
+      <section className="relative lux-section max-w-7xl mx-auto px-6 py-12">
+        <div className="space-y-6">
           {activeFilters.length > 0 && (
             <div className="flex flex-wrap items-center gap-2">
               {activeFilters.map((value) => (
@@ -621,19 +621,18 @@ export default function MarketplacePage() {
                 </button>
                 {filtersOpenFor === "desktop" && renderDesktopFilterPopover()}
               </div>
-              <span className="text-xs tracking-[0.22em] uppercase" style={{ color: "var(--fg-muted)" }}>
-                Sort
-              </span>
-              <select
-                value={sort}
-                onChange={(event) => setSort(event.target.value)}
-                className="lux-select text-sm"
-                style={{ width: "auto", padding: "10px 36px 10px 14px" }}
-              >
-                {SORT_OPTIONS.map((entry) => (
-                  <option key={entry.value} value={entry.value}>{entry.label}</option>
-                ))}
-              </select>
+              <div className="marketplace-sort-wrap">
+                <span className="marketplace-sort-label">Sort</span>
+                <select
+                  value={sort}
+                  onChange={(event) => setSort(event.target.value)}
+                  className="marketplace-sort-select"
+                >
+                  {SORT_OPTIONS.map((entry) => (
+                    <option key={entry.value} value={entry.value}>{entry.label}</option>
+                  ))}
+                </select>
+              </div>
             </div>
           </div>
 

@@ -390,14 +390,14 @@ html.dark .badge-purple { background: rgba(124,58,237,0.12); }
   font-weight: 800;
   letter-spacing: -0.035em;
   line-height: 0.92;
-  font-size: clamp(3rem, 8.2vw, 8rem);
+  font-size: clamp(2.4rem, 6.4vw, 6.2rem);
 }
 
 .lux-subdisplay {
   font-weight: 400;
   letter-spacing: -0.01em;
   line-height: 1.15;
-  font-size: clamp(1rem, 1.4vw, 1.2rem);
+  font-size: clamp(0.95rem, 1.1vw, 1.08rem);
   color: var(--fg-immersive-muted);
 }
 
@@ -648,6 +648,57 @@ html.dark .conference-detail-page .conference-hero-card {
     0 20px 42px rgba(0, 0, 0, 0.34);
 }
 
+.conference-detail-page .conference-banner-shell {
+  border-bottom: 1px solid var(--border);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--bg) 86%, transparent) 0%,
+    color-mix(in srgb, var(--bg) 100%, transparent) 100%
+  );
+}
+
+.conference-detail-page .conference-banner-frame {
+  border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+  border-radius: 22px;
+  overflow: hidden;
+  box-shadow: var(--card-shadow);
+  background: var(--bg-subtle);
+}
+
+.conference-detail-page .conference-pill {
+  background: color-mix(in srgb, var(--bg) 82%, transparent);
+  color: var(--fg);
+  border: 1px solid var(--border);
+}
+
+html.dark .conference-detail-page .conference-pill {
+  background: rgba(17, 20, 28, 0.74);
+  color: var(--fg);
+  border-color: rgba(243, 237, 224, 0.12);
+}
+
+.conference-detail-page .conference-surface {
+  background: var(--bg);
+  border: 1px solid var(--border);
+}
+
+html.dark .conference-detail-page .conference-surface {
+  background: #131823;
+  border-color: #2b313a;
+}
+
+.conference-detail-page .timing-pill {
+  display: inline-flex;
+  align-items: center;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  border-radius: 999px;
+  padding: 4px 10px;
+  color: #fff;
+  background: linear-gradient(120deg, #8c653a, #b89159);
+}
+
 .lux-card-interactive {
   transition: transform 0.35s cubic-bezier(0.2, 0.7, 0.2, 1),
     border-color 0.3s ease, box-shadow 0.3s ease, background 0.3s ease;
@@ -888,8 +939,8 @@ html.dark .conference-detail-page .conference-hero-card {
 /* Footer polish for immersive shell: dark surface, refined links,
    newsletter card matches lux-card aesthetic. */
 .lux-shell-immersive footer {
-  background: #070a0f !important;
-  border-top: 1px solid rgba(243, 237, 224, 0.08) !important;
+  background: linear-gradient(180deg, rgba(8, 10, 14, 0.98) 0%, rgba(6, 8, 12, 0.99) 100%) !important;
+  border-top: 1px solid rgba(243, 237, 224, 0.18) !important;
 }
 
 .lux-shell-immersive footer .input-base {
@@ -913,6 +964,37 @@ html.dark .conference-detail-page .conference-hero-card {
   border: 1px solid rgba(243, 237, 224, 0.08) !important;
 }
 
+.lux-shell-immersive .footer-title {
+  color: rgba(243, 237, 224, 0.96) !important;
+}
+
+.lux-shell-immersive .footer-copy {
+  color: rgba(243, 237, 224, 0.68) !important;
+}
+
+.lux-shell-immersive .footer-section-title {
+  color: rgba(243, 237, 224, 0.72) !important;
+}
+
+.lux-shell-immersive .footer-link {
+  color: rgba(243, 237, 224, 0.88) !important;
+}
+
+.lux-shell-immersive .footer-link:hover {
+  color: #f2dcb5 !important;
+}
+
+.lux-shell-immersive .footer-social {
+  background: rgba(243, 237, 224, 0.08) !important;
+  border-color: rgba(243, 237, 224, 0.2) !important;
+  color: rgba(243, 237, 224, 0.84) !important;
+}
+
+.lux-shell-immersive .footer-social:hover {
+  background: rgba(243, 237, 224, 0.16) !important;
+  border-color: rgba(243, 237, 224, 0.32) !important;
+}
+
 /* Navbar active-route indicator */
 .lux-shell .nav-link-lux[data-active="true"] {
   color: rgba(243, 237, 224, 0.98);
@@ -924,6 +1006,76 @@ html.dark .conference-detail-page .conference-hero-card {
   color: var(--fg);
   background: color-mix(in srgb, var(--bg-subtle) 80%, transparent 20%);
   border: 1px solid var(--border);
+}
+
+.user-menu-dropdown {
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.user-menu-identity {
+  background: color-mix(in srgb, var(--bg) 90%, var(--bg-subtle) 10%);
+}
+
+.user-menu-link {
+  transition: background 0.18s ease, color 0.18s ease;
+}
+
+.user-menu-link:hover {
+  background: color-mix(in srgb, var(--bg-subtle) 70%, transparent 30%);
+}
+
+.footer-shell {
+  border-top: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  background: color-mix(in srgb, var(--bg) 90%, #060708 10%);
+}
+
+.footer-logo-wrap {
+  border-color: color-mix(in srgb, var(--border) 75%, transparent);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+}
+
+.footer-title {
+  color: var(--fg);
+}
+
+.footer-copy {
+  color: var(--fg-muted);
+}
+
+.footer-section-title {
+  color: var(--fg-muted);
+}
+
+.footer-link {
+  color: var(--fg);
+  transition: color 0.18s ease;
+}
+
+.footer-link:hover {
+  color: var(--blue);
+}
+
+.footer-social {
+  background: color-mix(in srgb, var(--bg) 85%, var(--bg-subtle) 15%);
+  border: 1px solid var(--border);
+  color: var(--fg-muted);
+  transition: background 0.18s ease, color 0.18s ease, border-color 0.18s ease;
+}
+
+.footer-social:hover {
+  background: var(--bg-subtle);
+  border-color: var(--border-strong);
+  color: var(--fg);
+}
+
+.footer-bottom-row {
+  border-top-color: color-mix(in srgb, var(--border) 72%, transparent);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
 }
 
 /* ─────────────────────────────────────────────────────────────
@@ -1338,7 +1490,7 @@ html.dark .conference-detail-page .conference-hero-card {
 
 @media (min-width: 1024px) {
   .app-layout {
-    grid-template-columns: 260px minmax(0, 1fr);
+    grid-template-columns: 320px minmax(0, 1fr);
     gap: 28px;
     align-items: start;
   }
@@ -1401,12 +1553,12 @@ html.dark .conference-detail-page .conference-hero-card {
   align-items: center;
   gap: 10px;
   width: 100%;
-  padding: 9px 12px;
+  padding: 11px 14px;
   border-radius: 10px;
   border: none;
   background: transparent;
   color: var(--fg-muted);
-  font-size: 13.5px;
+  font-size: 14.5px;
   font-weight: 600;
   text-align: left;
   cursor: pointer;
@@ -1441,13 +1593,32 @@ html.dark .conference-detail-page .conference-hero-card {
 
 .app-sidebar-item-icon {
   flex-shrink: 0;
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 15px;
+  font-size: 16px;
   line-height: 1;
+}
+
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+textarea:-webkit-autofill,
+select:-webkit-autofill {
+  -webkit-text-fill-color: var(--fg) !important;
+  box-shadow: 0 0 0px 1000px var(--bg) inset !important;
+  transition: background-color 9999s ease-in-out 0s;
+}
+
+html.dark input:-webkit-autofill,
+html.dark input:-webkit-autofill:hover,
+html.dark input:-webkit-autofill:focus,
+html.dark textarea:-webkit-autofill,
+html.dark select:-webkit-autofill {
+  -webkit-text-fill-color: var(--fg) !important;
+  box-shadow: 0 0 0px 1000px #131823 inset !important;
 }
 
 .app-sidebar-item-label {
@@ -1473,6 +1644,38 @@ html.dark .conference-detail-page .conference-hero-card {
   background: var(--bg);
   color: var(--blue);
   border-color: color-mix(in srgb, var(--blue) 36%, transparent);
+}
+
+.app-select-modern {
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--bg) 92%, var(--bg-subtle) 8%);
+  border: 1px solid var(--border);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--bg) 70%, transparent);
+}
+
+.app-select-modern:hover {
+  border-color: var(--border-strong);
+  background: color-mix(in srgb, var(--bg) 86%, var(--bg-subtle) 14%);
+}
+
+.app-select-modern:focus {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 4px var(--focus-ring);
+}
+
+.organizer-dashboard .input-base.text-xs,
+.organizer-dashboard select.text-xs,
+.organizer-dashboard textarea.text-xs {
+  font-size: 13px;
+}
+
+.organizer-dashboard .card {
+  border-color: color-mix(in srgb, var(--border) 88%, transparent);
+}
+
+html.dark .organizer-dashboard .card {
+  background: #121823;
+  border-color: #2f3642;
 }
 
 .app-sidebar-mobile-trigger {
@@ -1576,6 +1779,103 @@ html.dark .conference-detail-page .conference-hero-card {
   background: var(--bg);
   color: var(--blue);
   border-color: color-mix(in srgb, var(--blue) 36%, transparent);
+}
+
+.marketplace-search-shell {
+  box-shadow: var(--card-shadow);
+}
+
+.marketplace-search-input {
+  border: none;
+  box-shadow: none !important;
+  outline: none;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.marketplace-search-input:focus {
+  box-shadow: none !important;
+}
+
+.marketplace-sort-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 6px 4px 10px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--bg) 92%, var(--bg-subtle) 8%);
+}
+
+.marketplace-sort-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--fg-muted);
+}
+
+.marketplace-sort-select {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--fg);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 7px 34px 7px 10px;
+  outline: none;
+  appearance: none;
+  background-image: linear-gradient(45deg, transparent 50%, var(--fg-muted) 50%),
+    linear-gradient(135deg, var(--fg-muted) 50%, transparent 50%);
+  background-position: calc(100% - 16px) 50%, calc(100% - 11px) 50%;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+}
+
+.marketplace-sort-select:focus {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px var(--focus-ring);
+}
+
+.marketplace-page .lux-input,
+.marketplace-page .lux-select {
+  background: color-mix(in srgb, var(--bg) 90%, var(--bg-subtle) 10%);
+  border: 1px solid var(--border);
+  color: var(--fg);
+}
+
+.marketplace-page .lux-input::placeholder {
+  color: var(--fg-muted);
+}
+
+.marketplace-page .lux-select option {
+  background: var(--bg);
+  color: var(--fg);
+}
+
+.marketplace-page .lux-pill {
+  color: var(--fg-muted);
+  border-color: var(--border);
+  background: color-mix(in srgb, var(--bg) 96%, var(--bg-subtle) 4%);
+}
+
+.marketplace-page .lux-pill-dot {
+  background: var(--blue);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--blue) 55%, transparent);
+}
+
+.marketplace-page .lux-subdisplay {
+  color: color-mix(in srgb, var(--fg) 78%, var(--fg-muted) 22%);
+}
+
+html.dark .marketplace-page .lux-pill {
+  color: rgba(243, 237, 224, 0.78);
+  border-color: rgba(243, 237, 224, 0.14);
+  background: rgba(243, 237, 224, 0.04);
+}
+
+html.dark .marketplace-page .lux-subdisplay {
+  color: rgba(243, 237, 224, 0.64);
 }
 
 /* Sticky action bar, pins to the bottom of a section when

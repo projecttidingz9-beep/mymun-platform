@@ -24,6 +24,30 @@ const DELEGATE_TABS: Array<{ id: DelegateTabId; label: string; icon: string }> =
 const isDelegateTabId = (value: string): value is DelegateTabId =>
   DELEGATE_TABS.some((tab) => tab.id === value);
 
+const formatInvoiceAddress = (registration: Registration, userAddress?: {
+  line1?: string;
+  line2?: string;
+  city?: string;
+  state?: string;
+  postalCode?: string;
+  country?: string;
+}) => {
+  const registrationLocation = registration.country?.trim();
+  const fromProfile = [
+    userAddress?.line1,
+    userAddress?.line2,
+    userAddress?.city,
+    userAddress?.state,
+    userAddress?.postalCode,
+    userAddress?.country,
+  ]
+    .map((part) => (part || "").trim())
+    .filter(Boolean);
+  if (fromProfile.length > 0) return fromProfile.join(", ");
+  if (registrationLocation) return registrationLocation;
+  return "Billing address not added";
+};
+
 export default function DashboardPage() {
   const { user, isLoggedIn, notifications, markNotificationRead, updateDelegateProfile, logout } = useAuth();
   const router = useRouter();
@@ -80,9 +104,11 @@ export default function DashboardPage() {
   const [changePasswordNext, setChangePasswordNext] = useState("");
   const [changePasswordConfirm, setChangePasswordConfirm] = useState("");
   const [changePasswordLoading, setChangePasswordLoading] = useState(false);
+  const [forgotPasswordLoading, setForgotPasswordLoading] = useState(false);
   const [deletePassword, setDeletePassword] = useState("");
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<DelegateTabId>("conferences");
+  const [invoicePreviewRegistrationId, setInvoicePreviewRegistrationId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isLoggedIn) router.push("/");
@@ -466,6 +492,26 @@ export default function DashboardPage() {
     }
   };
 
+  const onForgotPasswordFromSecurity = async () => {
+    if (!user.email) return;
+    setForgotPasswordLoading(true);
+    try {
+      const response = await fetch("/api/auth/forgot-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: user.email }),
+      });
+      const payload = (await response.json().catch(() => ({}))) as { error?: string };
+      if (!response.ok) {
+        alert(payload.error || "Could not send reset link.");
+        return;
+      }
+      alert(`Password reset link sent to ${user.email}.`);
+    } finally {
+      setForgotPasswordLoading(false);
+    }
+  };
+
   return (
     <>
       <Navbar />
@@ -488,7 +534,7 @@ export default function DashboardPage() {
             </div>
           </header>
 
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-10">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-7">
             {[
               { label: "Conferences", value: registrations.length, icon: "🌍", tone: "info" as const },
               { label: "Confirmed", value: confirmed, icon: "✅", tone: "success" as const },
@@ -506,7 +552,7 @@ export default function DashboardPage() {
             ))}
           </div>
 
-          <div className="app-tabs mb-6" role="tablist" aria-label="Dashboard sections">
+          <div className="app-tabs mb-4" role="tablist" aria-label="Dashboard sections">
             {DELEGATE_TABS.map((tab) => {
               const count =
                 tab.id === "notifications"
@@ -536,7 +582,7 @@ export default function DashboardPage() {
 
           <div>
             {activeTab === "conferences" && (
-              <div className="space-y-5">
+              <div className="space-y-4">
               {delegatePasses.length > 0 && (
                 <div className="card p-6 rounded-2xl mb-5">
                   <h3 className="font-bold mb-3" style={{ color: "var(--fg)" }}>Digital Delegate Passes</h3>
@@ -604,7 +650,7 @@ export default function DashboardPage() {
                 <div className="space-y-4">
                   {registrations.map((reg) => {
                     return (
-                      <div key={reg.id} className="card p-6 rounded-2xl">
+                      <div key={reg.id} className="card p-5 rounded-2xl">
                         <div className="flex items-start gap-4">
                           <div
                             className="w-14 h-14 rounded-2xl flex items-center justify-center flex-shrink-0"
@@ -658,13 +704,25 @@ export default function DashboardPage() {
                             >
                               View Conference
                             </Link>
-                            <Link
-                              href="/resolution-copilot"
-                              className="btn btn-outline-blue text-xs"
-                              style={{ padding: "6px 14px", borderRadius: "8px" }}
-                            >
-                              Write Resolution
-                            </Link>
+                            {(() => {
+                              const certificateEntry = (user.munParticipations || []).find(
+                                (entry) =>
+                                  entry.conferenceName.trim().toLowerCase() ===
+                                    reg.conferenceTitle.trim().toLowerCase() && entry.certificateUrl
+                              );
+                              if (!certificateEntry?.certificateUrl) return null;
+                              return (
+                                <a
+                                  href={certificateEntry.certificateUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="btn btn-ghost text-xs"
+                                  style={{ padding: "6px 14px", borderRadius: "8px" }}
+                                >
+                                  View Certificate
+                                </a>
+                              );
+                            })()}
                           </div>
                         </div>
                       </div>
@@ -676,8 +734,8 @@ export default function DashboardPage() {
             )}
 
             {activeTab === "profile" && (
-              <div className="space-y-6">
-              <div className="card p-6 rounded-2xl">
+              <div className="space-y-4">
+              <div className="card p-5 rounded-2xl">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="font-bold" style={{ color: "var(--fg)" }}>My Profile</h3>
                   {!isEditingProfile ? (
@@ -1120,8 +1178,8 @@ export default function DashboardPage() {
             )}
 
             {activeTab === "security" && (
-              <div className="space-y-6">
-              <div className="card p-6 rounded-2xl">
+              <div className="space-y-4">
+              <div className="card p-5 rounded-2xl">
                 <h3 className="font-bold mb-4" style={{ color: "var(--fg)" }}>Account Security</h3>
                 <div className="space-y-3">
                   <p className="text-xs font-semibold" style={{ color: "var(--fg)" }}>Change Password</p>
@@ -1153,6 +1211,13 @@ export default function DashboardPage() {
                   >
                     {changePasswordLoading ? "Updating..." : "Update Password"}
                   </button>
+                  <button
+                    onClick={onForgotPasswordFromSecurity}
+                    className="btn btn-ghost text-xs w-full"
+                    disabled={forgotPasswordLoading}
+                  >
+                    {forgotPasswordLoading ? "Sending reset link..." : "Forgot password? Send reset email"}
+                  </button>
                 </div>
                 <div className="mt-5 pt-4" style={{ borderTop: "1px solid var(--border)" }}>
                   <p className="text-xs font-semibold mb-2" style={{ color: "var(--danger)" }}>Delete Account</p>
@@ -1176,8 +1241,8 @@ export default function DashboardPage() {
             )}
 
             {activeTab === "payments" && (
-              <div className="space-y-6">
-              <div className="card p-6 rounded-2xl">
+              <div className="space-y-4">
+              <div className="card p-5 rounded-2xl">
                 <h3 className="font-bold mb-4" style={{ color: "var(--fg)" }}>Payment History</h3>
                 {registrations.length === 0 ? (
                   <p className="text-xs" style={{ color: "var(--fg-muted)" }}>
@@ -1210,6 +1275,49 @@ export default function DashboardPage() {
                         >
                           {registration.paid ? "Download Invoice (PDF)" : "Invoice available after payment"}
                         </button>
+                        {registration.paid && (
+                          <button
+                            className="btn btn-primary text-xs mt-2 w-full"
+                            onClick={() =>
+                              setInvoicePreviewRegistrationId((current) =>
+                                current === registration.id ? null : registration.id
+                              )
+                            }
+                          >
+                            {invoicePreviewRegistrationId === registration.id ? "Hide Invoice" : "View Invoice"}
+                          </button>
+                        )}
+                        {registration.paid && invoicePreviewRegistrationId === registration.id && (
+                          <div className="rounded-xl p-4 mt-3" style={{ background: "var(--bg)", border: "1px solid var(--border)" }}>
+                            <div className="flex items-start justify-between gap-3 flex-wrap">
+                              <div>
+                                <p className="text-sm font-bold" style={{ color: "var(--fg)" }}>Tax Invoice</p>
+                                <p className="text-xs" style={{ color: "var(--fg-muted)" }}>Invoice ID: INV-{registration.id}</p>
+                              </div>
+                              <span className="badge badge-success">Paid</span>
+                            </div>
+                            <div className="grid sm:grid-cols-2 gap-3 mt-3 text-xs">
+                              <div>
+                                <p style={{ color: "var(--fg-muted)" }}>Bill To</p>
+                                <p className="font-semibold mt-1" style={{ color: "var(--fg)" }}>{user.name}</p>
+                                <p style={{ color: "var(--fg-muted)" }}>{user.email}</p>
+                                <p style={{ color: "var(--fg-muted)" }}>
+                                  {formatInvoiceAddress(registration, user.invoiceAddress)}
+                                </p>
+                              </div>
+                              <div>
+                                <p style={{ color: "var(--fg-muted)" }}>Conference</p>
+                                <p className="font-semibold mt-1" style={{ color: "var(--fg)" }}>{registration.conferenceTitle}</p>
+                                <p style={{ color: "var(--fg-muted)" }}>{registration.categoryName}</p>
+                                <p style={{ color: "var(--fg-muted)" }}>Registered {registration.registeredAt}</p>
+                              </div>
+                            </div>
+                            <div className="mt-3 pt-3 flex items-center justify-between text-sm" style={{ borderTop: "1px solid var(--border)" }}>
+                              <span style={{ color: "var(--fg-muted)" }}>Total Paid</span>
+                              <span className="font-bold" style={{ color: "var(--fg)" }}>${registration.amount.toFixed(2)}</span>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -1219,31 +1327,8 @@ export default function DashboardPage() {
             )}
 
             {activeTab === "notifications" && (
-              <div className="space-y-6">
-              <div className="card p-6 rounded-2xl">
-                <h3 className="font-bold mb-4" style={{ color: "var(--fg)" }}>Quick Actions</h3>
-                <div className="space-y-2">
-                  {[
-                    { icon: "📋", label: "Write a Resolution", href: "/resolution-copilot" },
-                    { icon: "🌍", label: "Browse Conferences", href: "/marketplace" },
-                    { icon: "🔔", label: "View Notifications", href: "/notifications" },
-                    { icon: "🏢", label: "Organizer Dashboard", href: "/organizers/dashboard" },
-                  ].map((action) => (
-                    <Link
-                      key={action.href}
-                      href={action.href}
-                      className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all"
-                      style={{ background: "var(--bg-subtle)", color: "var(--fg)" }}
-                    >
-                      <span className="text-lg">{action.icon}</span>
-                      {action.label}
-                      <span className="ml-auto" style={{ color: "var(--fg-muted)" }}>→</span>
-                    </Link>
-                  ))}
-                </div>
-              </div>
-
-              <div className="card p-6 rounded-2xl">
+              <div className="space-y-4">
+              <div className="card p-5 rounded-2xl">
                 <h3 className="font-bold mb-4" style={{ color: "var(--fg)" }}>Recent Notifications</h3>
                 {mergedNotifications.length === 0 ? (
                   <p className="text-xs" style={{ color: "var(--fg-muted)" }}>No updates yet.</p>
@@ -1276,18 +1361,7 @@ export default function DashboardPage() {
                 <p className="text-white/85 text-sm leading-relaxed">
                   Start preparing your position paper at least 2 weeks before the conference. Research your country&apos;s official UN voting history for strong arguments.
                 </p>
-                <Link
-                  href="/resolution-copilot"
-                  className="mt-4 inline-flex items-center btn text-sm font-bold"
-                  style={{
-                    background: "rgba(255,255,255,0.18)",
-                    color: "white",
-                    border: "1px solid rgba(255,255,255,0.35)",
-                    padding: "10px 20px",
-                  }}
-                >
-                  Try AI Copilot →
-                </Link>
+
               </div>
               </div>
             )}

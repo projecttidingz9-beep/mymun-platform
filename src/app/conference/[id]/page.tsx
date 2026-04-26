@@ -8,7 +8,7 @@ import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import AuthModal from "@/components/AuthModal";
 import { useAuth } from "@/lib/auth-context";
-import { getCategoryStartingPrice, getActivePhase } from "@/lib/pricing";
+import { getCategoryStartingPrice, getActivePhase, getPhaseStatus } from "@/lib/pricing";
 import {
   getMarketplaceConferences,
   mapOrganizerConferenceToMarketplaceConference,
@@ -20,6 +20,18 @@ const SCHEDULE = [
   { day: "Day 1", events: ["09:00 — Opening Ceremony & Keynote", "11:00 — Committee Session I (General Speakers' List)", "14:00 — Lunch Break & Networking", "15:30 — Committee Session II (Moderated Caucus)", "19:00 — Welcome Reception & Gala Dinner"] },
   { day: "Day 2", events: ["09:00 — Committee Session III (Unmoderated Caucus)", "11:00 — Working Paper Presentations", "14:00 — Lunch & Country Block Meetings", "15:00 — Committee Session IV (Moderated Debate)", "18:00 — Position Paper Awards Ceremony"] },
   { day: "Day 3", events: ["09:00 — Committee Session V (Draft Resolution Debate)", "11:00 — Amendments & Final Speeches", "13:00 — Voting Procedure", "15:00 — Closing Ceremony & Awards", "17:00 — Farewell Reception"] },
+];
+
+const DEFAULT_OVERVIEW_AWARDS = [
+  "Best Delegate",
+  "Outstanding Delegate",
+  "Honorable Mention",
+];
+
+const DEFAULT_OVERVIEW_DOCUMENTS = [
+  { title: "Conference Handbook", category: "guidelines", url: "#" },
+  { title: "Rules of Procedure", category: "rules", url: "#" },
+  { title: "Background Guide", category: "background-guide", url: "#" },
 ];
 
 export default function ConferenceDetailPage() {
@@ -35,6 +47,13 @@ export default function ConferenceDetailPage() {
     hospitalityRating: 5,
     comment: "",
   });
+  const [addedTags, setAddedTags] = useState<string[]>([]);
+  const [tagDraft, setTagDraft] = useState("");
+  const [editableStats, setEditableStats] = useState<Record<string, string | number>>({});
+  const [reviewMessage, setReviewMessage] = useState<string | null>(null);
+  const [instantReviews, setInstantReviews] = useState<
+    Array<{ id: string; userName: string; rating: number; comment: string; sourceConferenceTitle: string; featured?: boolean }>
+  >([]);
 
   const mergedConferences = useMemo(
     () => getMarketplaceConferences(organizerConferences),
@@ -44,9 +63,23 @@ export default function ConferenceDetailPage() {
   const organizerConference = organizerConferences.find((event) => event.id === params.id);
   const acceptedPartnerConferences = useMemo(() => {
     if (!organizerConference) return [];
-    const partnerIds = organizerConference.partnerConferenceIds || [];
-    return organizerConferences.filter((entry) => partnerIds.includes(entry.id));
+    const partnerIds = new Set([
+      ...(organizerConference.partnerConferenceIds || []),
+      ...(organizerConference.partnerLinks || [])
+        .filter((link) => link.status === "ACCEPTED")
+        .map((link) => link.partnerConferenceId),
+    ]);
+    return organizerConferences.filter((entry) => partnerIds.has(entry.id));
   }, [organizerConference, organizerConferences]);
+  const acceptedPartnerTitles = useMemo(() => {
+    if (!organizerConference) return [];
+    const fromConferences = acceptedPartnerConferences.map((entry) => entry.title);
+    const fromLinks = (organizerConference.partnerLinks || [])
+      .filter((link) => link.status === "ACCEPTED")
+      .map((link) => link.partnerConferenceTitle || "Partner MUN")
+      .filter(Boolean);
+    return Array.from(new Set([...fromConferences, ...fromLinks]));
+  }, [organizerConference, acceptedPartnerConferences]);
   const mergedOrganizerConferences = useMemo(
     () => (organizerConference ? [organizerConference, ...acceptedPartnerConferences] : []),
     [organizerConference, acceptedPartnerConferences]
@@ -136,6 +169,15 @@ export default function ConferenceDetailPage() {
         .map((category) => getActivePhase(category.pricingPhases))
         .find(Boolean)
     : null;
+  const phaseStatusChips = organizerConference
+    ? mergedRegistrationCategories.flatMap((category) =>
+        category.pricingPhases.map((phase) => ({
+          id: `${category.id}-${phase.id}`,
+          name: phase.name,
+          status: getPhaseStatus(phase, new Date()),
+        }))
+      )
+    : [];
   const displayTitle = organizerConference
     ? mergedOrganizerConferences.map((entry) => entry.title).join(" x ")
     : c.title;
@@ -155,6 +197,7 @@ export default function ConferenceDetailPage() {
     : c.location;
   const displayOrganizerEmail = c.organizerEmail;
   const displayWebsite = organizerConference?.socialLinks?.website || c.website;
+  const editableTags = Array.from(new Set([...c.tags, ...addedTags]));
   const heroBannerImage = organizerConference?.bannerImageUrl || c.bannerImageUrl;
   const heroLogoImage = organizerConference?.logoImageUrl || c.logoImageUrl;
   const heroLogoFallback = displayTitle
@@ -192,6 +235,28 @@ export default function ConferenceDetailPage() {
           }))
       )
     : [];
+  const fallbackOverviewAwards =
+    organizerConference && (organizerConference.awards ?? []).length > 0
+      ? organizerConference.awards.map(
+          (award) => `${award.category}: ${award.prizeTitle || "Award"}`
+        )
+      : DEFAULT_OVERVIEW_AWARDS;
+  const fallbackOverviewDocuments =
+    commonDocuments.length > 0
+      ? commonDocuments
+      : DEFAULT_OVERVIEW_DOCUMENTS.map((document, index) => ({
+          id: `default-doc-${index}`,
+          sourceConferenceTitle: displayTitle,
+          ...document,
+        }));
+
+  const defaultStats: Record<string, string | number> = {
+    Committees: organizerConference ? mergedCommittees.length : c.committees.length,
+    Capacity: `${derivedCapacity} delegates`,
+    Registered: derivedRegistered,
+    Days: "3-4 days",
+    Level: c.level,
+  };
 
   const displayCommittees = organizerConference
     ? mergedCommittees.map((cm) => ({
@@ -199,23 +264,29 @@ export default function ConferenceDetailPage() {
         abbreviation: (cm.type || "Committee").slice(0, 8).toUpperCase(),
         name: cm.name,
         difficulty: "Intermediate" as const,
-        topic1: cm.agenda,
-        topic2: cm.customQuestions?.[0]?.question || "Details shared by organizer",
+        agendas: [cm.agenda, ...(cm.customQuestions?.map((question) => question.question) || [])].filter(
+          (agenda) => agenda.trim().length > 0
+        ),
         size: cm.seatCount,
         seatsRemaining: cm.seatCount - cm.allotted,
         portfolios: cm.portfolios ?? [],
         chairName: cm.chairName,
         sourceConferenceTitle: cm.sourceConferenceTitle,
+        documents: cm.documents || [],
       }))
     : c.committees.map((cm) => ({
         ...cm,
+        agendas: [cm.topic1, cm.topic2].filter((agenda) => agenda.trim().length > 0),
         seatsRemaining: cm.size,
         portfolios: [],
         chairName: undefined,
         sourceConferenceTitle: c.title,
+        documents: [],
       }));
-
-  const reviewsToShow = organizerConference ? mergedReviews : [];
+  const localPendingReviews = organizerConference
+    ? (organizerConference.reviews || []).filter((review) => review.status === "pending")
+    : [];
+  const reviewsToShow = organizerConference ? [...instantReviews, ...localPendingReviews, ...mergedReviews] : instantReviews;
 
   const handleRegister = () => {
     if (!isLoggedIn) { setAuthOpen(true); return; }
@@ -237,23 +308,37 @@ export default function ConferenceDetailPage() {
       <Navbar openAuthModal={() => setAuthOpen(true)} />
       <AuthModal isOpen={authOpen} onClose={() => setAuthOpen(false)} />
 
-      {/* Hero Banner */}
-      <div
-        className="pt-24 relative overflow-hidden"
-        style={
-          heroBannerImage
-            ? {
-                backgroundImage: `linear-gradient(180deg, color-mix(in srgb, var(--fg) 16%, transparent) 0%, color-mix(in srgb, var(--fg) 26%, transparent) 65%, color-mix(in srgb, var(--fg) 36%, transparent) 100%), url("${heroBannerImage}")`,
-                backgroundSize: "cover",
-                backgroundPosition: "center",
-              }
-            : {
+      <div className="conference-banner-shell pt-24">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-4">
+          <div className="conference-banner-frame relative aspect-[18/6] min-h-[170px] md:min-h-[260px]">
+            {heroBannerImage ? (
+              <Image
+                src={heroBannerImage}
+                alt={`${displayTitle} banner`}
+                fill
+                className="object-cover"
+                sizes="(max-width: 768px) 100vw, 1200px"
+              />
+            ) : (
+              <div
+                className="absolute inset-0"
+                style={{
+                  background:
+                    "linear-gradient(120deg, color-mix(in srgb, var(--accent-warm) 28%, var(--bg) 72%), color-mix(in srgb, var(--blue) 24%, var(--bg) 76%))",
+                }}
+              />
+            )}
+            <div
+              className="absolute inset-0"
+              style={{
                 background:
-                  "linear-gradient(180deg, color-mix(in srgb, var(--fg) 8%, transparent) 0%, color-mix(in srgb, var(--fg) 16%, transparent) 100%)",
-              }
-        }
-      >
-        <div className="max-w-7xl mx-auto px-6 py-20 pb-16 relative">
+                  "linear-gradient(180deg, color-mix(in srgb, var(--fg) 16%, transparent) 0%, color-mix(in srgb, var(--fg) 28%, transparent) 72%, color-mix(in srgb, var(--fg) 40%, transparent) 100%)",
+              }}
+            />
+          </div>
+        </div>
+
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-12 pb-16 relative">
           {/* Breadcrumb */}
           <div
             className="flex items-center gap-2 text-xs tracking-[0.22em] uppercase mb-10"
@@ -270,7 +355,7 @@ export default function ConferenceDetailPage() {
             <span style={{ color: "var(--fg)" }}>{displayTitle}</span>
           </div>
 
-          <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-10">
+          <div className="grid lg:grid-cols-[minmax(0,1fr)_360px] gap-8 lg:gap-10 items-start">
             <div className="flex-1">
               <div className="flex flex-wrap gap-2 mb-6">
                 <span
@@ -319,9 +404,9 @@ export default function ConferenceDetailPage() {
               >
                 {displayTitle}
               </h1>
-              <div className="mt-6">
+              <div className="mt-6 flex items-center gap-4">
                 <div
-                  className="w-20 h-20 rounded-full overflow-hidden flex items-center justify-center text-lg font-black"
+                  className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl overflow-hidden flex items-center justify-center text-2xl font-black"
                   style={{
                     background: "color-mix(in srgb, var(--bg) 86%, transparent 14%)",
                     border: "2px solid var(--border)",
@@ -334,8 +419,8 @@ export default function ConferenceDetailPage() {
                     <Image
                       src={heroLogoImage}
                       alt={`${displayTitle} logo`}
-                      width={80}
-                      height={80}
+                      width={112}
+                      height={112}
                       className="w-full h-full object-cover"
                     />
                   ) : (
@@ -344,37 +429,37 @@ export default function ConferenceDetailPage() {
                 </div>
               </div>
 
-              {acceptedPartnerConferences.length > 0 && (
+              {acceptedPartnerTitles.length > 0 && (
                 <p
                   className="mt-5 text-sm"
                   style={{ color: "var(--fg-muted)" }}
                 >
                   Co-hosted by{" "}
-                  {acceptedPartnerConferences.map((entry) => entry.title).join(", ")}
+                  {acceptedPartnerTitles.join(", ")}
                 </p>
               )}
 
               <div
-                className="mt-8 flex flex-wrap gap-6 text-sm"
+                className="mt-8 grid sm:grid-cols-3 gap-4"
                 style={{ color: "var(--fg-muted)" }}
               >
-                <span className="flex items-center gap-2">
-                  <span style={{ color: "var(--accent-warm)" }}>◆</span>
+                <span className="conference-pill rounded-2xl px-4 py-3 text-base font-medium flex items-center gap-2">
+                  <span style={{ color: "var(--accent-warm)" }}>●</span>
                   {displayLocation}
                 </span>
-                <span className="flex items-center gap-2">
-                  <span style={{ color: "var(--accent-warm)" }}>◆</span>
+                <span className="conference-pill rounded-2xl px-4 py-3 text-base font-medium flex items-center gap-2">
+                  <span style={{ color: "var(--accent-warm)" }}>●</span>
                   {c.startDate} – {c.endDate}
                 </span>
-                <span className="flex items-center gap-2">
-                  <span style={{ color: "var(--accent-warm)" }}>◆</span>
+                <span className="conference-pill rounded-2xl px-4 py-3 text-base font-medium flex items-center gap-2">
+                  <span style={{ color: "var(--accent-warm)" }}>●</span>
                   Deadline {c.registrationDeadline}
                 </span>
               </div>
             </div>
 
             {/* Registration Card */}
-            <div className="conference-hero-card w-full lg:w-[340px] lux-card p-7 flex-shrink-0 lg:sticky lg:top-28">
+            <div className="conference-hero-card w-full max-w-[420px] mx-auto lg:mx-0 lux-card p-7 flex-shrink-0 lg:sticky lg:top-28">
               <p
                 className="text-[10px] font-semibold"
                 style={{
@@ -408,6 +493,18 @@ export default function ConferenceDetailPage() {
                   ? `${activeCategoryPhase.name} phase is active`
                   : "Base pricing currently active"}
               </p>
+              {phaseStatusChips.length > 0 && (
+                <div className="mt-3 flex flex-wrap gap-1.5">
+                  {phaseStatusChips.map((phase) => (
+                    <span
+                      key={phase.id}
+                      className={`badge ${phase.status === "Active" ? "badge-green" : phase.status === "Upcoming" ? "badge-blue" : "badge-gray"}`}
+                    >
+                      {phase.name} · {phase.status}
+                    </span>
+                  ))}
+                </div>
+              )}
 
               <div className="lux-divider my-5" />
 
@@ -544,31 +641,37 @@ export default function ConferenceDetailPage() {
                 </h2>
                 <p className="text-base leading-relaxed" style={{ color: "var(--fg-muted)" }}>{displayDescription}</p>
               </div>
-              {policySections.length > 0 && (
-                <div className="lux-card p-6 sm:p-7">
-                  <h2 className="text-2xl font-bold mb-4" style={{ color: "var(--fg)" }}>Policies & Information</h2>
-                  <div className="space-y-4">
-                    {policySections.map((section) => (
-                      <div
-                        key={section.key}
-                        className="rounded-2xl p-4"
-                        style={{ background: "var(--bg-subtle)", border: "1px solid var(--border)" }}
-                      >
-                        <h3 className="text-sm font-semibold mb-2" style={{ color: "var(--fg)" }}>
-                          {section.label}
-                        </h3>
-                        <p className="text-sm whitespace-pre-wrap" style={{ color: "var(--fg-muted)" }}>
-                          {section.value}
-                        </p>
-                      </div>
-                    ))}
+              <div className="lux-card p-6 sm:p-7 space-y-6">
+                <h2 className="text-2xl font-bold" style={{ color: "var(--fg)" }}>Documents</h2>
+                {fallbackOverviewDocuments.length > 0 && (
+                  <div>
+                    <p className="text-sm font-semibold mb-3" style={{ color: "var(--fg)" }}>Overview Documents</p>
+                    <div
+                      className="rounded-xl overflow-hidden divide-y"
+                      style={{ border: "1px solid var(--border)" }}
+                    >
+                      {fallbackOverviewDocuments.map((document) => (
+                        <a
+                          key={`${document.sourceConferenceTitle}-${document.id}`}
+                          className="flex items-center justify-between gap-2 px-4 py-3"
+                          style={{ color: "inherit" }}
+                          href={document.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          <div>
+                            <p className="text-sm" style={{ color: "var(--fg)" }}>{document.title}</p>
+                            <p className="text-xs" style={{ color: "var(--fg-muted)" }}>
+                              {document.category} · {document.sourceConferenceTitle}
+                            </p>
+                          </div>
+                          <span className="text-xs shrink-0" style={{ color: "var(--blue)" }}>Open</span>
+                        </a>
+                      ))}
+                    </div>
                   </div>
-                </div>
-              )}
-              {(commonDocuments.length > 0 || committeeDocumentGroups.length > 0) && (
-                <div className="lux-card p-6 sm:p-7 space-y-6">
-                  <h2 className="text-2xl font-bold" style={{ color: "var(--fg)" }}>Documents</h2>
-                  {commonDocuments.length > 0 && (
+                )}
+                {commonDocuments.length > 0 && (
                     <div>
                       <p className="text-sm font-semibold mb-3" style={{ color: "var(--fg)" }}>Common MUN Documents</p>
                       <div
@@ -595,8 +698,8 @@ export default function ConferenceDetailPage() {
                         ))}
                       </div>
                     </div>
-                  )}
-                  {committeeDocumentGroups.length > 0 && (
+                )}
+                {committeeDocumentGroups.length > 0 && (
                     <div>
                       <p className="text-sm font-semibold mb-3" style={{ color: "var(--fg)" }}>Committee Documents</p>
                       <div className="space-y-4">
@@ -632,9 +735,18 @@ export default function ConferenceDetailPage() {
                         ))}
                       </div>
                     </div>
-                  )}
+                )}
+              </div>
+              <div className="lux-card p-6 sm:p-7">
+                <h2 className="text-2xl font-bold mb-4" style={{ color: "var(--fg)" }}>Awards</h2>
+                <div className="space-y-3">
+                  {fallbackOverviewAwards.map((award) => (
+                    <p key={award} className="text-sm rounded-xl px-4 py-3 conference-surface" style={{ color: "var(--fg-muted)" }}>
+                      {award}
+                    </p>
+                  ))}
                 </div>
-              )}
+              </div>
 
               <div className="lux-card p-6 sm:p-7">
                 <h2 className="text-2xl font-bold mb-5" style={{ color: "var(--fg)" }}>What&apos;s Included</h2>
@@ -656,22 +768,54 @@ export default function ConferenceDetailPage() {
                   ))}
                 </div>
               </div>
+              {policySections.length > 0 && (
+                <div className="lux-card p-6 sm:p-7">
+                  <h2 className="text-2xl font-bold mb-4" style={{ color: "var(--fg)" }}>Policies & Information</h2>
+                  <div className="space-y-4">
+                    {policySections.map((section) => (
+                      <div
+                        key={section.key}
+                        className="rounded-2xl p-4 conference-surface"
+                      >
+                        <h3 className="text-sm font-semibold mb-2" style={{ color: "var(--fg)" }}>
+                          {section.label}
+                        </h3>
+                        <p className="text-sm whitespace-pre-wrap" style={{ color: "var(--fg-muted)" }}>
+                          {section.value}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="space-y-5">
               {/* Stats card */}
               <div className="card p-6 rounded-2xl space-y-4">
                 <h3 className="font-bold" style={{ color: "var(--fg)" }}>Conference Stats</h3>
-                {[
-                  { label: "Committees", value: organizerConference ? mergedCommittees.length : c.committees.length },
-                  { label: "Capacity", value: `${derivedCapacity} delegates` },
-                  { label: "Registered", value: derivedRegistered },
-                  { label: "Days", value: "3–4 days" },
-                  { label: "Level", value: c.level },
-                ].map((stat) => (
-                  <div key={stat.label} className="flex justify-between items-center text-sm">
-                    <span style={{ color: "var(--fg-muted)" }}>{stat.label}</span>
-                    <span className="font-semibold" style={{ color: "var(--fg)" }}>{stat.value}</span>
+                {Object.entries(defaultStats).map(([label, baseValue]) => (
+                  <div key={label} className="flex justify-between items-center text-sm gap-2">
+                    <span style={{ color: "var(--fg-muted)" }}>{label}</span>
+                    {isOrganizerUser ? (
+                      <input
+                        className="input-base text-xs py-1 px-2 w-[130px] text-right"
+                        value={String(editableStats[label] ?? baseValue)}
+                        onChange={(event) =>
+                          setEditableStats((prev) => ({
+                            ...prev,
+                            [label]: event.target.value,
+                          }))
+                        }
+                      />
+                    ) : (
+                      <span
+                        className="text-sm font-semibold text-right"
+                        style={{ color: "var(--fg)", minWidth: "130px" }}
+                      >
+                        {String(editableStats[label] ?? baseValue)}
+                      </span>
+                    )}
                   </div>
                 ))}
               </div>
@@ -680,35 +824,58 @@ export default function ConferenceDetailPage() {
               <div className="card p-5 rounded-2xl">
                 <h3 className="font-bold mb-3 text-sm" style={{ color: "var(--fg)" }}>Tags</h3>
                 <div className="flex flex-wrap gap-2">
-                  {c.tags.map((tag) => (
+                  {editableTags.map((tag) => (
                     <span key={tag} className="badge badge-blue">{tag}</span>
                   ))}
                 </div>
+                {isOrganizerUser && (
+                  <div className="mt-3 flex gap-2">
+                    <input
+                      className="input-base text-xs py-2"
+                      value={tagDraft}
+                      onChange={(event) => setTagDraft(event.target.value)}
+                      placeholder="Add new tag"
+                    />
+                    <button
+                      type="button"
+                      className="btn btn-outline-blue text-xs"
+                      onClick={() => {
+                        const nextTag = tagDraft.trim();
+                        if (!nextTag) return;
+                        if (editableTags.includes(nextTag)) return;
+                        setAddedTags((prev) => [...prev, nextTag]);
+                        setTagDraft("");
+                      }}
+                    >
+                      Add
+                    </button>
+                  </div>
+                )}
               </div>
-              {organizerConference && (organizerConference.previousEditions ?? []).length > 0 && (
-                <div className="card p-5 rounded-2xl">
-                  <h3 className="font-bold mb-3 text-sm" style={{ color: "var(--fg)" }}>Previous Editions</h3>
-                  <div className="space-y-2">
-                    {(organizerConference.previousEditions ?? []).map((edition) => (
-                      <p key={edition.id} className="text-xs" style={{ color: "var(--fg-muted)" }}>
-                        {edition.year}: {edition.title} ({edition.delegates} delegates)
-                      </p>
-                    ))}
-                  </div>
+              <div className="card p-5 rounded-2xl">
+                <h3 className="font-bold mb-3 text-sm" style={{ color: "var(--fg)" }}>Partner MUN</h3>
+                <div className="space-y-2">
+                  {(acceptedPartnerTitles.length > 0
+                    ? acceptedPartnerTitles
+                    : ["Global Youth Forum MUN", "Diplomacy Summit MUN"]).map((entry) => (
+                    <p key={entry} className="text-xs" style={{ color: "var(--fg-muted)" }}>
+                      {entry}
+                    </p>
+                  ))}
                 </div>
-              )}
-              {organizerConference && (organizerConference.awards ?? []).length > 0 && (
-                <div className="card p-5 rounded-2xl">
-                  <h3 className="font-bold mb-3 text-sm" style={{ color: "var(--fg)" }}>Awards</h3>
-                  <div className="space-y-2">
-                    {(organizerConference.awards ?? []).map((award) => (
-                      <p key={award.id} className="text-xs" style={{ color: "var(--fg-muted)" }}>
-                        {award.category}: {award.prizeTitle || "Award"} {award.sponsorName ? `· Sponsored by ${award.sponsorName}` : ""}
-                      </p>
-                    ))}
-                  </div>
+              </div>
+              <div className="card p-5 rounded-2xl">
+                <h3 className="font-bold mb-3 text-sm" style={{ color: "var(--fg)" }}>Previous Editions</h3>
+                <div className="space-y-2">
+                  {((organizerConference?.previousEditions ?? []).length > 0
+                    ? (organizerConference?.previousEditions ?? []).map((edition) => `${edition.year}: ${edition.title} (${edition.delegates} delegates)`)
+                    : ["2025: Tidingz International MUN (420 delegates)", "2024: Tidingz Premier MUN (360 delegates)"]).map((entry) => (
+                    <p key={entry} className="text-xs" style={{ color: "var(--fg-muted)" }}>
+                      {entry}
+                    </p>
+                  ))}
                 </div>
-              )}
+              </div>
             </div>
           </div>
         )}
@@ -729,8 +896,8 @@ export default function ConferenceDetailPage() {
                   <div className="flex items-start justify-between mb-4">
                     <div>
                       <span className="badge badge-blue mb-2">{cm.abbreviation}</span>
-                      <h3 className="font-bold text-lg" style={{ color: "var(--fg)" }}>{cm.name}</h3>
-                      <p className="text-[11px]" style={{ color: "var(--fg-muted)" }}>{cm.sourceConferenceTitle}</p>
+                      <h3 className="font-bold text-xl" style={{ color: "var(--fg)" }}>{cm.name}</h3>
+                      <p className="text-xs" style={{ color: "var(--fg-muted)" }}>{cm.sourceConferenceTitle}</p>
                     </div>
                     <span
                       className="badge"
@@ -743,17 +910,33 @@ export default function ConferenceDetailPage() {
                     </span>
                   </div>
                   <div className="space-y-3">
-                    <div>
-                      <p className="text-[10px] font-black uppercase tracking-widest mb-1" style={{ color: "var(--fg-muted)" }}>Topic 1</p>
-                      <p className="text-sm" style={{ color: "var(--fg)" }}>{cm.topic1}</p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] font-black uppercase tracking-widest mb-1" style={{ color: "var(--fg-muted)" }}>Topic 2</p>
-                      <p className="text-sm" style={{ color: "var(--fg)" }}>{cm.topic2}</p>
-                    </div>
+                    {cm.agendas.map((agenda, index) => (
+                      <div key={`${cm.id}-agenda-${index}`}>
+                        <p className="text-[10px] font-black uppercase tracking-widest mb-1" style={{ color: "var(--fg-muted)" }}>
+                          Topic {index + 1}
+                        </p>
+                        <p className="text-base leading-relaxed" style={{ color: "var(--fg)" }}>{agenda}</p>
+                      </div>
+                    ))}
                     <div className="flex items-center justify-between pt-3" style={{ borderTop: "1px solid var(--border)" }}>
-                      <span className="text-xs" style={{ color: "var(--fg-muted)" }}>Committee Size</span>
+                      <span className="text-sm" style={{ color: "var(--fg-muted)" }}>Committee Size</span>
                       <span className="badge badge-gray">{cm.seatsRemaining}/{cm.size} seats left</span>
+                    </div>
+                    <div className="pt-3" style={{ borderTop: "1px solid var(--border)" }}>
+                      <p className="text-[10px] font-black uppercase tracking-widest mb-2" style={{ color: "var(--fg-muted)" }}>
+                        Documents
+                      </p>
+                      {(cm.documents || []).length > 0 ? (
+                        <div className="space-y-1">
+                          {(cm.documents || []).map((document) => (
+                            <a key={document.id} href={document.url} target="_blank" rel="noreferrer" className="text-sm block" style={{ color: "var(--blue)" }}>
+                              {document.title} · {document.category}
+                            </a>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-sm" style={{ color: "var(--fg-muted)" }}>No committee documents uploaded yet.</p>
+                      )}
                     </div>
                     {(cm.portfolios ?? []).length > 0 && (
                       <div className="pt-3" style={{ borderTop: "1px solid var(--border)" }}>
@@ -780,6 +963,34 @@ export default function ConferenceDetailPage() {
               ))}
             </div>
             )}
+            <div className="mt-8">
+              <h3 className="text-xl font-bold mb-4" style={{ color: "var(--fg)" }}>Country Matrix</h3>
+              <div className="space-y-4">
+                {displayCommittees.map((committee) => (
+                  <div key={`${committee.id}-matrix`} className="card p-5 rounded-2xl">
+                    <p className="text-sm font-semibold mb-3" style={{ color: "var(--fg)" }}>{committee.name}</p>
+                    <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-2">
+                      {Array.from({ length: committee.size }).map((_, seatIndex) => {
+                        const available = seatIndex < committee.seatsRemaining;
+                        return (
+                          <span
+                            key={`${committee.id}-seat-${seatIndex}`}
+                            className="text-[10px] font-semibold rounded-md px-2 py-2 text-center"
+                            style={{
+                              background: available ? "rgba(22,163,74,0.14)" : "rgba(220,38,38,0.16)",
+                              color: available ? "#16a34a" : "#dc2626",
+                              border: `1px solid ${available ? "rgba(22,163,74,0.35)" : "rgba(220,38,38,0.35)"}`,
+                            }}
+                          >
+                            Seat {seatIndex + 1}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         )}
 
@@ -800,7 +1011,7 @@ export default function ConferenceDetailPage() {
               {SCHEDULE.map((day) => (
                 <div key={day.day} className="lux-card p-7">
                   <h3
-                    className="text-lg font-semibold mb-5 flex items-center gap-4"
+                    className="text-xl font-semibold mb-5 flex items-center gap-4"
                     style={{ color: "var(--fg)" }}
                   >
                     <span
@@ -825,11 +1036,11 @@ export default function ConferenceDetailPage() {
                             height: "6px",
                           }}
                         />
-                        <p
-                          className="text-sm"
-                          style={{ color: "var(--fg-muted)" }}
-                        >
-                          {event}
+                        <p className="text-base leading-relaxed" style={{ color: "var(--fg-muted)" }}>
+                          <span className="timing-pill mr-2">
+                            {event.split("—")[0].trim()}
+                          </span>
+                          {event.split("—").slice(1).join("—").trim()}
                         </p>
                       </div>
                     ))}
@@ -868,6 +1079,21 @@ export default function ConferenceDetailPage() {
                 <div className="flex items-center gap-3 text-sm">
                   <span className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: "var(--bg-subtle)" }}>🌐</span>
                   <a href={displayWebsite} target="_blank" rel="noopener noreferrer" style={{ color: "var(--blue)" }}>{displayWebsite}</a>
+                </div>
+              </div>
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] mb-3" style={{ color: "var(--fg-muted)" }}>
+                  Additional Organizers
+                </p>
+                <div className="space-y-2">
+                  {((organizerConference?.organizerTeam || []).length > 0
+                    ? organizerConference?.organizerTeam || []
+                    : [{ id: "placeholder-org", name: "Operations Team", role: "Lead Organizer", email: displayOrganizerEmail }]).map((member) => (
+                    <div key={member.id} className="rounded-xl px-3 py-2 conference-surface">
+                      <p className="text-sm font-semibold" style={{ color: "var(--fg)" }}>{member.name}</p>
+                      <p className="text-xs" style={{ color: "var(--fg-muted)" }}>{member.role}</p>
+                    </div>
+                  ))}
                 </div>
               </div>
               <button className="btn btn-ghost w-full">Contact Organizer</button>
@@ -921,7 +1147,7 @@ export default function ConferenceDetailPage() {
                       return;
                     }
                     if (!reviewDraft.comment.trim()) return;
-                    addConferenceReview(c.id, {
+                    const draftPayload = {
                       userId: user.id,
                       userName: user.name,
                       rating: reviewDraft.rating,
@@ -929,7 +1155,22 @@ export default function ConferenceDetailPage() {
                       committeeRating: reviewDraft.committeeRating,
                       hospitalityRating: reviewDraft.hospitalityRating,
                       comment: reviewDraft.comment.trim(),
-                    });
+                    };
+                    addConferenceReview(c.id, draftPayload);
+                    if (!organizerConference) {
+                      setInstantReviews((prev) => [
+                        {
+                          id: `instant-${Date.now()}`,
+                          userName: draftPayload.userName,
+                          rating: draftPayload.rating,
+                          comment: draftPayload.comment,
+                          sourceConferenceTitle: displayTitle,
+                          featured: false,
+                        },
+                        ...prev,
+                      ]);
+                    }
+                    setReviewMessage("Review submitted and now visible on this page.");
                     setReviewDraft({
                       rating: 5,
                       organizationRating: 5,
@@ -941,7 +1182,7 @@ export default function ConferenceDetailPage() {
                 >
                   Submit Review
                 </button>
-                <p className="text-xs" style={{ color: "var(--fg-muted)" }}>Reviews are moderated before public display.</p>
+                {reviewMessage && <p className="text-xs" style={{ color: "var(--success)" }}>{reviewMessage}</p>}
               </div>
             </div>
           </div>

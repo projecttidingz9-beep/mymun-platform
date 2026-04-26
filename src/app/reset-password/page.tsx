@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
@@ -12,9 +12,43 @@ function ResetPasswordForm() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [tokenCheckLoading, setTokenCheckLoading] = useState(true);
+  const [tokenValid, setTokenValid] = useState(false);
+  const [tokenMessage, setTokenMessage] = useState("");
+
+  useEffect(() => {
+    if (!token) {
+      setTokenCheckLoading(false);
+      setTokenValid(false);
+      setTokenMessage("Reset token is missing from this link.");
+      return;
+    }
+    let active = true;
+    const run = async () => {
+      setTokenCheckLoading(true);
+      try {
+        const response = await fetch(`/api/auth/reset-password/verify?token=${encodeURIComponent(token)}`);
+        const payload = (await response.json().catch(() => ({}))) as { valid?: boolean; error?: string };
+        if (!active) return;
+        const valid = Boolean(payload.valid);
+        setTokenValid(valid);
+        setTokenMessage(valid ? "Reset link verified. You can set a new password now." : payload.error || "This reset link is invalid or expired.");
+      } catch {
+        if (!active) return;
+        setTokenValid(false);
+        setTokenMessage("Could not verify reset token. Please request a new reset link.");
+      } finally {
+        if (active) setTokenCheckLoading(false);
+      }
+    };
+    void run();
+    return () => {
+      active = false;
+    };
+  }, [token]);
 
   const onSubmit = async () => {
-    if (!token) {
+    if (!token || !tokenValid) {
       alert("Invalid reset link.");
       return;
     }
@@ -52,6 +86,18 @@ function ResetPasswordForm() {
       <p className="text-sm mb-5" style={{ color: "var(--fg-muted)" }}>
         Set a new password for your account.
       </p>
+      <div
+        className="rounded-xl px-4 py-3 text-xs mb-4"
+        style={
+          tokenCheckLoading
+            ? { background: "var(--bg-subtle)", color: "var(--fg-muted)", border: "1px solid var(--border)" }
+            : tokenValid
+              ? { background: "rgba(22,163,74,0.12)", color: "#15803d", border: "1px solid rgba(22,163,74,0.24)" }
+              : { background: "rgba(220,38,38,0.12)", color: "#b91c1c", border: "1px solid rgba(220,38,38,0.24)" }
+        }
+      >
+        {tokenCheckLoading ? "Verifying reset link..." : tokenMessage}
+      </div>
       <div className="space-y-3">
         <input
           type="password"
@@ -67,7 +113,7 @@ function ResetPasswordForm() {
           onChange={(event) => setConfirmPassword(event.target.value)}
           placeholder="Confirm new password"
         />
-        <button onClick={onSubmit} className="lux-button-primary w-full py-3.5" disabled={loading}>
+        <button onClick={onSubmit} className="lux-button-primary w-full py-3.5" disabled={loading || !tokenValid || tokenCheckLoading}>
           {loading ? "Updating..." : "Reset Password"}
         </button>
       </div>

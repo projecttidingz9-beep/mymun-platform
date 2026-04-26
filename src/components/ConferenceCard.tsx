@@ -45,6 +45,12 @@ export default function ConferenceCard({ conference: c }: ConferenceCardProps) {
     .slice(0, 2)
     .map((part) => part[0]?.toUpperCase() || "")
     .join("") || "MUN";
+  const statusBadgeTone =
+    c.statusBadgeLabel === "Event Ended"
+      ? "badge-gray"
+      : c.statusBadgeLabel?.startsWith("Phase ")
+        ? "badge-green"
+        : "badge-blue";
 
   return (
     <Link href={`/conference/${c.id}`} className="block group card rounded-[1.5rem] overflow-hidden cursor-pointer">
@@ -99,11 +105,18 @@ export default function ConferenceCard({ conference: c }: ConferenceCardProps) {
           <span className={`badge ${badge.class}`} style={{ background: "rgba(255,255,255,0.2)", color: "white" }}>
             {badge.emoji} {c.level}
           </span>
-          {c.featured && (
-            <span className="badge" style={{ background: "rgba(255,255,255,0.25)", color: "white" }}>
-              ⭐ Featured
-            </span>
-          )}
+          <div className="flex items-center gap-1.5">
+            {c.featured && (
+              <span className="badge" style={{ background: "rgba(255,255,255,0.25)", color: "white" }}>
+                ⭐ Featured
+              </span>
+            )}
+            {c.statusBadgeLabel && (
+              <span className={`badge ${statusBadgeTone}`} style={{ backdropFilter: "blur(6px)" }}>
+                {c.statusBadgeLabel}
+              </span>
+            )}
+          </div>
         </div>
 
         {/* Price bottom */}

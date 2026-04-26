@@ -413,6 +413,9 @@ const normalizeOrganizerConference = (raw: unknown): OrganizerConference | null 
     city: String(conference.city ?? ""),
     country: String(conference.country ?? ""),
     organizerName: String(conference.organizerName ?? ""),
+    contactDetail:
+      conference.contactDetail === undefined ? undefined : String(conference.contactDetail),
+    tags: Array.isArray(conference.tags) ? conference.tags.map((entry) => String(entry)) : [],
     level: (conference.level as OrganizerConference["level"]) ?? "Open",
     capacity: Number(conference.capacity ?? 0),
     startDate: String(conference.startDate ?? ""),
@@ -699,6 +702,7 @@ interface AuthContextType {
   addOrganizerConference: (
     payload: Omit<OrganizerConference, "id" | "status" | "applicants" | "announcements">
   ) => void;
+  removeOrganizerConference: (conferenceId: string) => void;
   updateOrganizerConferenceStatus: (conferenceId: string, status: OrganizerConference["status"]) => void;
   updateOrganizerConferenceConfig: (
     conferenceId: string,
@@ -709,6 +713,8 @@ interface AuthContextType {
         | "city"
         | "country"
         | "organizerName"
+        | "contactDetail"
+        | "tags"
         | "venue"
         | "description"
         | "termsAndConditions"
@@ -823,6 +829,7 @@ const AuthContext = createContext<AuthContextType>({
   logout: () => {},
   addRegistration: () => {},
   addOrganizerConference: () => {},
+  removeOrganizerConference: () => {},
   updateOrganizerConferenceStatus: () => {},
   updateOrganizerConferenceConfig: () => {},
   updateOrganizerCommitteeConfig: () => {},
@@ -1075,6 +1082,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     persistOrganizerConferences(next);
   };
 
+  const removeOrganizerConference: AuthContextType["removeOrganizerConference"] = (conferenceId) => {
+    const current = ensureOrganizerSeed(organizerConferences);
+    const next = current.filter((conference) => conference.id !== conferenceId);
+    persistOrganizerConferences(next);
+  };
+
   const updateOrganizerConferenceStatus: AuthContextType["updateOrganizerConferenceStatus"] = (conferenceId, status) => {
     const current = ensureOrganizerSeed(organizerConferences);
     const next = current.map((conference) =>
@@ -1182,7 +1195,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         id: `review-${Date.now()}`,
         conferenceId,
         ...payload,
-        status: "pending",
+        status: "approved",
         featured: false,
         createdAt: new Date().toISOString(),
       };
@@ -1691,6 +1704,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         logout,
         addRegistration,
         addOrganizerConference,
+        removeOrganizerConference,
         updateOrganizerConferenceStatus,
         updateOrganizerConferenceConfig,
         updateOrganizerCommitteeConfig,

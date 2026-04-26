@@ -45,36 +45,6 @@ const FEATURES_FOR_ORGANIZERS = [
   },
 ];
 
-const TIERS = [
-  {
-    name: "Starter",
-    price: "Free",
-    desc: "Perfect for first-time organizers",
-    limit: "Up to 100 delegates",
-    features: ["1 committee", "Basic registration form", "Email notifications", "Tidingz marketplace listing"],
-    cta: "Get Started Free",
-    highlight: false,
-  },
-  {
-    name: "Professional",
-    price: "$49/mo",
-    desc: "For established conferences",
-    limit: "Up to 1,000 delegates",
-    features: ["Unlimited committees", "Payment processing", "Analytics dashboard", "Position paper management", "Priority support"],
-    cta: "Start 14-Day Trial",
-    highlight: true,
-  },
-  {
-    name: "Enterprise",
-    price: "Custom",
-    desc: "For world-class conferences",
-    limit: "Unlimited delegates",
-    features: ["All Professional features", "Dedicated success manager", "Custom branding", "API access", "Bulk delegate import"],
-    cta: "Contact Sales",
-    highlight: false,
-  },
-];
-
 const FIELD_TYPE_OPTIONS: DynamicFieldType[] = ["text", "textarea", "select", "number", "date", "checkbox"];
 const STEPS = ["Event Basics", "Registration Categories", "Committees", "Pricing Phases", "Custom Forms", "Review & Submit"];
 const COMMITTEE_TYPE_OPTIONS = [
@@ -343,11 +313,7 @@ export default function OrganizersPage() {
   };
 
   const openWizard = () => {
-    if (!isLoggedIn) {
-      setAuthOpen(true);
-      return;
-    }
-    setWizardOpen(true);
+    router.push("/organizers/create");
   };
 
   const openDashboard = () => {
@@ -1143,34 +1109,14 @@ export default function OrganizersPage() {
                 className="lux-display mt-6"
                 style={{ color: "var(--fg-immersive)" }}
               >
-                Simple, transparent pricing.
+                Transparent pricing.
               </h2>
             </Reveal>
           </div>
-          <div className="grid md:grid-cols-3 gap-6">
-            {TIERS.map((tier, i) => (
-              <Reveal key={tier.name} delay={i * 0.08}>
-                <div
-                  className={`lux-card p-9 h-full relative ${
-                    tier.highlight ? "lux-card-accent" : ""
-                  }`}
-                >
-                  {tier.highlight && (
-                    <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                      <span
-                        className="text-[10px] font-semibold px-3 py-1 rounded-full"
-                        style={{
-                          background:
-                            "linear-gradient(120deg, #e7c390 0%, #d8ac72 55%, #b8925a 100%)",
-                          color: "#1a1108",
-                          letterSpacing: "0.22em",
-                          textTransform: "uppercase",
-                        }}
-                      >
-                        Most Popular
-                      </span>
-                    </div>
-                  )}
+          <Reveal delay={0.08}>
+            <div className="lux-card p-8 md:p-10 max-w-4xl mx-auto">
+              <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+                <div className="space-y-3">
                   <p
                     className="text-[10px] font-semibold"
                     style={{
@@ -1179,61 +1125,55 @@ export default function OrganizersPage() {
                       textTransform: "uppercase",
                     }}
                   >
-                    {tier.name}
+                    Platform Fee
                   </p>
                   <p
-                    className="mt-4 text-4xl font-semibold"
+                    className="text-4xl md:text-5xl font-semibold"
                     style={{
                       color: "var(--fg-immersive)",
                       letterSpacing: "-0.02em",
                     }}
                   >
-                    {tier.price}
+                    5%
                   </p>
                   <p
-                    className="mt-2 text-sm"
-                    style={{ color: "rgba(243,237,224,0.6)" }}
+                    className="text-sm md:text-base"
+                    style={{ color: "rgba(243,237,224,0.76)" }}
                   >
-                    {tier.desc} · {tier.limit}
+                    We charge a 5% platform fee on each paid registration transaction.
                   </p>
-                  <div className="lux-divider my-7" />
-                  <div className="space-y-3 mb-8">
-                    {tier.features.map((f) => (
-                      <div
-                        key={f}
-                        className="flex items-start gap-3 text-sm"
-                        style={{ color: "rgba(243,237,224,0.82)" }}
-                      >
-                        <span style={{ color: "var(--accent-warm)" }}>◆</span>
-                        <span>{f}</span>
-                      </div>
-                    ))}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => (tier.name === "Enterprise" ? null : openWizard())}
-                    className={
-                      tier.highlight ? "lux-button-primary" : "lux-button-ghost"
-                    }
+                </div>
+                <button
+                  type="button"
+                  onClick={openWizard}
+                  className="lux-button-primary text-sm"
+                  style={{ padding: "14px 22px", alignSelf: "flex-start" }}
+                >
+                  Get Started
+                </button>
+              </div>
+              <div className="lux-divider my-6" />
+              <div className="grid sm:grid-cols-3 gap-3">
+                {[
+                  "No monthly subscription plans",
+                  "Fee applies only when delegate payment succeeds",
+                  "You keep the remaining 95% (before gateway/provider charges)",
+                ].map((line) => (
+                  <div
+                    key={line}
+                    className="rounded-xl px-4 py-3 text-sm"
                     style={{
-                      width: "100%",
-                      padding: "14px 20px",
-                      fontSize: "14px",
-                      ...(tier.highlight
-                        ? {}
-                        : {
-                            color: "var(--fg-immersive)",
-                            borderColor: "rgba(243,237,224,0.22)",
-                            background: "rgba(243,237,224,0.03)",
-                          }),
+                      background: "rgba(243,237,224,0.04)",
+                      border: "1px solid rgba(243,237,224,0.1)",
+                      color: "rgba(243,237,224,0.82)",
                     }}
                   >
-                    {tier.cta}
-                  </button>
-                </div>
-              </Reveal>
-            ))}
-          </div>
+                    {line}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </Reveal>
         </div>
       </section>
 

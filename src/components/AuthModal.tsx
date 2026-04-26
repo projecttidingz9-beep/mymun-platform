@@ -20,6 +20,10 @@ export default function AuthModal({ isOpen, onClose, defaultTab = "signin" }: Au
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [forgotLoading, setForgotLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [forgotMode, setForgotMode] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState("");
+  const [forgotNotice, setForgotNotice] = useState("");
   const overlayRef = useRef<HTMLDivElement>(null);
 
   const closeModal = () => {
@@ -29,6 +33,10 @@ export default function AuthModal({ isOpen, onClose, defaultTab = "signin" }: Au
     setPassword("");
     setName("");
     setLoading(false);
+    setShowPassword(false);
+    setForgotMode(false);
+    setForgotEmail("");
+    setForgotNotice("");
     onClose();
   };
 
@@ -77,8 +85,10 @@ export default function AuthModal({ isOpen, onClose, defaultTab = "signin" }: Au
 
   const handleForgotPassword = async () => {
     setError("");
-    if (!email || !email.includes("@")) {
-      setError("Enter your account email first.");
+    setForgotNotice("");
+    const targetEmail = forgotEmail.trim().toLowerCase();
+    if (!targetEmail || !targetEmail.includes("@")) {
+      setError("Enter a valid account email.");
       return;
     }
     setForgotLoading(true);
@@ -86,14 +96,14 @@ export default function AuthModal({ isOpen, onClose, defaultTab = "signin" }: Au
       const response = await fetch("/api/auth/forgot-password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email: targetEmail }),
       });
       const payload = (await response.json().catch(() => ({}))) as { error?: string };
       if (!response.ok) {
         setError(payload.error || "Could not start password reset.");
         return;
       }
-      setError("Password reset link sent. Please check your email.");
+      setForgotNotice("Password reset link sent. Please check your email.");
     } finally {
       setForgotLoading(false);
     }
@@ -155,13 +165,13 @@ export default function AuthModal({ isOpen, onClose, defaultTab = "signin" }: Au
           <div className="tab-bar mb-6">
             <button
               className={`tab flex-1 ${tab === "signin" ? "active" : ""}`}
-              onClick={() => { setTab("signin"); setError(""); }}
+              onClick={() => { setTab("signin"); setError(""); setForgotMode(false); setForgotNotice(""); }}
             >
               Sign In
             </button>
             <button
               className={`tab flex-1 ${tab === "register" ? "active" : ""}`}
-              onClick={() => { setTab("register"); setError(""); }}
+              onClick={() => { setTab("register"); setError(""); setForgotMode(false); setForgotNotice(""); }}
             >
               Register
             </button>
@@ -215,36 +225,94 @@ export default function AuthModal({ isOpen, onClose, defaultTab = "signin" }: Au
             />
           </div>
 
-          <div>
-            <label className="block text-sm font-semibold mb-1.5" style={{ color: "var(--fg)" }}>
-              Password
-            </label>
-            <input
-              type="password"
-              placeholder="••••••••"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="input-base"
-            />
-            {tab === "signin" && (
-              <button
-                type="button"
-                onClick={handleForgotPassword}
-                className="text-xs mt-2"
-                style={{ color: "var(--blue)" }}
-                disabled={forgotLoading}
-              >
-                {forgotLoading ? "Sending reset link..." : "Forgot password?"}
-              </button>
-            )}
-          </div>
+          {!forgotMode ? (
+            <div>
+              <label className="block text-sm font-semibold mb-1.5" style={{ color: "var(--fg)" }}>
+                Password
+              </label>
+              <div className="relative">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  placeholder="••••••••"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="input-base pr-12"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((prev) => !prev)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold"
+                  style={{ color: "var(--fg-muted)" }}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                >
+                  {showPassword ? "Hide" : "Show"}
+                </button>
+              </div>
+              {tab === "signin" && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setForgotMode(true);
+                    setForgotEmail(email);
+                    setForgotNotice("");
+                    setError("");
+                  }}
+                  className="text-xs mt-2"
+                  style={{ color: "var(--blue)" }}
+                >
+                  Forgot password?
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-3 rounded-2xl p-4" style={{ background: "var(--bg-subtle)", border: "1px solid var(--border)" }}>
+              <p className="text-sm font-semibold" style={{ color: "var(--fg)" }}>
+                Password recovery
+              </p>
+              <p className="text-xs" style={{ color: "var(--fg-muted)" }}>
+                Enter your account email and we&apos;ll send a reset link.
+              </p>
+              <input
+                type="email"
+                placeholder="you@university.edu"
+                value={forgotEmail}
+                onChange={(e) => setForgotEmail(e.target.value)}
+                className="input-base"
+              />
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleForgotPassword}
+                  className="btn btn-primary text-xs flex-1"
+                  disabled={forgotLoading}
+                >
+                  {forgotLoading ? "Sending reset link..." : "Send reset link"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setForgotMode(false);
+                    setForgotNotice("");
+                    setError("");
+                  }}
+                  className="btn btn-ghost text-xs"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
 
-          {error && (
+          {(error || forgotNotice) && (
             <div
               className="flex items-center gap-2 text-sm px-4 py-3 rounded-xl"
-              style={{ background: "rgba(157, 46, 46, 0.12)", color: "#c84f4f", border: "1px solid rgba(157, 46, 46, 0.28)" }}
+              style={
+                error
+                  ? { background: "rgba(157, 46, 46, 0.12)", color: "#c84f4f", border: "1px solid rgba(157, 46, 46, 0.28)" }
+                  : { background: "rgba(22,163,74,0.12)", color: "#15803d", border: "1px solid rgba(22,163,74,0.25)" }
+              }
             >
-              <span>!</span> {error}
+              <span>{error ? "!" : "✓"}</span> {error || forgotNotice}
             </div>
           )}
 
@@ -268,7 +336,12 @@ export default function AuthModal({ isOpen, onClose, defaultTab = "signin" }: Au
             {tab === "signin" ? "Don't have an account? " : "Already have an account? "}
             <button
               type="button"
-              onClick={() => setTab(tab === "signin" ? "register" : "signin")}
+              onClick={() => {
+                setTab(tab === "signin" ? "register" : "signin");
+                setForgotMode(false);
+                setForgotNotice("");
+                setError("");
+              }}
               className="font-semibold"
               style={{ color: "var(--blue)" }}
             >

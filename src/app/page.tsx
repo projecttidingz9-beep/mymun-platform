@@ -105,7 +105,7 @@ export default function HomePage() {
 
   return (
     <ScrollShell>
-      <div className="lux-shell lux-shell-immersive min-h-screen">
+      <div className="lux-shell lux-shell-immersive min-h-screen flex flex-col">
         <WebGLLoader visible={!sceneReady} />
 
         {/* Persistent WebGL backdrop. One canvas carries the aesthetic across
@@ -125,6 +125,7 @@ export default function HomePage() {
         <Navbar openAuthModal={openAuthModal} />
         <AuthModal isOpen={authOpen} onClose={() => setAuthOpen(false)} />
 
+        <main className="flex-1">
         {/* ───── Hero ───── */}
         <section className="relative lux-section min-h-[100vh] flex items-center overflow-hidden">
           <div className="absolute inset-0 lux-grain pointer-events-none" />
@@ -238,6 +239,7 @@ export default function HomePage() {
 
         {/* ───── Philosophy ───── */}
         <section
+          id="philosophy"
           className="relative lux-section py-40 px-6"
           style={VEIL_SOFT}
         >
@@ -539,7 +541,7 @@ export default function HomePage() {
         </section>
 
         {/* ───── Contact ───── */}
-        <section className="relative lux-section py-40 px-6" style={VEIL_SOFT}>
+        <section id="contact" className="relative lux-section py-40 px-6" style={VEIL_SOFT}>
           <div className="max-w-4xl mx-auto text-center">
             <Reveal>
               <p className="lux-eyebrow" style={{ color: "rgba(243,237,224,0.55)" }}>
@@ -789,6 +791,7 @@ export default function HomePage() {
             </div>
           </div>
         </section>
+        </main>
 
         <Footer />
       </div>

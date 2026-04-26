@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
@@ -9,11 +9,10 @@ import AuthModal from "./AuthModal";
 
 const NAV_LINKS = [
   { label: "Marketplace", href: "/marketplace" },
-  { label: "Resolution Copilot", href: "/resolution-copilot" },
   { label: "For Organizers", href: "/organizers" },
   { label: "Dashboard", href: "/dashboard" },
 ];
-const INLINE_PRIORITY_HREFS = ["/marketplace", "/resolution-copilot"];
+const INLINE_PRIORITY_HREFS = ["/marketplace"];
 
 interface NavbarProps {
   openAuthModal?: () => void;
@@ -30,6 +29,7 @@ export default function Navbar({ openAuthModal }: NavbarProps) {
   const [hydrated, setHydrated] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const userMenuRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 20);
@@ -41,27 +41,61 @@ export default function Navbar({ openAuthModal }: NavbarProps) {
   useEffect(() => {
     const hydrationTimer = window.setTimeout(() => {
       setHydrated(true);
+      const storedTheme = localStorage.getItem("tidingz_dark");
+      const domDark = document.documentElement.classList.contains("dark");
+      setDarkMode(storedTheme === null ? domDark : storedTheme === "true");
     }, 0);
     return () => window.clearTimeout(hydrationTimer);
   }, []);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      const stored = localStorage.getItem("tidingz_dark");
-      if (stored === "true") {
-        setDarkMode(true);
-      }
-    }, 0);
-    return () => window.clearTimeout(timer);
+    const syncThemeFromStorage = () => {
+      const storedTheme = localStorage.getItem("tidingz_dark");
+      const domDark = document.documentElement.classList.contains("dark");
+      setDarkMode(storedTheme === null ? domDark : storedTheme === "true");
+    };
+    const onStorage = (event: StorageEvent) => {
+      if (event.key !== "tidingz_dark") return;
+      syncThemeFromStorage();
+    };
+    const onThemeChanged = () => {
+      syncThemeFromStorage();
+    };
+    window.addEventListener("storage", onStorage);
+    window.addEventListener("tidingz-theme-change", onThemeChanged);
+    return () => {
+      window.removeEventListener("storage", onStorage);
+      window.removeEventListener("tidingz-theme-change", onThemeChanged);
+    };
   }, []);
 
   useEffect(() => {
-    document.documentElement.classList.toggle("dark", darkMode);
-    localStorage.setItem("tidingz_dark", String(darkMode));
-  }, [darkMode]);
+    if (!userMenuOpen) return;
+    const onPointerDown = (event: MouseEvent) => {
+      if (!userMenuRef.current) return;
+      if (!userMenuRef.current.contains(event.target as Node)) {
+        setUserMenuOpen(false);
+      }
+    };
+    const onEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setUserMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("keydown", onEscape);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("keydown", onEscape);
+    };
+  }, [userMenuOpen]);
 
   const toggleDark = () => {
-    setDarkMode((prev) => !prev);
+    const nextDark = !document.documentElement.classList.contains("dark");
+    document.documentElement.classList.toggle("dark", nextDark);
+    localStorage.setItem("tidingz_dark", String(nextDark));
+    setDarkMode(nextDark);
+    window.dispatchEvent(new Event("tidingz-theme-change"));
   };
 
   const handleAuthClick = () => {
@@ -74,6 +108,7 @@ export default function Navbar({ openAuthModal }: NavbarProps) {
 
   const showLoggedInUi = hydrated && isLoggedIn;
   const showDarkModeOnIcon = hydrated && darkMode;
+  const hideThemeToggle = pathname === "/";
   const currentRole = user?.role || "delegate";
   const visibleNavLinks = showLoggedInUi
     ? NAV_LINKS.filter((link) => {
@@ -101,20 +136,20 @@ export default function Navbar({ openAuthModal }: NavbarProps) {
         }`}
         style={{ borderBottom: scrolled ? "1px solid var(--glass-border)" : "none" }}
       >
-        <div className="max-w-7xl mx-auto px-6 h-[72px] flex items-center justify-between">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 h-[76px] flex items-center justify-between">
           {/* Logo */}
-          <Link href="/" className="flex items-center gap-2.5 group">
-            <div className="w-9 h-9 rounded-xl overflow-hidden shadow-lg transition-transform group-hover:scale-105">
+          <Link href="/" className="flex items-center gap-3 group min-w-0">
+            <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl overflow-hidden shadow-lg transition-transform group-hover:scale-105 flex-shrink-0 border border-[var(--border)]">
               <Image
                 src="/tidingz-logo.png"
                 alt="Tidingz logo"
-                width={36}
-                height={36}
+                width={48}
+                height={48}
                 className="w-full h-full object-cover"
                 priority
               />
             </div>
-            <span className="text-lg font-bold tracking-tight" style={{ color: "var(--fg)" }}>
+            <span className="text-xl sm:text-2xl font-bold tracking-tight leading-none" style={{ color: "var(--fg)" }}>
               Tidingz
             </span>
           </Link>
@@ -148,31 +183,35 @@ export default function Navbar({ openAuthModal }: NavbarProps) {
           </div>
 
           {/* Right actions */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center justify-end gap-2 min-w-[196px]">
             {/* Dark mode toggle */}
-            <button
-              onClick={toggleDark}
-              className="w-9 h-9 rounded-xl flex items-center justify-center transition-all"
-              style={{
-                background: "color-mix(in srgb, var(--bg) 86%, transparent 14%)",
-                border: "1.5px solid var(--border)",
-                color: "var(--fg-muted)",
-              }}
-              title="Toggle dark mode"
-            >
-              {showDarkModeOnIcon ? (
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M12 3v1m0 16v1M4.22 4.22l.7.7m12.16 12.16.7.7M1 12h1m20 0h1m-16.78 7.78.7-.7M18.36 5.64l.7-.7M12 6a6 6 0 0 0 0 12A6 6 0 0 0 12 6z" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" />
-                </svg>
-              ) : (
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M21 12.79A9 9 0 1 1 11.21 3a7 7 0 0 0 9.79 9.79z" />
-                </svg>
-              )}
-            </button>
+            {!hideThemeToggle ? (
+              <button
+                onClick={toggleDark}
+                className="w-9 h-9 rounded-xl flex items-center justify-center transition-all"
+                style={{
+                  background: "color-mix(in srgb, var(--bg) 86%, transparent 14%)",
+                  border: "1.5px solid var(--border)",
+                  color: "var(--fg-muted)",
+                }}
+                title="Toggle dark mode"
+              >
+                {showDarkModeOnIcon ? (
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 3v1m0 16v1M4.22 4.22l.7.7m12.16 12.16.7.7M1 12h1m20 0h1m-16.78 7.78.7-.7M18.36 5.64l.7-.7M12 6a6 6 0 0 0 0 12A6 6 0 0 0 12 6z" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" />
+                  </svg>
+                ) : (
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M21 12.79A9 9 0 1 1 11.21 3a7 7 0 0 0 9.79 9.79z" />
+                  </svg>
+                )}
+              </button>
+            ) : (
+              <div aria-hidden className="w-9 h-9" />
+            )}
 
             {showLoggedInUi ? (
-              <div className="relative">
+              <div className="relative" ref={userMenuRef}>
                 <button
                   onClick={() => setUserMenuOpen((p) => !p)}
                   className="flex items-center gap-2 px-3 py-2 rounded-xl transition-all"
@@ -194,63 +233,58 @@ export default function Navbar({ openAuthModal }: NavbarProps) {
 
                 {userMenuOpen && (
                   <div
-                    className="absolute right-0 top-full mt-2 w-52 rounded-2xl overflow-hidden animate-slide-down"
+                    className="absolute right-0 top-full mt-2 min-w-[290px] max-w-[min(92vw,360px)] rounded-2xl overflow-hidden animate-slide-down user-menu-dropdown"
                     style={{
                       background: "var(--bg)",
-                      border: "1.5px solid var(--border)",
-                      boxShadow: "0 8px 32px rgba(0,0,0,0.12)",
+                      border: "1px solid var(--border)",
+                      boxShadow: "0 18px 48px rgba(0,0,0,0.22)",
                       zIndex: 100,
                     }}
                   >
-                    <div className="px-4 py-3 border-b" style={{ borderColor: "var(--border)" }}>
+                    <div className="px-5 py-4 border-b user-menu-identity" style={{ borderColor: "var(--border)" }}>
                       <p className="text-sm font-semibold" style={{ color: "var(--fg)" }}>{user?.name}</p>
-                      <p className="text-xs" style={{ color: "var(--fg-muted)" }}>{user?.email}</p>
+                      <p className="text-xs break-all mt-1" style={{ color: "var(--fg-muted)" }}>{user?.email}</p>
                     </div>
-                    {currentRole !== "organizer" && (
-                      <>
+                    <div className="py-1.5">
+                      {currentRole !== "organizer" && (
+                        <>
+                          <Link
+                            href="/dashboard"
+                            onClick={() => setUserMenuOpen(false)}
+                            className="flex items-center gap-3 px-5 py-3 text-sm font-medium transition-colors user-menu-link"
+                            style={{ color: "var(--fg)" }}
+                          >
+                            📊 Dashboard
+                          </Link>
+                          <Link
+                            href="/dashboard#profile"
+                            onClick={() => setUserMenuOpen(false)}
+                            className="flex items-center gap-3 px-5 py-3 text-sm font-medium transition-colors user-menu-link"
+                            style={{ color: "var(--fg)" }}
+                          >
+                            ⚙️ Settings
+                          </Link>
+                        </>
+                      )}
+                      {currentRole !== "delegate" && (
                         <Link
-                          href="/dashboard"
+                          href="/organizers/dashboard"
                           onClick={() => setUserMenuOpen(false)}
-                          className="flex items-center gap-3 px-4 py-3 text-sm font-medium transition-colors"
+                          className="flex items-center gap-3 px-5 py-3 text-sm font-medium transition-colors user-menu-link"
                           style={{ color: "var(--fg)" }}
                         >
-                          📊 Dashboard
+                          🏢 Organizer Dashboard
                         </Link>
-                        <Link
-                          href={`/delegates/${user?.id || ""}`}
-                          onClick={() => setUserMenuOpen(false)}
-                          className="flex items-center gap-3 px-4 py-3 text-sm font-medium transition-colors"
-                          style={{ color: "var(--fg)" }}
-                        >
-                          🪪 Public Profile
-                        </Link>
-                      </>
-                    )}
-                    {currentRole !== "delegate" && (
-                      <Link
-                        href="/organizers/dashboard"
-                        onClick={() => setUserMenuOpen(false)}
-                        className="flex items-center gap-3 px-4 py-3 text-sm font-medium transition-colors"
-                        style={{ color: "var(--fg)" }}
-                      >
-                        🏢 Organizer Dashboard
-                      </Link>
-                    )}
-                    <Link
-                      href="/resolution-copilot"
-                      onClick={() => setUserMenuOpen(false)}
-                      className="flex items-center gap-3 px-4 py-3 text-sm font-medium transition-colors"
-                      style={{ color: "var(--fg)" }}
-                    >
-                      ✍️ Resolution Copilot
-                    </Link>
-                    <div className="border-t" style={{ borderColor: "var(--border)" }}>
+                      )}
+                    </div>
+
+                    <div className="border-t py-1.5" style={{ borderColor: "var(--border)" }}>
                       <button
                         onClick={() => { logout(); setUserMenuOpen(false); }}
-                        className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium transition-colors"
+                        className="w-full flex items-center gap-3 px-5 py-3 text-sm font-medium transition-colors user-menu-link"
                         style={{ color: "#dc2626" }}
                       >
-                        🚪 Sign Out
+                        🚪 Logout
                       </button>
                     </div>
                   </div>

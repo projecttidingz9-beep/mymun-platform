@@ -129,6 +129,7 @@ export interface Conference {
   logoImageUrl?: string;
   bannerImageUrl?: string;
   tags: string[];
+  statusBadgeLabel?: string;
 }
 
 export interface User {
@@ -251,6 +252,8 @@ export interface OrganizerConference {
   city: string;
   country: string;
   organizerName: string;
+  contactDetail?: string;
+  tags?: string[];
   venue?: string;
   level: "High School" | "University" | "Open";
   capacity: number;
@@ -309,7 +312,7 @@ export interface OrganizerTeamMember {
   id: string;
   name: string;
   email: string;
-  role: "Lead Organizer" | "USG" | "Logistics Head" | "Committee Head";
+  role: string;
   permissions: OrganizerPermission[];
 }
 
@@ -404,6 +407,8 @@ export interface OrganizerConferencePreviewConfig {
   city?: string;
   country?: string;
   organizerName?: string;
+  contactDetail?: string;
+  tags?: string[];
   venue?: string;
   description?: string;
   termsAndConditions?: string;

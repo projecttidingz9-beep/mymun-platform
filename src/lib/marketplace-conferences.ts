@@ -1,5 +1,6 @@
 import { CONFERENCES } from "@/lib/data";
 import { Conference, OrganizerConference } from "@/lib/types";
+import { getActivePhase } from "@/lib/pricing";
 
 const LISTABLE_ORGANIZER_STATUSES = new Set<OrganizerConference["status"]>([
   "Review",
@@ -54,6 +55,19 @@ function inferRegion(country: string): Conference["region"] {
   return REGION_BY_COUNTRY[normalized] ?? "Asia";
 }
 
+function getConferenceStatusBadge(conference: OrganizerConference): string {
+  const today = new Date().setHours(0, 0, 0, 0);
+  const eventEnd = new Date(conference.endDate).setHours(0, 0, 0, 0);
+  if (!Number.isNaN(eventEnd) && eventEnd < today) return "Event Ended";
+  const activeCategoryPhase = conference.registrationCategories
+    .map((category) => getActivePhase(category.pricingPhases))
+    .find(Boolean);
+  if (activeCategoryPhase?.name) {
+    return `Phase ${activeCategoryPhase.name} Open`;
+  }
+  return "Coming Soon";
+}
+
 export function mapOrganizerConferenceToMarketplaceConference(
   conference: OrganizerConference
 ): Conference {
@@ -89,17 +103,21 @@ export function mapOrganizerConferenceToMarketplaceConference(
     level: conference.level,
     committees: conference.committees
       .filter((committee) => committee.isPublic !== false)
-      .map((committee) => ({
-        id: committee.id,
-        name: committee.name,
-        abbreviation: committee.name.slice(0, 8).toUpperCase(),
-        topic1: committee.agenda || "Agenda to be announced",
-        topic2:
-          committee.customQuestions?.[0]?.question ||
-          "Additional details by organizer",
-        difficulty: "Intermediate" as const,
-        size: committee.seatCount,
-      })),
+      .map((committee) => {
+        const agendas = [
+          committee.agenda || "Agenda to be announced",
+          ...(committee.customQuestions?.map((question) => question.question) || []),
+        ].filter((agenda) => agenda.trim().length > 0);
+        return {
+          id: committee.id,
+          name: committee.name,
+          abbreviation: committee.name.slice(0, 8).toUpperCase(),
+          topic1: agendas[0] || "Agenda to be announced",
+          topic2: agendas[1] || "",
+          difficulty: "Intermediate" as const,
+          size: committee.seatCount,
+        };
+      }),
     capacity: conference.capacity,
     registered: conference.applicants.length,
     description:
@@ -111,7 +129,11 @@ export function mapOrganizerConferenceToMarketplaceConference(
     color: "from-slate-700 to-slate-900",
     logoImageUrl: conference.logoImageUrl,
     bannerImageUrl: conference.bannerImageUrl,
-    tags: [conference.level, conference.status, "Organizer Created"],
+    tags:
+      conference.tags && conference.tags.length > 0
+        ? conference.tags
+        : [conference.level, conference.status, "Organizer Created"],
+    statusBadgeLabel: getConferenceStatusBadge(conference),
   };
 }
 
@@ -122,7 +144,21 @@ export function getMarketplaceConferences(
     .filter((conference) => LISTABLE_ORGANIZER_STATUSES.has(conference.status))
     .map(mapOrganizerConferenceToMarketplaceConference);
 
-  const merged = [...CONFERENCES, ...organizerEntries];
+  const today = new Date().setHours(0, 0, 0, 0);
+  const withStaticStatus = CONFERENCES.map((conference) => {
+    if (conference.statusBadgeLabel) return conference;
+    const end = new Date(conference.endDate).setHours(0, 0, 0, 0);
+    const deadline = new Date(conference.registrationDeadline).setHours(0, 0, 0, 0);
+    if (!Number.isNaN(end) && end < today) {
+      return { ...conference, statusBadgeLabel: "Event Ended" };
+    }
+    if (!Number.isNaN(deadline) && deadline >= today) {
+      return { ...conference, statusBadgeLabel: "Coming Soon" };
+    }
+    return { ...conference, statusBadgeLabel: "Coming Soon" };
+  });
+
+  const merged = [...withStaticStatus, ...organizerEntries];
   const dedupedById = new Map<string, Conference>();
   for (const conference of merged) {
     dedupedById.set(conference.id, conference);
