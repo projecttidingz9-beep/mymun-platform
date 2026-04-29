@@ -21,6 +21,16 @@ const SCHEDULE = [
   { day: "Day 2", events: ["09:00 — Committee Session III (Unmoderated Caucus)", "11:00 — Working Paper Presentations", "14:00 — Lunch & Country Block Meetings", "15:00 — Committee Session IV (Moderated Debate)", "18:00 — Position Paper Awards Ceremony"] },
   { day: "Day 3", events: ["09:00 — Committee Session V (Draft Resolution Debate)", "11:00 — Amendments & Final Speeches", "13:00 — Voting Procedure", "15:00 — Closing Ceremony & Awards", "17:00 — Farewell Reception"] },
 ];
+const DEFAULT_WHATS_INCLUDED = [
+  "Committee participation & materials",
+  "Opening & closing ceremonies",
+  "Delegate documentation package",
+  "Access to all social events",
+  "Digital certificate of participation",
+  "Networking with global delegates",
+  "Expert speaker sessions",
+  "Best Delegate award consideration",
+];
 
 const DEFAULT_OVERVIEW_AWARDS = [
   "Best Delegate",
@@ -197,6 +207,9 @@ export default function ConferenceDetailPage() {
     : c.location;
   const displayOrganizerEmail = c.organizerEmail;
   const displayWebsite = organizerConference?.socialLinks?.website || c.website;
+  const displayInstagram = organizerConference?.socialLinks?.instagram;
+  const displayLinkedin = organizerConference?.socialLinks?.linkedin;
+  const displayTwitter = organizerConference?.socialLinks?.twitter;
   const editableTags = Array.from(new Set([...c.tags, ...addedTags]));
   const heroBannerImage = organizerConference?.bannerImageUrl || c.bannerImageUrl;
   const heroLogoImage = organizerConference?.logoImageUrl || c.logoImageUrl;
@@ -249,6 +262,21 @@ export default function ConferenceDetailPage() {
           sourceConferenceTitle: displayTitle,
           ...document,
         }));
+  const displayWhatsIncluded =
+    organizerConference && (organizerConference.whatIsIncluded || []).length > 0
+      ? organizerConference.whatIsIncluded || []
+      : DEFAULT_WHATS_INCLUDED;
+  const scheduleGroups =
+    organizerConference && (organizerConference.conferenceSchedule || []).length > 0
+      ? Object.entries(
+          (organizerConference.conferenceSchedule || []).reduce<Record<string, string[]>>((acc, entry) => {
+            const day = entry.day || "Day";
+            const line = `${entry.fromTime} — ${entry.title}${entry.toTime ? ` (${entry.toTime})` : ""}`;
+            acc[day] = [...(acc[day] || []), line];
+            return acc;
+          }, {})
+        ).map(([day, events]) => ({ day, events }))
+      : SCHEDULE;
 
   const defaultStats: Record<string, string | number> = {
     Committees: organizerConference ? mergedCommittees.length : c.committees.length,
@@ -751,16 +779,7 @@ export default function ConferenceDetailPage() {
               <div className="lux-card p-6 sm:p-7">
                 <h2 className="text-2xl font-bold mb-5" style={{ color: "var(--fg)" }}>What&apos;s Included</h2>
                 <div className="grid sm:grid-cols-2 gap-3">
-                  {[
-                    "Committee participation & materials",
-                    "Opening & closing ceremonies",
-                    "Delegate documentation package",
-                    "Access to all social events",
-                    "Digital certificate of participation",
-                    "Networking with global delegates",
-                    "Expert speaker sessions",
-                    "Best Delegate award consideration",
-                  ].map((item) => (
+                  {displayWhatsIncluded.map((item) => (
                     <div key={item} className="flex items-center gap-3 text-sm" style={{ color: "var(--fg)" }}>
                       <span className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 text-xs" style={{ background: "#dcfce7", color: "#16a34a" }}>✓</span>
                       {item}
@@ -1008,7 +1027,7 @@ export default function ConferenceDetailPage() {
               </h2>
             </div>
             <div className="space-y-5">
-              {SCHEDULE.map((day) => (
+              {scheduleGroups.map((day) => (
                 <div key={day.day} className="lux-card p-7">
                   <h3
                     className="text-xl font-semibold mb-5 flex items-center gap-4"
@@ -1080,6 +1099,24 @@ export default function ConferenceDetailPage() {
                   <span className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: "var(--bg-subtle)" }}>🌐</span>
                   <a href={displayWebsite} target="_blank" rel="noopener noreferrer" style={{ color: "var(--blue)" }}>{displayWebsite}</a>
                 </div>
+                {displayInstagram && (
+                  <div className="flex items-center gap-3 text-sm">
+                    <span className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: "var(--bg-subtle)" }}>📸</span>
+                    <a href={displayInstagram} target="_blank" rel="noopener noreferrer" style={{ color: "var(--blue)" }}>Instagram</a>
+                  </div>
+                )}
+                {displayLinkedin && (
+                  <div className="flex items-center gap-3 text-sm">
+                    <span className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: "var(--bg-subtle)" }}>💼</span>
+                    <a href={displayLinkedin} target="_blank" rel="noopener noreferrer" style={{ color: "var(--blue)" }}>LinkedIn</a>
+                  </div>
+                )}
+                {displayTwitter && (
+                  <div className="flex items-center gap-3 text-sm">
+                    <span className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: "var(--bg-subtle)" }}>𝕏</span>
+                    <a href={displayTwitter} target="_blank" rel="noopener noreferrer" style={{ color: "var(--blue)" }}>X / Twitter</a>
+                  </div>
+                )}
               </div>
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.2em] mb-3" style={{ color: "var(--fg-muted)" }}>

@@ -10,7 +10,7 @@ import { useAuth } from "@/lib/auth-context";
 import { OrganizerCommittee, Registration, RegistrationCategory } from "@/lib/types";
 import { getPhaseStatus, resolveRegistrationPrice } from "@/lib/pricing";
 
-type Step = 1 | 2 | 3 | 4 | 5;
+type Step = 1 | 2 | 3 | 4;
 
 const createConfirmationId = () => `MYM-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
 
@@ -45,13 +45,13 @@ export default function CheckoutPage() {
   const [thirdPreferenceCommitteeId, setThirdPreferenceCommitteeId] = useState("");
   const [portfolioPreferencePrimary, setPortfolioPreferencePrimary] = useState("");
   const [portfolioPreferenceSecondary, setPortfolioPreferenceSecondary] = useState("");
-  const [answers, setAnswers] = useState<Record<string, string | number | boolean>>({});
+  const [answers, setAnswers] = useState<Record<string, string | number | boolean | string[]>>({});
   const [cardNumber, setCardNumber] = useState("");
   const [cardName, setCardName] = useState(user?.name || "");
   const [expiry, setExpiry] = useState("");
   const [cvv, setCvv] = useState("");
   const [loading, setLoading] = useState(false);
-  const [confirmationId, setConfirmationId] = useState("");
+  const [uploadedFiles, setUploadedFiles] = useState<Record<string, string[]>>({});
 
   const organizerConference = organizerConferences.find((conference) => conference.id === params.id);
   const marketplaceConference = CONFERENCES.find((conference) => conference.id === params.id);
@@ -146,7 +146,6 @@ export default function CheckoutPage() {
     setLoading(true);
     await new Promise((resolve) => setTimeout(resolve, 1800));
     const confId = createConfirmationId();
-    setConfirmationId(confId);
 
     const registration: Registration = {
       id: confId,
@@ -176,11 +175,11 @@ export default function CheckoutPage() {
 
     addRegistration(registration);
     setLoading(false);
-    setStep(5);
+    router.push("/dashboard");
   };
 
   const isStep1Valid = !!selectedCategoryId;
-  const isStep2Valid = !!selectedCategory && selectedCategory.formFields.every(
+  const isStep2Valid = !!selectedCategory && phone.trim().length > 0 && selectedCategory.formFields.every(
     (field) => !field.required || answers[field.id] !== undefined
   ) && delegationSizeValid;
   const isStep3Valid = (!selectedCategory?.requiresCommitteeSelection || !!selectedCommitteeId) && committeeQuestionsValid;
@@ -198,15 +197,13 @@ export default function CheckoutPage() {
           <header className="app-header">
             <div className="app-header-copy">
               <div className="section-label mb-3">
-                {step === 5 ? "Confirmation" : `Checkout · Step ${step}/4`}
+                {`Checkout · Step ${step}/4`}
               </div>
               <h1 className="app-title">
-                {step === 5 ? "Registration Confirmed" : "Complete Your Registration"}
+                Complete Your Registration
               </h1>
               <p className="app-subtitle mt-2">
-                {step === 5
-                  ? "Your seat is reserved. A confirmation has been sent to your email."
-                  : displayTitle}
+                {displayTitle}
               </p>
             </div>
             <div className="app-header-actions">
@@ -216,7 +213,7 @@ export default function CheckoutPage() {
             </div>
           </header>
 
-          {step < 5 && (
+          {step <= 4 && (
             <div className="app-card mb-6 flex items-center gap-4">
               <div
                 className="w-14 h-14 rounded-2xl flex items-center justify-center flex-shrink-0"
@@ -258,7 +255,7 @@ export default function CheckoutPage() {
                     {getCategoryTypeLabel(category.applicationType)}
                   </p>
                   <p className="text-xs mt-1" style={{ color: "var(--fg-muted)" }}>{category.description || "No description provided."}</p>
-                  {category.pricingPhases.length > 0 && (
+                  {(category.applicationType === "delegate" || category.applicationType === "delegation") && category.pricingPhases.length > 0 && (
                     <div className="mt-2 flex flex-wrap gap-1.5">
                       {category.pricingPhases.map((phase) => {
                         const status = getPhaseStatus(phase, new Date());
@@ -266,7 +263,7 @@ export default function CheckoutPage() {
                           status === "Active" ? "badge-green" : status === "Upcoming" ? "badge-blue" : "badge-gray";
                         return (
                           <span key={phase.id} className={`badge ${badgeClass}`}>
-                            {phase.name} · {status}
+                            {phase.name} · {status === "Ended" ? "Ended" : status}
                           </span>
                         );
                       })}
@@ -298,7 +295,7 @@ export default function CheckoutPage() {
               </div>
               <input value={fullName} onChange={(event) => { setFullName(event.target.value); setAnswers((prev) => ({ ...prev, fullName: event.target.value })); }} className="input-base" placeholder="Full Name" />
               <input value={school} onChange={(event) => { setSchool(event.target.value); setAnswers((prev) => ({ ...prev, school: event.target.value })); }} className="input-base" placeholder="School / University" />
-              <input value={phone} onChange={(event) => { setPhone(event.target.value); setAnswers((prev) => ({ ...prev, phone: event.target.value })); }} className="input-base" placeholder="Phone" />
+              <input value={phone} onChange={(event) => { setPhone(event.target.value); setAnswers((prev) => ({ ...prev, phone: event.target.value })); }} className="input-base" placeholder="Phone *" required />
               {selectedCategory.formFields.map((field) => (
                 <div key={field.id}>
                   <label className="block text-sm font-semibold mb-1.5" style={{ color: "var(--fg)" }}>
@@ -318,6 +315,56 @@ export default function CheckoutPage() {
                       <input type="checkbox" checked={Boolean(answers[field.id])} onChange={(event) => setAnswers((prev) => ({ ...prev, [field.id]: event.target.checked }))} />
                       Yes
                     </label>
+                  ) : field.type === "file" ? (
+                    <div className="space-y-2">
+                      <input
+                        className="input-base"
+                        type="file"
+                        multiple={(field.maxFiles || 1) > 1}
+                        onChange={(event) => {
+                          const files = Array.from(event.target.files || []);
+                          const maxFiles = field.maxFiles || 1;
+                          const maxFileSizeMb = field.maxFileSizeMb || 5;
+                          if (files.length > maxFiles) {
+                            alert(`You can upload up to ${maxFiles} files.`);
+                            event.target.value = "";
+                            return;
+                          }
+                          const overLimit = files.find((file) => file.size > maxFileSizeMb * 1024 * 1024);
+                          if (overLimit) {
+                            alert(`Each file must be under ${maxFileSizeMb}MB.`);
+                            event.target.value = "";
+                            return;
+                          }
+                          const readPromises = files.map(
+                            (file) =>
+                              new Promise<string>((resolve, reject) => {
+                                const reader = new FileReader();
+                                reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : "");
+                                reader.onerror = () => reject(new Error("Failed to read file."));
+                                reader.readAsDataURL(file);
+                              })
+                          );
+                          Promise.all(readPromises)
+                            .then((payload) => {
+                              const filtered = payload.filter(Boolean);
+                              setUploadedFiles((prev) => ({ ...prev, [field.id]: filtered }));
+                              setAnswers((prev) => ({ ...prev, [field.id]: filtered }));
+                            })
+                            .catch(() => {
+                              alert("Could not read one or more files.");
+                            });
+                        }}
+                      />
+                      <p className="text-xs" style={{ color: "var(--fg-muted)" }}>
+                        Max files: {field.maxFiles || 1} · Max size per file: {field.maxFileSizeMb || 5}MB
+                      </p>
+                      {(uploadedFiles[field.id] || []).length > 0 && (
+                        <p className="text-xs" style={{ color: "var(--fg-muted)" }}>
+                          {(uploadedFiles[field.id] || []).length} file(s) selected
+                        </p>
+                      )}
+                    </div>
                   ) : (
                     <input className="input-base" type={field.type === "number" ? "number" : field.type === "date" ? "date" : "text"} value={String(answers[field.id] ?? "")} onChange={(event) => setAnswers((prev) => ({ ...prev, [field.id]: field.type === "number" ? Number(event.target.value) : event.target.value }))} placeholder={field.placeholder} />
                   )}
@@ -471,7 +518,7 @@ export default function CheckoutPage() {
               <div className="flex gap-3">
                 <button onClick={() => setStep(2)} className="btn btn-ghost flex-1">← Back</button>
                 <button onClick={() => setStep(4)} disabled={!isStep3Valid} className="btn btn-primary flex-[2]" style={{ opacity: isStep3Valid ? 1 : 0.5 }}>
-                  Continue to Payment →
+                  Continue to Preview →
                 </button>
               </div>
             </div>
@@ -479,7 +526,14 @@ export default function CheckoutPage() {
 
           {step === 4 && (
             <div className="card p-8 rounded-2xl space-y-4">
-              <h2 className="text-xl font-bold" style={{ color: "var(--fg)" }}>Payment Details</h2>
+              <h2 className="text-xl font-bold" style={{ color: "var(--fg)" }}>Preview & Payment</h2>
+              <div className="rounded-xl p-4 space-y-1" style={{ background: "var(--bg-subtle)", border: "1px solid var(--border)" }}>
+                <p className="text-sm font-semibold" style={{ color: "var(--fg)" }}>Review your submission</p>
+                <p className="text-xs" style={{ color: "var(--fg-muted)" }}>Name: {fullName || "N/A"}</p>
+                <p className="text-xs" style={{ color: "var(--fg-muted)" }}>Phone: {phone || "N/A"}</p>
+                <p className="text-xs" style={{ color: "var(--fg-muted)" }}>Category: {selectedCategory?.name || "N/A"}</p>
+                <p className="text-xs" style={{ color: "var(--fg-muted)" }}>Committee: {selectedCommittee?.name || "N/A"}</p>
+              </div>
               <input value={cardNumber} onChange={(event) => setCardNumber(formatCardNumber(event.target.value))} className="input-base" placeholder="Card Number" maxLength={19} />
               <input value={cardName} onChange={(event) => setCardName(event.target.value)} className="input-base" placeholder="Name on Card" />
               <div className="grid grid-cols-2 gap-4">
@@ -506,22 +560,6 @@ export default function CheckoutPage() {
                 <button onClick={handlePay} disabled={!isStep4Valid || loading} className="btn btn-primary flex-[2]" style={{ opacity: isStep4Valid && !loading ? 1 : 0.5 }}>
                   {loading ? "Processing..." : `Pay ${currencySymbol}${priceResult.amount}.00`}
                 </button>
-              </div>
-            </div>
-          )}
-
-          {step === 5 && (
-            <div className="card p-10 rounded-2xl text-center space-y-6">
-              <h2 className="text-3xl font-black" style={{ color: "var(--fg)" }}>You&apos;re Registered!</h2>
-              <div className="rounded-2xl p-5 text-left space-y-3" style={{ background: "var(--bg-subtle)", border: "1.5px solid var(--border)" }}>
-                <div className="flex justify-between text-sm"><span style={{ color: "var(--fg-muted)" }}>Confirmation ID</span><span style={{ color: "var(--blue)" }}>{confirmationId}</span></div>
-                <div className="flex justify-between text-sm"><span style={{ color: "var(--fg-muted)" }}>Category</span><span style={{ color: "var(--fg)" }}>{selectedCategory?.name}</span></div>
-                <div className="flex justify-between text-sm"><span style={{ color: "var(--fg-muted)" }}>Committee</span><span style={{ color: "var(--fg)" }}>{selectedCommittee?.name || "N/A"}</span></div>
-                <div className="flex justify-between text-sm"><span style={{ color: "var(--fg-muted)" }}>Amount Paid</span><span style={{ color: "var(--success)", fontWeight: 700 }}>{currencySymbol}{priceResult.amount}.00</span></div>
-              </div>
-              <div className="flex flex-col sm:flex-row gap-3">
-                <Link href="/dashboard" className="btn btn-primary flex-1">Go to Dashboard →</Link>
-                <Link href="/marketplace" className="btn btn-ghost flex-1">Browse More →</Link>
               </div>
             </div>
           )}

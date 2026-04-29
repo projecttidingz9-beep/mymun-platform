@@ -236,6 +236,7 @@ const normalizeOrganizerConference = (raw: unknown): OrganizerConference | null 
                   id: String(rawChair.id ?? `chair-${index}-${chairIndex}`),
                   name: String(rawChair.name ?? ""),
                   email: rawChair.email ? String(rawChair.email) : undefined,
+                  role: rawChair.role ? String(rawChair.role) : undefined,
                 };
               }).filter((chair) => chair.name.trim())
             : committee.chairName
@@ -244,6 +245,7 @@ const normalizeOrganizerConference = (raw: unknown): OrganizerConference | null 
                     id: `chair-${index}-0`,
                     name: String(committee.chairName),
                     email: committee.chairEmail ? String(committee.chairEmail) : undefined,
+                    role: "Chair",
                   },
                 ]
               : [],
@@ -303,7 +305,7 @@ const normalizeOrganizerConference = (raw: unknown): OrganizerConference | null 
       })
     : [
         {
-          id: "cat-default",
+          id: "cat-delegate",
           name: "Delegate Registration",
           description: "Default registration category migrated from legacy event format.",
           basePrice: legacyFee,
@@ -311,6 +313,43 @@ const normalizeOrganizerConference = (raw: unknown): OrganizerConference | null 
           isOpen: true,
           deadlineOverride: undefined,
           requiresCommitteeSelection: true,
+          formFields: [],
+          pricingPhases: [],
+        },
+        {
+          id: "cat-chair",
+          name: "Chair Registration",
+          description: "Executive board and chair applications.",
+          basePrice: legacyFee,
+          applicationType: "chair",
+          isOpen: true,
+          deadlineOverride: undefined,
+          requiresCommitteeSelection: true,
+          formFields: [],
+          pricingPhases: [],
+        },
+        {
+          id: "cat-delegation",
+          name: "Delegation Registration",
+          description: "Register an entire delegation.",
+          basePrice: legacyFee,
+          applicationType: "delegation",
+          isOpen: true,
+          deadlineOverride: undefined,
+          requiresCommitteeSelection: true,
+          formFields: [],
+          pricingPhases: [],
+          maxDelegatesPerDelegation: 10,
+        },
+        {
+          id: "cat-organizer",
+          name: "Organising Committee Registration",
+          description: "Internal organising team onboarding category.",
+          basePrice: 0,
+          applicationType: "organizer",
+          isOpen: true,
+          deadlineOverride: undefined,
+          requiresCommitteeSelection: false,
           formFields: [],
           pricingPhases: [],
         },
@@ -354,8 +393,9 @@ const normalizeOrganizerConference = (raw: unknown): OrganizerConference | null 
             : [],
           responses:
             typeof applicant.responses === "object" && applicant.responses !== null
-              ? (applicant.responses as Record<string, string | number | boolean>)
+              ? (applicant.responses as Record<string, string | number | boolean | string[]>)
               : {},
+          phone: applicant.phone ? String(applicant.phone) : undefined,
           paid: Boolean(applicant.paid),
           amount: applicant.amount === undefined ? undefined : Number(applicant.amount),
           registrationId: applicant.registrationId ? String(applicant.registrationId) : undefined,
@@ -420,6 +460,21 @@ const normalizeOrganizerConference = (raw: unknown): OrganizerConference | null 
     capacity: Number(conference.capacity ?? 0),
     startDate: String(conference.startDate ?? ""),
     endDate: String(conference.endDate ?? ""),
+    whatIsIncluded: Array.isArray(conference.whatIsIncluded)
+      ? conference.whatIsIncluded.map((item) => String(item)).filter(Boolean)
+      : [],
+    conferenceSchedule: Array.isArray(conference.conferenceSchedule)
+      ? conference.conferenceSchedule.map((entry, index) => {
+          const item = entry as Record<string, unknown>;
+          return {
+            id: String(item.id ?? `schedule-${index}`),
+            day: String(item.day ?? ""),
+            fromTime: String(item.fromTime ?? ""),
+            toTime: String(item.toTime ?? ""),
+            title: String(item.title ?? ""),
+          };
+        })
+      : [],
     registrationDeadline:
       conference.registrationDeadline === undefined
         ? undefined
@@ -718,6 +773,8 @@ interface AuthContextType {
         | "contactDetail"
         | "tags"
         | "venue"
+        | "startDate"
+        | "endDate"
         | "description"
         | "termsAndConditions"
         | "refundPolicy"
@@ -739,6 +796,8 @@ interface AuthContextType {
         | "reviews"
         | "statusEmailTemplates"
         | "commonDocuments"
+        | "whatIsIncluded"
+        | "conferenceSchedule"
       >
     >
   ) => void;
@@ -964,6 +1023,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         paid: reg.paid,
         amount: reg.amount,
         responses: reg.formAnswers,
+        phone:
+          typeof reg.formAnswers.phone === "string" ? reg.formAnswers.phone : undefined,
         registrationId: reg.id,
         registeredAt: reg.registeredAt,
         userId: updated.id,

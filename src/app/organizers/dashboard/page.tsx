@@ -30,6 +30,8 @@ const buildPreviewDraft = (conference?: OrganizerConference | null) => ({
   country: conference?.country || "",
   organizerName: conference?.organizerName || "",
   venue: conference?.venue || "",
+  startDate: conference?.startDate || "",
+  endDate: conference?.endDate || "",
   description: conference?.description || "",
   termsAndConditions: conference?.termsAndConditions || "",
   refundPolicy: conference?.refundPolicy || "",
@@ -44,7 +46,42 @@ const buildPreviewDraft = (conference?: OrganizerConference | null) => ({
   tags: (conference?.tags || []).join(", "),
   capacity: conference?.capacity || 0,
   level: conference?.level || "Open",
+  whatIsIncluded: (conference?.whatIsIncluded || []).join("\n"),
 });
+
+const normalizeScheduleEntries = (
+  raw: unknown
+): Array<{ id: string; day: string; fromTime: string; toTime: string; title: string }> => {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((entry, index) => {
+      const item = entry as Record<string, unknown>;
+      return {
+        id: String(item.id || `schedule-${Date.now()}-${index}`),
+        day: String(item.day || ""),
+        fromTime: String(item.fromTime || ""),
+        toTime: String(item.toTime || ""),
+        title: String(item.title || ""),
+      };
+    })
+    .filter((item) => item.day && item.fromTime && item.toTime && item.title);
+};
+
+const groupScheduleByDay = (
+  entries: Array<{ id: string; day: string; fromTime: string; toTime: string; title: string }>
+) => {
+  const dayOrder: string[] = [];
+  const grouped = new Map<string, Array<{ id: string; day: string; fromTime: string; toTime: string; title: string }>>();
+  entries.forEach((entry) => {
+    const dayName = entry.day.trim() || "Day";
+    if (!grouped.has(dayName)) {
+      grouped.set(dayName, []);
+      dayOrder.push(dayName);
+    }
+    grouped.get(dayName)?.push(entry);
+  });
+  return dayOrder.map((dayName) => ({ dayName, events: grouped.get(dayName) || [] }));
+};
 
 const getCommitteeTypeLabel = (committee: OrganizerConference["committees"][number]) => {
   if (committee.committeeType === "UN") return "UN";
@@ -279,6 +316,22 @@ const ORGANIZER_SECTION_META: Record<OrganizerSectionId, { label: string; eyebro
   },
 };
 
+const SECTION_SEARCH_KEYWORDS: Record<OrganizerSectionId, string[]> = {
+  overview: ["workspace", "analytics", "stats"],
+  conferences: ["active conference", "create conference"],
+  preview: ["conference tags", "conference stats", "what's included", "schedule", "place", "dates", "venue"],
+  applications: ["delegate application", "chair application", "organiser application", "delegation application"],
+  participants: ["participant profile", "allotment", "country matrix"],
+  committees: ["add committee", "edit details", "chairs", "agenda"],
+  pricing: ["registration categories", "pricing phases", "question builder", "steps"],
+  transactions: ["payments", "refunds", "invoices"],
+  communications: ["announcements", "status email templates"],
+  awards: ["reviews", "awards module"],
+  team: ["organizer team", "members"],
+  cameraCheckIn: ["qr scanner", "camera check in"],
+  settings: ["documents", "partner conference", "previous editions", "banking details"],
+};
+
 const isOrganizerSectionId = (value: string): value is OrganizerSectionId =>
   Object.prototype.hasOwnProperty.call(ORGANIZER_SECTION_META, value);
 
@@ -298,9 +351,7 @@ export default function OrganizerDashboardPage() {
     updateApplicantStatus,
     addAnnouncement,
     assignApplicant,
-    inviteApplicant,
     unassignApplicant,
-    overrideSeatLimit,
     updateOrganizerConferenceConfig,
     updateOrganizerCommitteeConfig,
     addOrganizerCommittee,
@@ -313,14 +364,17 @@ export default function OrganizerDashboardPage() {
   const [selectedConferenceId, setSelectedConferenceId] = useState<string>("");
   const [activeSection, setActiveSection] = useState<OrganizerSectionId>("overview");
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [globalSearchInput, setGlobalSearchInput] = useState("");
   const [globalSearchQuery, setGlobalSearchQuery] = useState("");
   const [globalSearchOpen, setGlobalSearchOpen] = useState(false);
   const [announcementTitle, setAnnouncementTitle] = useState("");
   const [announcementMessage, setAnnouncementMessage] = useState("");
   const [assignmentCommittee, setAssignmentCommittee] = useState<Record<string, string>>({});
   const [assignmentPortfolio, setAssignmentPortfolio] = useState<Record<string, string>>({});
-  const [allowOverride, setAllowOverride] = useState<Record<string, boolean>>({});
   const [selectedApplicantId, setSelectedApplicantId] = useState<string>("");
+  const [applicationTypeTab, setApplicationTypeTab] = useState<
+    "delegate" | "chair" | "organizer" | "delegation"
+  >("delegate");
   const [applicantProfileDrawerOpen, setApplicantProfileDrawerOpen] = useState(false);
   const [participantSearchQuery, setParticipantSearchQuery] = useState("");
   const [participantStatusFilter, setParticipantStatusFilter] = useState<
@@ -389,7 +443,7 @@ export default function OrganizerDashboardPage() {
     agenda: "",
     agendasText: "",
     logoImageUrl: "",
-    chairs: [] as Array<{ id: string; name: string; email: string }>,
+    chairs: [] as Array<{ id: string; name: string; email: string; role: string }>,
     customQuestions: [] as Array<{ id: string; question: string; required: boolean }>,
   });
   const [serverOverview, setServerOverview] = useState<{
@@ -405,7 +459,11 @@ export default function OrganizerDashboardPage() {
   const [previewDraft, setPreviewDraft] = useState(() =>
     buildPreviewDraft(organizerConferences[0] || null)
   );
+  const [previewScheduleDraft, setPreviewScheduleDraft] = useState<
+    Array<{ id: string; day: string; fromTime: string; toTime: string; title: string }>
+  >(normalizeScheduleEntries(organizerConferences[0]?.conferenceSchedule || []));
   const [previewSaveStatus, setPreviewSaveStatus] = useState("");
+  const [deleteConfirmStep, setDeleteConfirmStep] = useState<0 | 1>(0);
   const [partnerRelationships, setPartnerRelationships] = useState<PartnerRelationship[]>([]);
   const [partnerInviteTargetId, setPartnerInviteTargetId] = useState("");
   const [partnerActionStatus, setPartnerActionStatus] = useState("");
@@ -580,52 +638,24 @@ export default function OrganizerDashboardPage() {
               id: chair.id || `${committee.id}-chair-${index}`,
               name: chair.name || "",
               email: chair.email || "",
+              role: chair.role || "",
             }))
           : committee.chairName
-            ? [{ id: `${committee.id}-chair-legacy`, name: committee.chairName, email: committee.chairEmail || "" }]
+            ? [{ id: `${committee.id}-chair-legacy`, name: committee.chairName, email: committee.chairEmail || "", role: "Chair" }]
             : [],
       customQuestions: (committee.customQuestions ?? []).map((q) => ({ ...q })),
     });
     setDetailsEditorOpen(true);
   };
 
-  const addCommitteeQuestionDraft = () => {
-    setDetailsEditorDraft((prev) => ({
-      ...prev,
-      customQuestions: [
-        ...prev.customQuestions,
-        { id: `q-${Date.now()}`, question: "", required: false },
-      ],
-    }));
-  };
-
-  const updateCommitteeQuestionDraft = (
-    questionId: string,
-    patch: Partial<{ question: string; required: boolean }>
-  ) => {
-    setDetailsEditorDraft((prev) => ({
-      ...prev,
-      customQuestions: prev.customQuestions.map((q) =>
-        q.id === questionId ? { ...q, ...patch } : q
-      ),
-    }));
-  };
-
-  const removeCommitteeQuestionDraft = (questionId: string) => {
-    setDetailsEditorDraft((prev) => ({
-      ...prev,
-      customQuestions: prev.customQuestions.filter((q) => q.id !== questionId),
-    }));
-  };
-
   const addChairDraftRow = () => {
     setDetailsEditorDraft((prev) => ({
       ...prev,
-      chairs: [...prev.chairs, { id: `chair-${Date.now()}`, name: "", email: "" }],
+      chairs: [...prev.chairs, { id: `chair-${Date.now()}`, name: "", email: "", role: "" }],
     }));
   };
 
-  const updateChairDraftRow = (chairId: string, patch: Partial<{ name: string; email: string }>) => {
+  const updateChairDraftRow = (chairId: string, patch: Partial<{ name: string; email: string; role: string }>) => {
     setDetailsEditorDraft((prev) => ({
       ...prev,
       chairs: prev.chairs.map((chair) => (chair.id === chairId ? { ...chair, ...patch } : chair)),
@@ -639,28 +669,60 @@ export default function OrganizerDashboardPage() {
     }));
   };
 
-  const onCommitteeLogoFileSelected = (event: ChangeEvent<HTMLInputElement>) => {
+  const readImageFileToDataUrl = (
+    event: ChangeEvent<HTMLInputElement>,
+    onDone: (dataUrl: string) => void,
+    maxMb: number,
+    label: string
+  ) => {
     const selectedFile = event.target.files?.[0];
     if (!selectedFile) return;
     if (!selectedFile.type.startsWith("image/")) {
-      alert("Please choose an image file.");
+      alert(`Please choose an image file for ${label}.`);
       event.target.value = "";
       return;
     }
-    const maxBytes = 2 * 1024 * 1024;
+    const maxBytes = maxMb * 1024 * 1024;
     if (selectedFile.size > maxBytes) {
-      alert("Committee logo must be under 2MB.");
+      alert(`${label} must be under ${maxMb}MB.`);
       event.target.value = "";
       return;
     }
     const reader = new FileReader();
     reader.onload = () => {
-      const result = reader.result;
-      if (typeof result === "string") {
-        setDetailsEditorDraft((prev) => ({ ...prev, logoImageUrl: result }));
-      }
+      const result = typeof reader.result === "string" ? reader.result : "";
+      if (!result) return;
+      onDone(result);
+      event.target.value = "";
     };
     reader.readAsDataURL(selectedFile);
+  };
+
+  const onPreviewLogoFileSelected = (event: ChangeEvent<HTMLInputElement>) => {
+    readImageFileToDataUrl(
+      event,
+      (result) => setPreviewDraft((prev) => ({ ...prev, logoImageUrl: result })),
+      2,
+      "conference logo"
+    );
+  };
+
+  const onPreviewBannerFileSelected = (event: ChangeEvent<HTMLInputElement>) => {
+    readImageFileToDataUrl(
+      event,
+      (result) => setPreviewDraft((prev) => ({ ...prev, bannerImageUrl: result })),
+      3,
+      "conference banner"
+    );
+  };
+
+  const onCommitteeLogoFileSelected = (event: ChangeEvent<HTMLInputElement>) => {
+    readImageFileToDataUrl(
+      event,
+      (result) => setDetailsEditorDraft((prev) => ({ ...prev, logoImageUrl: result })),
+      2,
+      "committee logo"
+    );
   };
 
   const onAwardLogoFileSelected = (event: ChangeEvent<HTMLInputElement>) => {
@@ -708,6 +770,7 @@ export default function OrganizerDashboardPage() {
         id: chair.id || `${detailsEditorCommitteeId}-chair-${index}`,
         name: chair.name.trim(),
         email: chair.email.trim() || undefined,
+        role: chair.role.trim() || undefined,
       }))
       .filter((chair) => chair.name);
     updateOrganizerCommitteeConfig(conferenceId, detailsEditorCommitteeId, {
@@ -718,7 +781,7 @@ export default function OrganizerDashboardPage() {
       chairs: normalizedChairs,
       chairName: normalizedChairs[0]?.name,
       chairEmail: normalizedChairs[0]?.email,
-      customQuestions: [...derivedTopics, ...detailsEditorDraft.customQuestions],
+      customQuestions: derivedTopics,
     });
     setDetailsEditorOpen(false);
     setDetailsEditorCommitteeId("");
@@ -833,6 +896,17 @@ export default function OrganizerDashboardPage() {
     }
     return organizerConferences[0];
   }, [organizerConferences, selectedConferenceId]);
+  const previewScheduleByDay = useMemo(
+    () => groupScheduleByDay(previewScheduleDraft),
+    [previewScheduleDraft]
+  );
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setGlobalSearchQuery(globalSearchInput);
+    }, 180);
+    return () => window.clearTimeout(timer);
+  }, [globalSearchInput]);
 
   const globalSearchResults = useMemo(() => {
     const q = globalSearchQuery.trim().toLowerCase();
@@ -846,7 +920,8 @@ export default function OrganizerDashboardPage() {
 
     (Object.keys(ORGANIZER_SECTION_META) as OrganizerSectionId[]).forEach((sectionId) => {
       const meta = ORGANIZER_SECTION_META[sectionId];
-      const haystack = `${meta.label} ${meta.eyebrow} ${meta.subtitle}`.toLowerCase();
+      const keywordText = (SECTION_SEARCH_KEYWORDS[sectionId] || []).join(" ");
+      const haystack = `${meta.label} ${meta.eyebrow} ${meta.subtitle} ${keywordText}`.toLowerCase();
       if (!haystack.includes(q)) return;
       pushUnique({
         id: `section-${sectionId}`,
@@ -924,6 +999,8 @@ export default function OrganizerDashboardPage() {
         country: previewDraft.country,
         organizerName: previewDraft.organizerName,
         venue: previewDraft.venue || undefined,
+        startDate: previewDraft.startDate || selectedConference.startDate,
+        endDate: previewDraft.endDate || selectedConference.endDate,
         description: previewDraft.description || undefined,
         termsAndConditions: previewDraft.termsAndConditions.trim() || undefined,
         refundPolicy: previewDraft.refundPolicy.trim() || undefined,
@@ -943,12 +1020,17 @@ export default function OrganizerDashboardPage() {
           .filter(Boolean),
         capacity: Number(previewDraft.capacity) || selectedConference.capacity,
         level: previewDraft.level as OrganizerConference["level"],
+        whatIsIncluded: previewDraft.whatIsIncluded
+          .split("\n")
+          .map((entry) => entry.trim())
+          .filter(Boolean),
+        conferenceSchedule: previewScheduleDraft,
       });
       await fetch(`/api/organizers/conference-config/${selectedConference.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify(previewDraft),
+        body: JSON.stringify({ ...previewDraft, conferenceSchedule: previewScheduleDraft }),
       }).catch(() => null);
       setPreviewSaveStatus("Preview and policy changes saved.");
       window.setTimeout(() => setPreviewSaveStatus(""), 3500);
@@ -960,10 +1042,42 @@ export default function OrganizerDashboardPage() {
   const previewHasUnsavedChanges = (() => {
     if (!selectedConference) return false;
     const base = buildPreviewDraft(selectedConference);
-    return (Object.keys(base) as Array<keyof typeof base>).some(
+    const hasDraftDifferences = (Object.keys(base) as Array<keyof typeof base>).some(
       (key) => (previewDraft[key] ?? "") !== (base[key] ?? "")
     );
+    if (hasDraftDifferences) return true;
+    const baseSchedule = normalizeScheduleEntries(selectedConference.conferenceSchedule || []);
+    return JSON.stringify(baseSchedule) !== JSON.stringify(previewScheduleDraft);
   })();
+  const hasPaidRegistrations = Boolean(
+    selectedConference?.applicants.some((applicant) => applicant.paid)
+  );
+
+  const deleteSelectedConference = async () => {
+    if (!selectedConference || hasPaidRegistrations) return;
+    if (deleteConfirmStep === 0) {
+      setDeleteConfirmStep(1);
+      return;
+    }
+    try {
+      const response = await fetch(`/api/organizers/conferences/${selectedConference.id}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      if (!response.ok && response.status !== 404) {
+        const payload = (await response.json().catch(() => ({}))) as { error?: string };
+        throw new Error(payload.error || "Unable to delete conference.");
+      }
+      removeOrganizerConference(selectedConference.id);
+      setSelectedConferenceId("");
+      setActiveSection("conferences");
+      setPreviewSaveStatus("Conference deleted.");
+    } catch (error) {
+      setPreviewSaveStatus(error instanceof Error ? error.message : "Unable to delete conference.");
+    } finally {
+      setDeleteConfirmStep(0);
+    }
+  };
 
   useEffect(() => {
     if (!selectedConference) return;
@@ -987,6 +1101,8 @@ export default function OrganizerDashboardPage() {
           country: String(cfg.country ?? prev.country),
           organizerName: String(cfg.organizerName ?? prev.organizerName),
           venue: String(cfg.venue ?? prev.venue),
+          startDate: String(cfg.startDate ?? prev.startDate),
+          endDate: String(cfg.endDate ?? prev.endDate),
           description: String(cfg.description ?? prev.description),
           termsAndConditions: String(cfg.termsAndConditions ?? prev.termsAndConditions),
           refundPolicy: String(cfg.refundPolicy ?? prev.refundPolicy),
@@ -1000,14 +1116,28 @@ export default function OrganizerDashboardPage() {
           twitter: String((cfg.socialLinks as { twitter?: string } | undefined)?.twitter ?? prev.twitter),
           tags: Array.isArray(cfg.tags) ? cfg.tags.map((entry) => String(entry)).join(", ") : prev.tags,
           capacity: Number(cfg.capacity ?? prev.capacity),
+          whatIsIncluded: Array.isArray(cfg.whatIsIncluded)
+            ? cfg.whatIsIncluded.map((entry) => String(entry)).join("\n")
+            : prev.whatIsIncluded,
           level:
             cfg.level === "High School" || cfg.level === "University" || cfg.level === "Open"
               ? cfg.level
               : prev.level,
         }));
+        if (Array.isArray(cfg.conferenceSchedule)) {
+          setPreviewScheduleDraft(normalizeScheduleEntries(cfg.conferenceSchedule));
+        }
       })
       .catch(() => null);
   }, [selectedConference]);
+
+  useEffect(() => {
+    setPreviewScheduleDraft(normalizeScheduleEntries(selectedConference?.conferenceSchedule || []));
+  }, [selectedConference?.id, selectedConference?.conferenceSchedule]);
+
+  useEffect(() => {
+    setDeleteConfirmStep(0);
+  }, [selectedConference?.id, activeSection]);
 
   useEffect(() => {
     if (!selectedConference) return;
@@ -1107,6 +1237,12 @@ export default function OrganizerDashboardPage() {
     action: "accept" | "reject" | "cancel" | "unlink"
   ) => {
     if (!selectedConference) return;
+    if (action === "reject" || action === "cancel" || action === "unlink") {
+      const firstConfirm = window.confirm("This will remove the current partnership link. Continue?");
+      if (!firstConfirm) return;
+      const secondConfirm = window.confirm("Please confirm again to proceed with this removal action.");
+      if (!secondConfirm) return;
+    }
     setPartnerActionStatus("Updating partnership...");
     try {
       const response =
@@ -1133,7 +1269,7 @@ export default function OrganizerDashboardPage() {
   };
 
   const resetDocumentDraft = (scope: "common" | "committee") => {
-    const resetState: DocumentDraft = { title: "", category: "background-guide", sourceType: "url", url: "" };
+    const resetState: DocumentDraft = { title: "", category: "background-guide", sourceType: "upload", url: "" };
     if (scope === "common") {
       setCommonDocumentDraft(resetState);
       return;
@@ -1202,6 +1338,10 @@ export default function OrganizerDashboardPage() {
 
   const removeCommonDocument = (documentId: string) => {
     if (!selectedConference) return;
+    const firstConfirm = window.confirm("Remove this document?");
+    if (!firstConfirm) return;
+    const secondConfirm = window.confirm("Please confirm again: permanently remove this document?");
+    if (!secondConfirm) return;
     updateOrganizerConferenceConfig(selectedConference.id, {
       commonDocuments: (selectedConference.commonDocuments || []).filter((entry) => entry.id !== documentId),
     });
@@ -1226,6 +1366,10 @@ export default function OrganizerDashboardPage() {
 
   const removeCommitteeDocument = (committeeId: string, documentId: string) => {
     if (!selectedConference) return;
+    const firstConfirm = window.confirm("Remove this committee document?");
+    if (!firstConfirm) return;
+    const secondConfirm = window.confirm("Please confirm again: permanently remove this committee document?");
+    if (!secondConfirm) return;
     const committee = selectedConference.committees.find((entry) => entry.id === committeeId);
     if (!committee) return;
     updateOrganizerCommitteeConfig(selectedConference.id, committeeId, {
@@ -1276,6 +1420,21 @@ export default function OrganizerDashboardPage() {
       byCity: Array.from(cityMap.entries()).map(([city, count]) => ({ city, count })),
     };
   }, [selectedConference]);
+  const filteredApplications = useMemo(() => {
+    if (!selectedConference) return [];
+    const categoryTypeById = new Map(
+      selectedConference.registrationCategories.map((category) => [
+        category.id,
+        category.applicationType || "delegate",
+      ])
+    );
+    return selectedConference.applicants.filter((applicant) => {
+      const categoryType = applicant.categoryId
+        ? categoryTypeById.get(applicant.categoryId) || "delegate"
+        : "delegate";
+      return categoryType === applicationTypeTab;
+    });
+  }, [selectedConference, applicationTypeTab]);
 
   const selectedApplicant = useMemo(() => {
     if (!selectedConference || !selectedApplicantId) return null;
@@ -1599,6 +1758,7 @@ export default function OrganizerDashboardPage() {
   const clearBankingDetails = () => {
     if (!selectedConference) return;
     if (!confirm("Clear all banking details for this conference?")) return;
+    if (!confirm("Please confirm again: clear all banking details?")) return;
     updateOrganizerConferenceConfig(selectedConference.id, {
       bankingDetails: { verificationStatus: "Unverified", updatedAt: new Date().toISOString() },
     });
@@ -1654,12 +1814,21 @@ export default function OrganizerDashboardPage() {
                 Manage your conferences, delegate applications, and communications from one place.
               </p>
             </div>
-            <div className="app-header-actions">
+            <div className="app-header-actions flex flex-col gap-3 items-stretch sm:items-end">
+              {selectedConference && (
+                <button
+                  type="button"
+                  className="btn btn-ghost text-sm w-full sm:w-[320px] justify-center"
+                  onClick={() => changeActiveSection("cameraCheckIn")}
+                >
+                  Open Camera Check-In
+                </button>
+              )}
               <div className="relative w-full sm:w-[320px]">
                 <input
-                  value={globalSearchQuery}
+                  value={globalSearchInput}
                   onChange={(event) => {
-                    setGlobalSearchQuery(event.target.value);
+                    setGlobalSearchInput(event.target.value);
                     setGlobalSearchOpen(true);
                   }}
                   onFocus={() => setGlobalSearchOpen(true)}
@@ -1685,6 +1854,7 @@ export default function OrganizerDashboardPage() {
                           onClick={() => {
                             result.onSelect();
                             setGlobalSearchOpen(false);
+                            setGlobalSearchInput("");
                             setGlobalSearchQuery("");
                           }}
                         >
@@ -1696,7 +1866,7 @@ export default function OrganizerDashboardPage() {
                   </div>
                 )}
               </div>
-              <Link href="/organizers/create" className="btn btn-primary text-sm">
+              <Link href="/organizers/create" className="btn btn-primary text-sm w-full sm:w-[320px] justify-center">
                 + Create New Conference
               </Link>
             </div>
@@ -1735,21 +1905,6 @@ export default function OrganizerDashboardPage() {
                     </option>
                   ))}
                 </select>
-              {selectedConference && (
-                <button
-                  type="button"
-                  className="btn btn-danger-ghost text-xs mt-2"
-                  onClick={() => {
-                    const confirmed = window.confirm(`Delete conference "${selectedConference.title}"? This cannot be undone.`);
-                    if (!confirmed) return;
-                    removeOrganizerConference(selectedConference.id);
-                    setSelectedConferenceId("");
-                    setActiveSection("conferences");
-                  }}
-                >
-                  Delete Conference
-                </button>
-              )}
                 {selectedConference && (
                   <p className="text-[11px]" style={{ color: "var(--fg-muted)" }}>
                     {selectedConference.city}, {selectedConference.country} · {selectedConference.status}
@@ -2048,6 +2203,29 @@ export default function OrganizerDashboardPage() {
                         Save Preview Settings
                       </button>
                     </div>
+                    <div
+                      className="rounded-xl p-3 mb-4"
+                      style={{ background: "var(--bg-subtle)", border: "1px solid var(--border)" }}
+                    >
+                      <p className="text-sm font-semibold" style={{ color: "var(--fg)" }}>Conference deletion</p>
+                      {hasPaidRegistrations ? (
+                        <p className="text-xs mt-1" style={{ color: "var(--danger-fg)" }}>
+                          This conference cannot be deleted because paid registrations exist.
+                        </p>
+                      ) : (
+                        <p className="text-xs mt-1" style={{ color: "var(--fg-muted)" }}>
+                          Deletion requires double confirmation.
+                        </p>
+                      )}
+                      <button
+                        type="button"
+                        className="btn btn-danger-ghost text-xs mt-3"
+                        disabled={hasPaidRegistrations}
+                        onClick={() => void deleteSelectedConference()}
+                      >
+                        {deleteConfirmStep === 0 ? "Delete Conference" : "Confirm Delete Conference"}
+                      </button>
+                    </div>
                     <div className="grid lg:grid-cols-2 gap-6">
                       <div className="space-y-2">
                         <input value={previewDraft.title} onChange={(event) => setPreviewDraft((prev) => ({ ...prev, title: event.target.value }))} className="input-base text-sm" placeholder="Conference title" />
@@ -2057,9 +2235,155 @@ export default function OrganizerDashboardPage() {
                         </div>
                         <input value={previewDraft.organizerName} onChange={(event) => setPreviewDraft((prev) => ({ ...prev, organizerName: event.target.value }))} className="input-base text-sm" placeholder="Organizer name" />
                         <input value={previewDraft.venue} onChange={(event) => setPreviewDraft((prev) => ({ ...prev, venue: event.target.value }))} className="input-base text-sm" placeholder="Venue" />
-                        <input value={previewDraft.logoImageUrl} onChange={(event) => setPreviewDraft((prev) => ({ ...prev, logoImageUrl: event.target.value }))} className="input-base text-sm" placeholder="Logo URL" />
-                        <input value={previewDraft.bannerImageUrl} onChange={(event) => setPreviewDraft((prev) => ({ ...prev, bannerImageUrl: event.target.value }))} className="input-base text-sm" placeholder="Banner URL" />
+                        <div className="grid grid-cols-2 gap-2">
+                          <input value={previewDraft.startDate} onChange={(event) => setPreviewDraft((prev) => ({ ...prev, startDate: event.target.value }))} className="input-base text-sm" placeholder="Start date (YYYY-MM-DD)" />
+                          <input value={previewDraft.endDate} onChange={(event) => setPreviewDraft((prev) => ({ ...prev, endDate: event.target.value }))} className="input-base text-sm" placeholder="End date (YYYY-MM-DD)" />
+                        </div>
+                        <label className="text-xs font-semibold" style={{ color: "var(--fg-muted)" }}>Logo upload</label>
+                        <input type="file" accept="image/*" className="input-base text-sm" onChange={onPreviewLogoFileSelected} />
+                        <label className="text-xs font-semibold" style={{ color: "var(--fg-muted)" }}>Banner upload</label>
+                        <input type="file" accept="image/*" className="input-base text-sm" onChange={onPreviewBannerFileSelected} />
                         <textarea value={previewDraft.description} onChange={(event) => setPreviewDraft((prev) => ({ ...prev, description: event.target.value }))} className="input-base text-sm" rows={3} placeholder="Conference description" />
+                        <textarea
+                          value={previewDraft.whatIsIncluded}
+                          onChange={(event) => setPreviewDraft((prev) => ({ ...prev, whatIsIncluded: event.target.value }))}
+                          className="input-base text-sm"
+                          rows={5}
+                          placeholder={"What's Included (one item per line)\nDelegate kit\nSocial events\nCertificate"}
+                        />
+                        <div className="rounded-xl p-3 space-y-2" style={{ border: "1px solid var(--border)" }}>
+                          <div className="flex items-center justify-between">
+                            <p className="text-xs font-semibold" style={{ color: "var(--fg)" }}>Conference Schedule</p>
+                            <button
+                              type="button"
+                              className="btn btn-ghost text-xs"
+                              onClick={() =>
+                                setPreviewScheduleDraft((prev) => {
+                                  const nextDay = `Day ${new Set(prev.map((entry) => entry.day)).size + 1}`;
+                                  return [
+                                    ...prev,
+                                    {
+                                      id: `schedule-${Date.now()}`,
+                                      day: nextDay,
+                                      fromTime: "",
+                                      toTime: "",
+                                      title: "",
+                                    },
+                                  ];
+                                })
+                              }
+                            >
+                              + Add Day
+                            </button>
+                          </div>
+                          {previewScheduleDraft.length === 0 && (
+                            <p className="text-xs" style={{ color: "var(--fg-muted)" }}>
+                              No schedule events yet.
+                            </p>
+                          )}
+                          <div className="space-y-2">
+                            {previewScheduleByDay.map((dayGroup) => (
+                              <div key={dayGroup.dayName} className="rounded-lg p-2 space-y-2" style={{ border: "1px solid var(--border)" }}>
+                                <div className="flex items-center justify-between gap-2">
+                                  <input
+                                    className="input-base text-xs"
+                                    value={dayGroup.dayName}
+                                    onChange={(event) =>
+                                      setPreviewScheduleDraft((prev) =>
+                                        prev.map((item) =>
+                                          item.day === dayGroup.dayName ? { ...item, day: event.target.value } : item
+                                        )
+                                      )
+                                    }
+                                    placeholder="Day name"
+                                  />
+                                  <div className="flex items-center gap-2">
+                                    <button
+                                      type="button"
+                                      className="btn btn-ghost text-xs"
+                                      onClick={() =>
+                                        setPreviewScheduleDraft((prev) => [
+                                          ...prev,
+                                          {
+                                            id: `schedule-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                                            day: dayGroup.dayName,
+                                            fromTime: "",
+                                            toTime: "",
+                                            title: "",
+                                          },
+                                        ])
+                                      }
+                                    >
+                                      + Add Event
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="btn btn-danger-ghost text-xs"
+                                      onClick={() =>
+                                        setPreviewScheduleDraft((prev) =>
+                                          prev.filter((item) => item.day !== dayGroup.dayName)
+                                        )
+                                      }
+                                    >
+                                      Remove Day
+                                    </button>
+                                  </div>
+                                </div>
+                                <div className="space-y-2">
+                                  {dayGroup.events.map((entry) => (
+                                    <div key={entry.id} className="grid grid-cols-[110px_110px_1fr_70px] gap-2">
+                                      <input
+                                        className="input-base text-xs"
+                                        value={entry.fromTime}
+                                        onChange={(event) =>
+                                          setPreviewScheduleDraft((prev) =>
+                                            prev.map((item) =>
+                                              item.id === entry.id ? { ...item, fromTime: event.target.value } : item
+                                            )
+                                          )
+                                        }
+                                        placeholder="From"
+                                      />
+                                      <input
+                                        className="input-base text-xs"
+                                        value={entry.toTime}
+                                        onChange={(event) =>
+                                          setPreviewScheduleDraft((prev) =>
+                                            prev.map((item) =>
+                                              item.id === entry.id ? { ...item, toTime: event.target.value } : item
+                                            )
+                                          )
+                                        }
+                                        placeholder="To"
+                                      />
+                                      <input
+                                        className="input-base text-xs"
+                                        value={entry.title}
+                                        onChange={(event) =>
+                                          setPreviewScheduleDraft((prev) =>
+                                            prev.map((item) =>
+                                              item.id === entry.id ? { ...item, title: event.target.value } : item
+                                            )
+                                          )
+                                        }
+                                        placeholder="Event title"
+                                      />
+                                      <button
+                                        type="button"
+                                        className="btn btn-danger-ghost text-xs"
+                                        onClick={() =>
+                                          setPreviewScheduleDraft((prev) => prev.filter((item) => item.id !== entry.id))
+                                        }
+                                      >
+                                        Remove
+                                      </button>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
                         <div className="grid grid-cols-2 gap-2">
                           <input value={previewDraft.website} onChange={(event) => setPreviewDraft((prev) => ({ ...prev, website: event.target.value }))} className="input-base text-sm" placeholder="Website URL" />
                           <input value={previewDraft.instagram} onChange={(event) => setPreviewDraft((prev) => ({ ...prev, instagram: event.target.value }))} className="input-base text-sm" placeholder="Instagram URL" />
@@ -2151,7 +2475,7 @@ export default function OrganizerDashboardPage() {
 
                   {activeSection === "preview" && (
                     <div className="card p-6 rounded-2xl mt-6">
-                      <h3 className="text-lg font-bold mb-4" style={{ color: "var(--fg)" }}>Editable Meta Data</h3>
+                      <h3 className="text-lg font-bold mb-4" style={{ color: "var(--fg)" }}>Conference Stats & Tags</h3>
                       <div className="grid md:grid-cols-3 gap-3">
                         <div>
                           <label className="text-xs font-semibold" style={{ color: "var(--fg-muted)" }}>Capacity</label>
@@ -2180,7 +2504,7 @@ export default function OrganizerDashboardPage() {
                           </select>
                         </div>
                         <div>
-                          <label className="text-xs font-semibold" style={{ color: "var(--fg-muted)" }}>Tags</label>
+                          <label className="text-xs font-semibold" style={{ color: "var(--fg-muted)" }}>Conference Tags</label>
                           <input
                             className="input-base text-sm mt-1"
                             placeholder="e.g. Crisis, International, Beginner Friendly"
@@ -2211,7 +2535,10 @@ export default function OrganizerDashboardPage() {
                         <button
                           type="button"
                           className="btn btn-ghost text-xs"
-                          onClick={() => setPreviewDraft(buildPreviewDraft(selectedConference))}
+                          onClick={() => {
+                            setPreviewDraft(buildPreviewDraft(selectedConference));
+                            setPreviewScheduleDraft(normalizeScheduleEntries(selectedConference.conferenceSchedule || []));
+                          }}
                         >
                           Discard
                         </button>
@@ -2228,23 +2555,41 @@ export default function OrganizerDashboardPage() {
 
                   {activeSection === "applications" && (
                   <div className="card p-6 rounded-2xl">
-                    <h3 className="text-lg font-bold mb-4" style={{ color: "var(--fg)" }}>Applications</h3>
-                    <div className="grid md:grid-cols-5 gap-2 mb-4">
-                      {(["Pending", "Invited", "Allotted", "Waitlisted", "Rejected"] as const).map((status) => {
-                        const count = selectedConference.applicants.filter((entry) => entry.status === status).length;
+                    <h3 className="text-2xl font-bold mb-4" style={{ color: "var(--fg)" }}>Applications</h3>
+                    <div className="flex flex-wrap gap-2 mb-4">
+                      {([
+                        { id: "delegate", label: "Delegate Applications" },
+                        { id: "chair", label: "Chair Applications" },
+                        { id: "organizer", label: "Organiser Applications" },
+                        { id: "delegation", label: "Delegation Applications" },
+                      ] as const).map((tab) => (
+                        <button
+                          key={tab.id}
+                          type="button"
+                          className="btn btn-ghost text-xs"
+                          data-active={applicationTypeTab === tab.id ? "true" : "false"}
+                          onClick={() => setApplicationTypeTab(tab.id)}
+                        >
+                          {tab.label}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="grid md:grid-cols-3 gap-2 mb-4">
+                      {(["Pending", "Allotted", "Rejected"] as const).map((status) => {
+                        const count = filteredApplications.filter((entry) => entry.status === status).length;
                         return (
                           <div key={status} className="rounded-xl p-3" style={{ background: "var(--bg-subtle)" }}>
-                            <p className="text-[11px] font-semibold" style={{ color: "var(--fg-muted)" }}>{status}</p>
-                            <p className="text-lg font-black" style={{ color: "var(--fg)" }}>{count}</p>
+                            <p className="text-sm font-semibold" style={{ color: "var(--fg-muted)" }}>{status}</p>
+                            <p className="text-2xl font-black" style={{ color: "var(--fg)" }}>{count}</p>
                           </div>
                         );
                       })}
                     </div>
-                    {selectedConference.applicants.length === 0 ? (
+                    {filteredApplications.length === 0 ? (
                       <p className="text-sm" style={{ color: "var(--fg-muted)" }}>No applications yet.</p>
                     ) : (
                       <div className="space-y-3">
-                        {selectedConference.applicants.map((applicant) => {
+                        {filteredApplications.map((applicant) => {
                           const suggestedCommittee = applicant.committeePreferences?.[0] || applicant.committeePreference;
                           const selectedCommitteeId = assignmentCommittee[applicant.id] || applicant.assignedCommitteeId || "";
                           const selectedCommittee = selectedConference.committees.find((committee) => committee.id === selectedCommitteeId);
@@ -2258,16 +2603,13 @@ export default function OrganizerDashboardPage() {
                             >
                               <div className="flex items-start justify-between gap-4 flex-wrap">
                                 <div>
-                                  <p className="font-semibold text-base" style={{ color: "var(--fg)" }}>{applicant.name}</p>
-                                  <p className="text-sm" style={{ color: "var(--fg-muted)" }}>{applicant.school}</p>
-                                  <p className="text-sm mt-1" style={{ color: "var(--fg-muted)" }}>
+                                  <p className="font-semibold text-lg" style={{ color: "var(--fg)" }}>{applicant.name}</p>
+                                  <p className="text-base" style={{ color: "var(--fg-muted)" }}>{applicant.school}</p>
+                                  <p className="text-base mt-1" style={{ color: "var(--fg-muted)" }}>
                                     Category: {applicant.categoryName || "N/A"} · Country: {applicant.countryPreference || "N/A"}
                                   </p>
-                                  <p className="text-sm mt-1" style={{ color: "var(--fg-muted)" }}>
-                                    Preferences: {(applicant.committeePreferences || [applicant.committeePreference]).filter(Boolean).join(" → ") || "Not provided"}
-                                  </p>
                                   {suggestedCommittee && (
-                                    <p className="text-sm mt-1" style={{ color: "var(--blue)" }}>
+                                    <p className="text-base mt-1" style={{ color: "var(--blue)" }}>
                                       Suggested allotment: {suggestedCommittee}
                                     </p>
                                   )}
@@ -2287,7 +2629,7 @@ export default function OrganizerDashboardPage() {
                                 </span>
                               </div>
 
-                              <div className="grid md:grid-cols-2 gap-2 mt-3">
+                              <div className={`grid gap-2 mt-3 ${applicationTypeTab === "chair" ? "md:grid-cols-1" : "md:grid-cols-2"}`}>
                                 <select
                                   className="input-base text-sm app-select-modern"
                                   value={selectedCommitteeId}
@@ -2308,36 +2650,27 @@ export default function OrganizerDashboardPage() {
                                     );
                                   })}
                                 </select>
-                                <select
-                                  className="input-base text-sm app-select-modern"
-                                  value={selectedPortfolioId}
-                                  onChange={(event) =>
-                                    setAssignmentPortfolio((prev) => ({ ...prev, [applicant.id]: event.target.value }))
-                                  }
-                                  disabled={!selectedCommittee || (selectedCommittee.portfolios ?? []).length === 0}
-                                >
-                                  <option value="">Select portfolio (optional)</option>
-                                  {(selectedCommittee?.portfolios ?? []).map((portfolio) => {
-                                    const available = portfolio.seatCount - portfolio.assignedApplicantIds.length;
-                                    return (
-                                      <option key={portfolio.id} value={portfolio.id}>
-                                        {portfolio.name} ({available}/{portfolio.seatCount} available)
-                                      </option>
-                                    );
-                                  })}
-                                </select>
+                                {applicationTypeTab !== "chair" && (
+                                  <select
+                                    className="input-base text-sm app-select-modern"
+                                    value={selectedPortfolioId}
+                                    onChange={(event) =>
+                                      setAssignmentPortfolio((prev) => ({ ...prev, [applicant.id]: event.target.value }))
+                                    }
+                                    disabled={!selectedCommittee || (selectedCommittee.portfolios ?? []).length === 0}
+                                  >
+                                    <option value="">Select portfolio (optional)</option>
+                                    {(selectedCommittee?.portfolios ?? []).map((portfolio) => {
+                                      const available = portfolio.seatCount - portfolio.assignedApplicantIds.length;
+                                      return (
+                                        <option key={portfolio.id} value={portfolio.id}>
+                                          {portfolio.name} ({available}/{portfolio.seatCount} available)
+                                        </option>
+                                      );
+                                    })}
+                                  </select>
+                                )}
                               </div>
-
-                              <label className="flex items-center gap-2 mt-2 text-xs" style={{ color: "var(--fg-muted)" }}>
-                                <input
-                                  type="checkbox"
-                                  checked={Boolean(allowOverride[applicant.id])}
-                                  onChange={(event) =>
-                                    setAllowOverride((prev) => ({ ...prev, [applicant.id]: event.target.checked }))
-                                  }
-                                />
-                                Allow seat override for this allocation
-                              </label>
 
                               <div className="flex gap-2 mt-3 flex-wrap">
                                 <button
@@ -2351,21 +2684,13 @@ export default function OrganizerDashboardPage() {
                                 </button>
                                 <button
                                   onClick={() => {
-                                    const result = inviteApplicant(selectedConference.id, applicant.id);
-                                    if (!result.ok) alert(result.message);
-                                  }}
-                                  className="btn btn-ghost text-xs"
-                                >
-                                  Invite
-                                </button>
-                                <button
-                                  onClick={() => {
                                     const result = assignApplicant({
                                       conferenceId: selectedConference.id,
                                       applicantId: applicant.id,
                                       committeeId: selectedCommitteeId,
-                                      portfolioId: selectedPortfolioId || undefined,
-                                      allowOverride: Boolean(allowOverride[applicant.id]),
+                                      portfolioId:
+                                        applicationTypeTab === "chair" ? undefined : selectedPortfolioId || undefined,
+                                      allowOverride: false,
                                     });
                                     if (!result.ok) alert(result.message);
                                   }}
@@ -2821,6 +3146,13 @@ export default function OrganizerDashboardPage() {
                             <p className="text-xs mt-1" style={{ color: "var(--fg-muted)" }}>
                               Type: {getCommitteeTypeLabel(committee)} · Chair: {committee.chairName || "TBA"} · Visibility: {committee.isPublic === false ? "Private" : "Public"}
                             </p>
+                            {(committee.chairs || []).length > 0 && (
+                              <p className="text-xs mt-1" style={{ color: "var(--fg-muted)" }}>
+                                Chairs: {(committee.chairs || [])
+                                  .map((chair) => `${chair.name}${chair.role ? ` (${chair.role})` : ""}`)
+                                  .join(", ")}
+                              </p>
+                            )}
                             <p className="text-xs mt-1" style={{ color: "var(--fg-muted)" }}>
                               Mode: {committee.memberMode === "UN_COUNTRY" ? "UN Countries" : "Custom Members"}
                             </p>
@@ -2854,18 +3186,6 @@ export default function OrganizerDashboardPage() {
                                 ))}
                               </div>
                             )}
-                            <button
-                              className="btn btn-ghost text-xs mt-2 mr-2"
-                              onClick={() => {
-                                const nextSeat = prompt(`Override seat limit for ${committee.name}`, String(committee.seatCount));
-                                if (!nextSeat) return;
-                                const parsed = Number(nextSeat);
-                                if (Number.isNaN(parsed) || parsed <= 0) return;
-                                overrideSeatLimit(selectedConference.id, committee.id, parsed);
-                              }}
-                            >
-                              Manage Seats
-                            </button>
                             <button className="btn btn-ghost text-xs mt-2 mr-2" onClick={() => openDetailsEditor(committee)}>
                               Edit Details
                             </button>
@@ -3205,45 +3525,18 @@ export default function OrganizerDashboardPage() {
                               <option value="rules">Rules</option>
                               <option value="other">Other</option>
                             </select>
-                            <select
-                              className="input-base text-xs"
-                              value={commonDocumentDraft.sourceType ?? "url"}
-                              onChange={(event) =>
-                                setCommonDocumentDraft((prev) => ({
-                                  ...prev,
-                                  sourceType: event.target.value as "upload" | "url",
-                                  url: event.target.value === "url" ? prev.url : "",
-                                  fileName: undefined,
-                                  mimeType: undefined,
-                                }))
-                              }
-                            >
-                              <option value="url">URL link</option>
-                              <option value="upload">Upload file</option>
-                            </select>
-                            {commonDocumentDraft.sourceType === "url" ? (
-                              <input
-                                className="input-base text-xs col-span-2"
-                                placeholder="https://example.com/guide.pdf"
-                                value={commonDocumentDraft.url ?? ""}
-                                onChange={(event) =>
-                                  setCommonDocumentDraft((prev) => ({ ...prev, url: event.target.value }))
-                                }
-                              />
-                            ) : (
-                              <input
-                                className="input-base text-xs col-span-2"
-                                type="file"
-                                accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.webp"
-                                onChange={(event) => {
-                                  const selectedFile = event.target.files?.[0];
-                                  if (!selectedFile) return;
-                                  readFileToDataUrl(selectedFile, (payload) => {
-                                    setCommonDocumentDraft((prev) => ({ ...prev, ...payload }));
-                                  });
-                                }}
-                              />
-                            )}
+                            <input
+                              className="input-base text-xs col-span-2"
+                              type="file"
+                              accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.webp"
+                              onChange={(event) => {
+                                const selectedFile = event.target.files?.[0];
+                                if (!selectedFile) return;
+                                readFileToDataUrl(selectedFile, (payload) => {
+                                  setCommonDocumentDraft((prev) => ({ ...prev, ...payload, sourceType: "upload" }));
+                                });
+                              }}
+                            />
                           </div>
                           <button className="btn btn-primary text-xs" onClick={addCommonDocument}>Add Common Document</button>
                           <div className="mt-2 space-y-1">
@@ -3299,45 +3592,18 @@ export default function OrganizerDashboardPage() {
                               <option value="rules">Rules</option>
                               <option value="other">Other</option>
                             </select>
-                            <select
-                              className="input-base text-xs"
-                              value={committeeDocumentDraft.sourceType ?? "url"}
-                              onChange={(event) =>
-                                setCommitteeDocumentDraft((prev) => ({
-                                  ...prev,
-                                  sourceType: event.target.value as "upload" | "url",
-                                  url: event.target.value === "url" ? prev.url : "",
-                                  fileName: undefined,
-                                  mimeType: undefined,
-                                }))
-                              }
-                            >
-                              <option value="url">URL link</option>
-                              <option value="upload">Upload file</option>
-                            </select>
-                            {committeeDocumentDraft.sourceType === "url" ? (
-                              <input
-                                className="input-base text-xs col-span-2"
-                                placeholder="https://example.com/committee-guide.pdf"
-                                value={committeeDocumentDraft.url ?? ""}
-                                onChange={(event) =>
-                                  setCommitteeDocumentDraft((prev) => ({ ...prev, url: event.target.value }))
-                                }
-                              />
-                            ) : (
-                              <input
-                                className="input-base text-xs col-span-2"
-                                type="file"
-                                accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.webp"
-                                onChange={(event) => {
-                                  const selectedFile = event.target.files?.[0];
-                                  if (!selectedFile) return;
-                                  readFileToDataUrl(selectedFile, (payload) => {
-                                    setCommitteeDocumentDraft((prev) => ({ ...prev, ...payload }));
-                                  });
-                                }}
-                              />
-                            )}
+                            <input
+                              className="input-base text-xs col-span-2"
+                              type="file"
+                              accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.webp"
+                              onChange={(event) => {
+                                const selectedFile = event.target.files?.[0];
+                                if (!selectedFile) return;
+                                readFileToDataUrl(selectedFile, (payload) => {
+                                  setCommitteeDocumentDraft((prev) => ({ ...prev, ...payload, sourceType: "upload" }));
+                                });
+                              }}
+                            />
                           </div>
                           <button className="btn btn-primary text-xs" onClick={addCommitteeDocument}>
                             Add Committee Document
@@ -3409,9 +3675,25 @@ export default function OrganizerDashboardPage() {
                           </button>
                           <div className="mt-2 space-y-1">
                             {(selectedConference.previousEditions || []).map((edition) => (
-                              <p key={edition.id} className="text-xs" style={{ color: "var(--fg-muted)" }}>
-                                {edition.year} · {edition.title} · {edition.delegates} delegates
-                              </p>
+                              <div key={edition.id} className="flex items-center justify-between gap-2">
+                                <p className="text-xs" style={{ color: "var(--fg-muted)" }}>
+                                  {edition.year} · {edition.title} · {edition.delegates} delegates
+                                </p>
+                                <button
+                                  className="btn btn-ghost text-xs"
+                                  onClick={() => {
+                                    const first = window.confirm(`Remove previous edition "${edition.title}"?`);
+                                    if (!first) return;
+                                    const second = window.confirm("Please confirm again to remove this edition.");
+                                    if (!second) return;
+                                    updateOrganizerConferenceConfig(selectedConference.id, {
+                                      previousEditions: (selectedConference.previousEditions || []).filter((entry) => entry.id !== edition.id),
+                                    });
+                                  }}
+                                >
+                                  Remove
+                                </button>
+                              </div>
                             ))}
                           </div>
                         </div>
@@ -3614,11 +3896,15 @@ export default function OrganizerDashboardPage() {
                             </div>
                             <button
                               className="btn btn-ghost text-xs"
-                              onClick={() =>
+                              onClick={() => {
+                                const firstConfirm = window.confirm(`Remove team member ${member.name}?`);
+                                if (!firstConfirm) return;
+                                const secondConfirm = window.confirm("Please confirm again to remove this team member.");
+                                if (!secondConfirm) return;
                                 updateOrganizerConferenceConfig(selectedConference.id, {
                                   organizerTeam: (selectedConference.organizerTeam || []).filter((entry) => entry.id !== member.id),
-                                })
-                              }
+                                });
+                              }}
                             >
                               Remove
                             </button>
@@ -4222,6 +4508,7 @@ export default function OrganizerDashboardPage() {
                 <p><strong style={{ color: "var(--fg)" }}>School:</strong> {selectedApplicant.school || selectedApplicantUserProfile?.school || "N/A"}</p>
                 <p><strong style={{ color: "var(--fg)" }}>Country:</strong> {selectedApplicant.countryPreference || selectedApplicantUserProfile?.country || "N/A"}</p>
                 <p><strong style={{ color: "var(--fg)" }}>Category:</strong> {selectedApplicant.categoryName || "N/A"}</p>
+                <p><strong style={{ color: "var(--fg)" }}>Phone:</strong> {selectedApplicant.phone || selectedApplicantUserProfile?.phone || "N/A"}</p>
                 <p><strong style={{ color: "var(--fg)" }}>Status:</strong> {selectedApplicant.status}</p>
                 <p><strong style={{ color: "var(--fg)" }}>Payment:</strong> {selectedApplicant.paid ? "Paid" : "Unpaid"}</p>
                 <p><strong style={{ color: "var(--fg)" }}>Amount:</strong> {typeof selectedApplicant.amount === "number" ? `$${selectedApplicant.amount}` : "N/A"}</p>
@@ -4280,7 +4567,7 @@ export default function OrganizerDashboardPage() {
             </div>
 
             <div className="rounded-xl p-3 mb-4 space-y-2" style={{ background: "var(--bg-subtle)" }}>
-              <p className="text-xs font-semibold" style={{ color: "var(--fg)" }}>Submitted Answers</p>
+              <p className="text-sm font-semibold" style={{ color: "var(--fg)" }}>Submitted Answers</p>
               {selectedApplicantResponses.length === 0 ? (
                 <p className="text-xs" style={{ color: "var(--fg-muted)" }}>No submitted responses found.</p>
               ) : (
@@ -4310,12 +4597,29 @@ export default function OrganizerDashboardPage() {
                       }
                     }
                     return (
-                      <div key={key} className="rounded-lg p-2 text-xs" style={{ background: "var(--bg)" }}>
+                      <div key={key} className="rounded-lg p-3 text-sm" style={{ background: "var(--bg)" }}>
                         <p className="font-semibold" style={{ color: "var(--fg)" }}>{label}</p>
-                        <p style={{ color: "var(--fg-muted)" }}>
-                          {/* If it's a date string, it might look like 2026-04-24T... try to display just date if it fits */}
-                          {typeof value === "boolean" ? (value ? "Yes" : "No") : value === null || value === undefined || value === "" ? "N/A" : String(value)}
-                        </p>
+                        {typeof value === "string" && value.startsWith("data:") ? (
+                          value.startsWith("data:image/") ? (
+                            <Image src={value} alt={label} width={180} height={120} className="rounded-md mt-2 h-auto w-auto max-h-40 object-cover" unoptimized />
+                          ) : (
+                            <a href={value} target="_blank" rel="noreferrer" className="text-sm mt-2 inline-block" style={{ color: "var(--blue)" }}>
+                              Open uploaded file
+                            </a>
+                          )
+                        ) : Array.isArray(value) ? (
+                          <div className="mt-2 space-y-1">
+                            {value.map((item, index) => (
+                              <a key={`${key}-${index}`} href={String(item)} target="_blank" rel="noreferrer" className="text-sm block" style={{ color: "var(--blue)" }}>
+                                Open file {index + 1}
+                              </a>
+                            ))}
+                          </div>
+                        ) : (
+                          <p style={{ color: "var(--fg-muted)" }}>
+                            {typeof value === "boolean" ? (value ? "Yes" : "No") : value === null || value === undefined || value === "" ? "N/A" : String(value)}
+                          </p>
+                        )}
                       </div>
                     );
                   })}
@@ -4513,12 +4817,6 @@ export default function OrganizerDashboardPage() {
             <div className="rounded-xl p-3 mb-4 space-y-2" style={{ background: "var(--bg-subtle)" }}>
               <p className="text-xs font-semibold" style={{ color: "var(--fg)" }}>Committee Logo</p>
               <input
-                className="input-base text-sm"
-                placeholder="Logo URL"
-                value={detailsEditorDraft.logoImageUrl}
-                onChange={(event) => setDetailsEditorDraft((prev) => ({ ...prev, logoImageUrl: event.target.value }))}
-              />
-              <input
                 type="file"
                 accept="image/png,image/jpeg,image/webp,image/gif"
                 onChange={onCommitteeLogoFileSelected}
@@ -4539,7 +4837,7 @@ export default function OrganizerDashboardPage() {
               )}
               <div className="space-y-2">
                 {detailsEditorDraft.chairs.map((chair) => (
-                  <div key={chair.id} className="grid grid-cols-[1fr_1fr_80px] gap-2">
+                  <div key={chair.id} className="grid grid-cols-[1fr_1fr_1fr_80px] gap-2">
                     <input
                       className="input-base text-xs"
                       placeholder="Chair name"
@@ -4552,50 +4850,18 @@ export default function OrganizerDashboardPage() {
                       value={chair.email}
                       onChange={(event) => updateChairDraftRow(chair.id, { email: event.target.value })}
                     />
+                    <input
+                      className="input-base text-xs"
+                      placeholder="Role (Vice Chair, Rapporteur...)"
+                      value={chair.role}
+                      onChange={(event) => updateChairDraftRow(chair.id, { role: event.target.value })}
+                    />
                     <button
                       className="btn btn-danger-ghost text-xs"
                       onClick={() => removeChairDraftRow(chair.id)}
                     >
                       Remove
                     </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="rounded-xl p-3 mb-4 space-y-2" style={{ background: "var(--bg-subtle)" }}>
-              <div className="flex items-center justify-between">
-                <p className="text-xs font-semibold" style={{ color: "var(--fg)" }}>Registration Questions</p>
-                <button className="btn btn-ghost text-xs" onClick={addCommitteeQuestionDraft}>+ Add Question</button>
-              </div>
-              {detailsEditorDraft.customQuestions.length === 0 && (
-                <p className="text-xs" style={{ color: "var(--fg-muted)" }}>No custom questions for this committee.</p>
-              )}
-              <div className="space-y-2">
-                {detailsEditorDraft.customQuestions.map((q) => (
-                  <div key={q.id} className="space-y-2 p-2 rounded-lg" style={{ border: "1px solid var(--border)" }}>
-                    <div className="flex gap-2">
-                      <input
-                        className="input-base text-xs flex-1"
-                        placeholder="Question text"
-                        value={q.question}
-                        onChange={(event) => updateCommitteeQuestionDraft(q.id, { question: event.target.value })}
-                      />
-                      <button
-                        className="btn btn-danger-ghost text-xs"
-                        onClick={() => removeCommitteeQuestionDraft(q.id)}
-                      >
-                        Remove
-                      </button>
-                    </div>
-                    <label className="flex items-center gap-2 text-[10px]" style={{ color: "var(--fg-muted)" }}>
-                      <input
-                        type="checkbox"
-                        checked={q.required}
-                        onChange={(event) => updateCommitteeQuestionDraft(q.id, { required: event.target.checked })}
-                      />
-                      Required for registration
-                    </label>
                   </div>
                 ))}
               </div>

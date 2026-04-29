@@ -54,6 +54,7 @@ export interface OrganizerCommitteeChair {
   id: string;
   name: string;
   email?: string;
+  role?: string;
 }
 
 export interface OrganizerCommitteeQuestion {
@@ -69,7 +70,7 @@ export interface OrganizerCommitteePortfolio {
   assignedApplicantIds: string[];
 }
 
-export type DynamicFieldType = "text" | "textarea" | "select" | "number" | "date" | "checkbox";
+export type DynamicFieldType = "text" | "textarea" | "select" | "number" | "date" | "checkbox" | "file";
 
 export interface DynamicFormField {
   id: string;
@@ -78,6 +79,8 @@ export interface DynamicFormField {
   required: boolean;
   placeholder?: string;
   options?: string[];
+  maxFiles?: number;
+  maxFileSizeMb?: number;
 }
 
 export interface PricingPhase {
@@ -218,7 +221,8 @@ export interface OrganizerApplicant {
   assignedAt?: string;
   overrideUsed?: boolean;
   assignmentHistory?: OrganizerAssignmentLog[];
-  responses?: Record<string, string | number | boolean>;
+  phone?: string;
+  responses?: Record<string, string | number | boolean | string[]>;
   paid: boolean;
   amount?: number;
   registrationId?: string;
@@ -259,6 +263,14 @@ export interface OrganizerConference {
   capacity: number;
   startDate: string;
   endDate: string;
+  whatIsIncluded?: string[];
+  conferenceSchedule?: Array<{
+    id: string;
+    day: string;
+    fromTime: string;
+    toTime: string;
+    title: string;
+  }>;
   registrationDeadline?: string;
   logoImageUrl?: string;
   bannerImageUrl?: string;
@@ -410,6 +422,8 @@ export interface OrganizerConferencePreviewConfig {
   contactDetail?: string;
   tags?: string[];
   venue?: string;
+  startDate?: string;
+  endDate?: string;
   description?: string;
   termsAndConditions?: string;
   refundPolicy?: string;
@@ -418,6 +432,14 @@ export interface OrganizerConferencePreviewConfig {
   logoImageUrl?: string;
   bannerImageUrl?: string;
   socialLinks?: OrganizerSocialLinks;
+  whatIsIncluded?: string[];
+  conferenceSchedule?: Array<{
+    id: string;
+    day: string;
+    fromTime: string;
+    toTime: string;
+    title: string;
+  }>;
   brandPrimaryColor?: string;
   brandSecondaryColor?: string;
 }
@@ -439,7 +461,7 @@ export interface Registration {
   assignedAt?: string;
   overrideUsed?: boolean;
   country?: string;
-  formAnswers: Record<string, string | number | boolean>;
+  formAnswers: Record<string, string | number | boolean | string[]>;
   pricingPhaseId?: string;
   pricingPhaseName?: string;
   status: "Confirmed" | "Waitlisted" | "Pending";

@@ -345,6 +345,10 @@ export default function DashboardPage() {
   };
 
   const saveProfile = () => {
+    if (!draftPhone.trim()) {
+      alert("Phone number is mandatory.");
+      return;
+    }
     const missingCertificateEntry = draftParticipations.find(
       (entry) => entry.conferenceName.trim() && !entry.certificateUrl
     );
@@ -1125,10 +1129,13 @@ export default function DashboardPage() {
                       <p className="text-xs font-semibold mb-1" style={{ color: "var(--fg)" }}>
                         Participations ({user.munParticipations?.length || 0})
                       </p>
+                      <p className="text-[11px] mb-1" style={{ color: "var(--fg-muted)" }}>
+                        Total conferences attended: {user.munParticipations?.length || 0}
+                      </p>
                       <div className="space-y-1">
-                        {(user.munParticipations || []).slice(0, 2).map((entry) => (
+                        {(user.munParticipations || []).slice(0, 3).map((entry, index) => (
                           <p key={entry.id} className="text-[11px]" style={{ color: "var(--fg-muted)" }}>
-                            {entry.conferenceName} {entry.year ? `(${entry.year})` : ""} {entry.committee ? `· ${entry.committee}` : ""}
+                            {index + 1}. {entry.conferenceName} {entry.year ? `(${entry.year})` : ""} {entry.committee ? `· ${entry.committee}` : ""}
                           </p>
                         ))}
                         {(user.munParticipations || []).length === 0 && (
@@ -1139,6 +1146,9 @@ export default function DashboardPage() {
                     <div>
                       <p className="text-xs font-semibold mb-1" style={{ color: "var(--fg)" }}>
                         Awards ({user.munAwards?.length || 0})
+                      </p>
+                      <p className="text-[11px] mb-1" style={{ color: "var(--fg-muted)" }}>
+                        Total awards won: {user.munAwards?.length || 0}
                       </p>
                       <div className="space-y-1">
                         {(user.munAwards || []).slice(0, 2).map((entry) => (

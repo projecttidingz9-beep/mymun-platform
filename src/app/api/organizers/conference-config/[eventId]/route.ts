@@ -43,6 +43,8 @@ export async function PATCH(
     country: typeof body.country === "string" ? body.country : undefined,
     organizerName: typeof body.organizerName === "string" ? body.organizerName : undefined,
     venue: typeof body.venue === "string" ? body.venue : undefined,
+    startDate: typeof body.startDate === "string" ? body.startDate : undefined,
+    endDate: typeof body.endDate === "string" ? body.endDate : undefined,
     description: typeof body.description === "string" ? body.description : undefined,
     termsAndConditions:
       typeof body.termsAndConditions === "string" ? body.termsAndConditions : undefined,
@@ -62,6 +64,23 @@ export async function PATCH(
             twitter?: string;
           })
         : undefined,
+    whatIsIncluded: Array.isArray(body.whatIsIncluded)
+      ? body.whatIsIncluded.map((entry) => String(entry)).filter(Boolean)
+      : undefined,
+    conferenceSchedule: Array.isArray(body.conferenceSchedule)
+      ? body.conferenceSchedule
+          .map((entry) => {
+            const item = entry as Record<string, unknown>;
+            return {
+              id: String(item.id || `schedule-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`),
+              day: String(item.day || ""),
+              fromTime: String(item.fromTime || ""),
+              toTime: String(item.toTime || ""),
+              title: String(item.title || ""),
+            };
+          })
+          .filter((entry) => entry.day && entry.fromTime && entry.toTime && entry.title)
+      : undefined,
   });
 
   return NextResponse.json({ config: saved });
