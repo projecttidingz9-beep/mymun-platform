@@ -91,7 +91,7 @@ export async function POST(request: NextRequest) {
         registrationId: pass.registrationId,
         title: "Check-in confirmed",
         message: `You have checked in successfully for ${pass.registration.event.title}.`,
-        type: "checkin",
+        type: "CHECKED_IN",
       },
     });
 

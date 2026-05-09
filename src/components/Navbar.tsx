@@ -7,6 +7,21 @@ import { usePathname } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import AuthModal from "./AuthModal";
 
+function MenuIcon({ children }: { children: React.ReactNode }) {
+  return (
+    <span
+      className="inline-flex items-center justify-center w-7 h-7 rounded-lg flex-shrink-0"
+      style={{
+        background: "color-mix(in srgb, var(--accent-warm) 14%, var(--bg) 86%)",
+        border: "1px solid color-mix(in srgb, var(--accent-warm) 32%, var(--border) 68%)",
+        color: "var(--fg)",
+      }}
+    >
+      {children}
+    </span>
+  );
+}
+
 const NAV_LINKS = [
   { label: "Marketplace", href: "/marketplace" },
   { label: "For Organizers", href: "/organizers" },
@@ -254,7 +269,15 @@ export default function Navbar({ openAuthModal }: NavbarProps) {
                             className="flex items-center gap-3 px-5 py-3 text-sm font-medium transition-colors user-menu-link"
                             style={{ color: "var(--fg)" }}
                           >
-                            📊 Dashboard
+                            <MenuIcon>
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="M3 3v18h18" strokeLinecap="round" strokeLinejoin="round" />
+                                <rect x="7" y="12" width="3" height="6" rx="1" />
+                                <rect x="12" y="9" width="3" height="9" rx="1" />
+                                <rect x="17" y="6" width="3" height="12" rx="1" />
+                              </svg>
+                            </MenuIcon>
+                            Dashboard
                           </Link>
                           <Link
                             href="/dashboard#profile"
@@ -262,7 +285,13 @@ export default function Navbar({ openAuthModal }: NavbarProps) {
                             className="flex items-center gap-3 px-5 py-3 text-sm font-medium transition-colors user-menu-link"
                             style={{ color: "var(--fg)" }}
                           >
-                            ⚙️ Settings
+                            <MenuIcon>
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <circle cx="12" cy="12" r="3" />
+                                <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6 1.7 1.7 0 0 1-3 0 1.7 1.7 0 0 0-1-.6 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.6-1 1.7 1.7 0 0 1 0-3 1.7 1.7 0 0 0 .6-1 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.6 1.7 1.7 0 0 1 3 0 1.7 1.7 0 0 0 1 .6 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9c.24.37.4.8.6 1 .73.11 1.4.47 1.4 2s-.67 1.89-1.4 2c-.2.2-.36.63-.6 1Z" strokeLinecap="round" strokeLinejoin="round" />
+                              </svg>
+                            </MenuIcon>
+                            Settings
                           </Link>
                         </>
                       )}
@@ -273,7 +302,13 @@ export default function Navbar({ openAuthModal }: NavbarProps) {
                           className="flex items-center gap-3 px-5 py-3 text-sm font-medium transition-colors user-menu-link"
                           style={{ color: "var(--fg)" }}
                         >
-                          🏢 Organizer Dashboard
+                          <MenuIcon>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <rect x="4" y="3" width="16" height="18" rx="2" />
+                              <path d="M9 8h1M14 8h1M9 12h1M14 12h1M9 16h1M14 16h1" strokeLinecap="round" />
+                            </svg>
+                          </MenuIcon>
+                          Organizer Dashboard
                         </Link>
                       )}
                     </div>
@@ -284,7 +319,21 @@ export default function Navbar({ openAuthModal }: NavbarProps) {
                         className="w-full flex items-center gap-3 px-5 py-3 text-sm font-medium transition-colors user-menu-link"
                         style={{ color: "#dc2626" }}
                       >
-                        🚪 Logout
+                        <span
+                          className="inline-flex items-center justify-center w-7 h-7 rounded-lg flex-shrink-0"
+                          style={{
+                            background: "rgba(220, 38, 38, 0.12)",
+                            border: "1px solid rgba(220, 38, 38, 0.28)",
+                            color: "#dc2626",
+                          }}
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" strokeLinecap="round" strokeLinejoin="round" />
+                            <path d="M16 17l5-5-5-5" strokeLinecap="round" strokeLinejoin="round" />
+                            <path d="M21 12H9" strokeLinecap="round" strokeLinejoin="round" />
+                          </svg>
+                        </span>
+                        Logout
                       </button>
                     </div>
                   </div>

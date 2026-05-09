@@ -1,9 +1,7 @@
-import { CONFERENCES } from "@/lib/data";
 import { Conference, OrganizerConference } from "@/lib/types";
 import { getActivePhase } from "@/lib/pricing";
 
 const LISTABLE_ORGANIZER_STATUSES = new Set<OrganizerConference["status"]>([
-  "Review",
   "Published",
 ]);
 
@@ -55,17 +53,40 @@ function inferRegion(country: string): Conference["region"] {
   return REGION_BY_COUNTRY[normalized] ?? "Asia";
 }
 
+function parseDayStart(value: string | undefined): number | null {
+  if (!value) return null;
+  const parsed = new Date(value).setHours(0, 0, 0, 0);
+  return Number.isNaN(parsed) ? null : parsed;
+}
+
 function getConferenceStatusBadge(conference: OrganizerConference): string {
   const today = new Date().setHours(0, 0, 0, 0);
-  const eventEnd = new Date(conference.endDate).setHours(0, 0, 0, 0);
-  if (!Number.isNaN(eventEnd) && eventEnd < today) return "Event Ended";
-  const activeCategoryPhase = conference.registrationCategories
-    .map((category) => getActivePhase(category.pricingPhases))
-    .find(Boolean);
-  if (activeCategoryPhase?.name) {
-    return `Phase ${activeCategoryPhase.name} Open`;
+  const eventEnd = parseDayStart(conference.endDate);
+  if (eventEnd !== null && eventEnd < today) return "Event Ended";
+
+  const openCategories = conference.registrationCategories.filter((category) => category.isOpen !== false);
+  const hasActivePhase = openCategories.some((category) => Boolean(getActivePhase(category.pricingPhases)));
+  if (hasActivePhase) return "Register Now";
+
+  const allPhaseWindows = openCategories.flatMap((category) => category.pricingPhases || []);
+  const hasUpcomingPhase = allPhaseWindows.some((phase) => {
+    const start = parseDayStart(phase.startDate);
+    return start !== null && start > today;
+  });
+  const hasEndedPhase = allPhaseWindows.some((phase) => {
+    const end = parseDayStart(phase.endDate);
+    return end !== null && end < today;
+  });
+
+  if (hasUpcomingPhase && !hasEndedPhase) return "Coming Soon";
+  if (hasUpcomingPhase && hasEndedPhase) return "Currently Registrations Closed";
+  if (openCategories.length === 0) return "Currently Registrations Closed";
+
+  const registrationDeadline = parseDayStart(conference.registrationDeadline);
+  if (registrationDeadline !== null && registrationDeadline >= today) {
+    return "Register Now";
   }
-  return "Coming Soon";
+  return "Currently Registrations Closed";
 }
 
 export function mapOrganizerConferenceToMarketplaceConference(
@@ -86,6 +107,10 @@ export function mapOrganizerConferenceToMarketplaceConference(
       .map((category) => category.deadlineOverride)
       .find((deadline): deadline is string => Boolean(deadline)) ||
     conference.startDate;
+  const registrationOpenDate = openCategories
+    .flatMap((category) => category.pricingPhases || [])
+    .map((phase) => phase.startDate)
+    .sort((a, b) => (parseDayStart(a) ?? Number.MAX_SAFE_INTEGER) - (parseDayStart(b) ?? Number.MAX_SAFE_INTEGER))[0];
 
   return {
     id: conference.id,
@@ -97,6 +122,7 @@ export function mapOrganizerConferenceToMarketplaceConference(
     region: inferRegion(conference.country),
     startDate: formatDate(conference.startDate),
     endDate: formatDate(conference.endDate),
+    registrationOpenDate: formatDate(registrationOpenDate),
     registrationDeadline: formatDate(registrationDeadline),
     price: startingPrice,
     currency: "USD",
@@ -123,7 +149,7 @@ export function mapOrganizerConferenceToMarketplaceConference(
     description:
       conference.description || "Conference details will be updated soon.",
     organizer: conference.organizerName,
-    organizerEmail: "organizer@tidingz.local",
+    organizerEmail: conference.contactDetail?.trim() || "",
     website: conference.socialLinks?.website || "#",
     featured: false,
     color: "from-slate-700 to-slate-900",
@@ -140,28 +166,7 @@ export function mapOrganizerConferenceToMarketplaceConference(
 export function getMarketplaceConferences(
   organizerConferences: OrganizerConference[]
 ): Conference[] {
-  const organizerEntries = organizerConferences
+  return organizerConferences
     .filter((conference) => LISTABLE_ORGANIZER_STATUSES.has(conference.status))
     .map(mapOrganizerConferenceToMarketplaceConference);
-
-  const today = new Date().setHours(0, 0, 0, 0);
-  const withStaticStatus = CONFERENCES.map((conference) => {
-    if (conference.statusBadgeLabel) return conference;
-    const end = new Date(conference.endDate).setHours(0, 0, 0, 0);
-    const deadline = new Date(conference.registrationDeadline).setHours(0, 0, 0, 0);
-    if (!Number.isNaN(end) && end < today) {
-      return { ...conference, statusBadgeLabel: "Event Ended" };
-    }
-    if (!Number.isNaN(deadline) && deadline >= today) {
-      return { ...conference, statusBadgeLabel: "Coming Soon" };
-    }
-    return { ...conference, statusBadgeLabel: "Coming Soon" };
-  });
-
-  const merged = [...withStaticStatus, ...organizerEntries];
-  const dedupedById = new Map<string, Conference>();
-  for (const conference of merged) {
-    dedupedById.set(conference.id, conference);
-  }
-  return Array.from(dedupedById.values());
 }

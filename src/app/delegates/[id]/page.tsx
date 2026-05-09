@@ -7,7 +7,6 @@ import { useMemo, useSyncExternalStore } from "react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { useAuth } from "@/lib/auth-context";
-import { MOCK_USER } from "@/lib/data";
 import { DelegateMunAward, DelegateMunParticipation, User } from "@/lib/types";
 
 export default function DelegateProfilePage() {
@@ -22,7 +21,6 @@ export default function DelegateProfilePage() {
 
   const profile = useMemo<User | null>(() => {
     if (hydrated && user?.id === delegateId) return user;
-    if (MOCK_USER.id === delegateId) return MOCK_USER;
 
     if (hydrated && typeof window !== "undefined") {
       const stored = localStorage.getItem("tidingz_user");

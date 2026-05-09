@@ -9,7 +9,7 @@ export default defineConfig({
     path: "prisma/migrations",
   },
   datasource: {
-    // Free-tier Supabase setup uses pooled URL only.
-    url: process.env["DATABASE_URL"],
+    // Prefer DIRECT_URL for migrations (Supabase direct Postgres); fallback to pooled DATABASE_URL.
+    url: process.env["DIRECT_URL"]?.trim() || process.env["DATABASE_URL"],
   },
 });

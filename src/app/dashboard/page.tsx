@@ -6,6 +6,7 @@ import Link from "next/link";
 import Image from "next/image";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
+import AppRouteSkeleton from "@/components/AppRouteSkeleton";
 import { ensureServerSession } from "@/lib/client/session";
 import { downloadRegistrationInvoicePdf } from "@/lib/client/invoice-pdf";
 import { useAuth } from "@/lib/auth-context";
@@ -49,7 +50,8 @@ const formatInvoiceAddress = (registration: Registration, userAddress?: {
 };
 
 export default function DashboardPage() {
-  const { user, isLoggedIn, notifications, markNotificationRead, updateDelegateProfile, logout } = useAuth();
+  const { user, isLoggedIn, authReady, notifications, markNotificationRead, updateDelegateProfile, logout } =
+    useAuth();
   const router = useRouter();
   const [delegatePasses, setDelegatePasses] = useState<Array<{
     id: string;
@@ -143,7 +145,7 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!isLoggedIn || !user) return;
-    void ensureServerSession({ email: user.email, name: user.name });
+    void ensureServerSession();
     void fetch("/api/passes/me", { credentials: "include" })
       .then((response) => response.json())
       .then((data) => setDelegatePasses(data.passes || []))
@@ -154,7 +156,9 @@ export default function DashboardPage() {
       .catch(() => setServerNotifications([]));
   }, [isLoggedIn, user]);
 
-  if (!isLoggedIn || !user) return null;
+  if (!authReady || !isLoggedIn || !user) {
+    return <AppRouteSkeleton />;
+  }
 
   const registrations = user.registeredConferences;
   const myNotifications = notifications.filter(

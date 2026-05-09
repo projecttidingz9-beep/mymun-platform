@@ -1,36 +1,49 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Tidingz (mymun-platform)
 
-## Getting Started
+Production-oriented Model UN platform: marketplace, delegate flows, organizer dashboards, and manual/free checkout — Next.js App Router + PostgreSQL (Prisma).
 
-First, run the development server:
+## Scripts
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+| Command | Purpose |
+| -------- | ------- |
+| `npm run dev` | Local dev server |
+| `npm run build` / `npm run start` | Production build & serve |
+| `npm run lint` / `npm run typecheck` | Quality gates |
+| `npm run test` | Vitest unit/integration tests |
+| `npm run test:e2e` | Playwright (starts dev server locally unless `CI=true`) |
+| `npm run prisma:generate` | Generate Prisma client into `src/generated/prisma` |
+| `npm run prisma:migrate` | Dev migrations |
+| `npm run prisma:migrate:deploy` | Prod/staging `migrate deploy` |
+| `npm run db:seed` | Seed demo data |
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Environment
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Copy `.env.example` → `.env.local`. Critical vars:
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- **`DATABASE_URL`** / **`DIRECT_URL`** — Postgres (e.g. Supabase).
+- **`AUTH_SESSION_SECRET`** — JWT signing for `mymun_session`.
+- **`PASS_QR_SECRET`** — Delegate pass QR signing.
+- **`NEXT_PUBLIC_APP_URL`** — Canonical URL for metadata, emails, sitemap.
 
-## Learn More
+Optional: Google OAuth (`NEXT_PUBLIC_GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_ID`), Resend (`RESEND_*`), Sentry (`SENTRY_DSN` — wire in `src/instrumentation.ts`).
 
-To learn more about Next.js, take a look at the following resources:
+## Architecture & ops
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- **`docs/architecture.md`** — stack and boundaries.
+- **`docs/payments.md`** — FREE/MANUAL checkout model.
+- **`docs/runbook.md`** — deploy, incidents, session revocation.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Auth notes
 
-## Deploy on Vercel
+- Sessions include **`sub`** (user id) + **`sv`** (`User.sessionVersion`). Call **`POST /api/auth/logout-all`** to invalidate every device.
+- Password login applies **lockout** after repeated failures (see runbook).
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## CI
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+GitHub Actions **`ci.yml`**: install → prisma generate → lint → typecheck → tests → build → Playwright smoke → build artifact.
+
+Additional workflows: **`preview.yml`**, **`release.yml`** (template — add host + secrets).
+
+## Cloudflare / OpenNext
+
+See `npm run cf:*` scripts for Workers-oriented builds.

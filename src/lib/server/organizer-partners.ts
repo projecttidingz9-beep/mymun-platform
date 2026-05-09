@@ -15,19 +15,27 @@ export type PartnershipRecord = {
 
 type EventLite = { id: string; title: string };
 
-function toIso(value: unknown): string {
-  if (value instanceof Date) return value.toISOString();
-  return String(value);
+function toIso(value: Date): string {
+  return value.toISOString();
 }
 
-function normalizeRow(row: Record<string, unknown>): PartnershipRecord {
+function normalizeRow(row: {
+  id: string;
+  sourceEventId: string;
+  targetEventId: string;
+  status: string;
+  createdByUserId: string;
+  respondedByUserId: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}): PartnershipRecord {
   return {
-    id: String(row.id),
-    sourceEventId: String(row.sourceEventId),
-    targetEventId: String(row.targetEventId),
-    status: String(row.status) as PartnershipStatus,
-    createdByUserId: String(row.createdByUserId),
-    respondedByUserId: row.respondedByUserId ? String(row.respondedByUserId) : null,
+    id: row.id,
+    sourceEventId: row.sourceEventId,
+    targetEventId: row.targetEventId,
+    status: row.status as PartnershipStatus,
+    createdByUserId: row.createdByUserId,
+    respondedByUserId: row.respondedByUserId,
     createdAt: toIso(row.createdAt),
     updatedAt: toIso(row.updatedAt),
   };
@@ -42,19 +50,16 @@ async function ensureEventExists(eventId: string) {
 
 export async function listEventPartnerships(eventId: string) {
   await ensureEventExists(eventId);
-  const rows = await prisma.$queryRawUnsafe<Record<string, unknown>[]>(
-    `SELECT * FROM "EventPartnership"
-     WHERE "sourceEventId" = ? OR "targetEventId" = ?
-     ORDER BY "updatedAt" DESC`,
-    eventId,
-    eventId
-  );
+  const rows = await prisma.eventPartnership.findMany({
+    where: {
+      OR: [{ sourceEventId: eventId }, { targetEventId: eventId }],
+    },
+    orderBy: { updatedAt: "desc" },
+  });
 
   const partnerIds = Array.from(
     new Set(
-      rows.map((row) =>
-        String(row.sourceEventId) === eventId ? String(row.targetEventId) : String(row.sourceEventId)
-      )
+      rows.map((row) => (row.sourceEventId === eventId ? row.targetEventId : row.sourceEventId))
     )
   );
   const events =
@@ -91,47 +96,43 @@ export async function invitePartnerEvent(input: {
   await ensureEventExists(sourceEventId);
   await ensureEventExists(targetEventId);
 
-  const source = [sourceEventId, targetEventId].sort()[0];
-  const target = [sourceEventId, targetEventId].sort()[1];
-  const existing = await prisma.$queryRawUnsafe<Record<string, unknown>[]>(
-    `SELECT * FROM "EventPartnership"
-     WHERE "sourceEventId" = ? AND "targetEventId" = ?
-     LIMIT 1`,
-    source,
-    target
-  );
-  if (existing.length > 0) {
-    const row = normalizeRow(existing[0]);
+  const source = [sourceEventId, targetEventId].sort()[0]!;
+  const target = [sourceEventId, targetEventId].sort()[1]!;
+
+  const existing = await prisma.eventPartnership.findUnique({
+    where: {
+      sourceEventId_targetEventId: { sourceEventId: source, targetEventId: target },
+    },
+  });
+
+  if (existing) {
+    const row = normalizeRow(existing);
     if (row.status === "PENDING" || row.status === "ACCEPTED") {
       throw new Error("Partnership already exists for this event pair.");
     }
   }
 
   const id = `partnership-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  await prisma.$executeRawUnsafe(
-    `INSERT INTO "EventPartnership"
-      ("id","sourceEventId","targetEventId","status","createdByUserId","createdAt","updatedAt")
-     VALUES (?, ?, ?, 'PENDING', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-     ON CONFLICT("sourceEventId","targetEventId")
-     DO UPDATE SET
-       "status"='PENDING',
-       "createdByUserId"=excluded."createdByUserId",
-       "respondedByUserId"=NULL,
-       "updatedAt"=CURRENT_TIMESTAMP`,
-    id,
-    source,
-    target,
-    actorUserId
-  );
 
-  const saved = await prisma.$queryRawUnsafe<Record<string, unknown>[]>(
-    `SELECT * FROM "EventPartnership"
-     WHERE "sourceEventId" = ? AND "targetEventId" = ?
-     LIMIT 1`,
-    source,
-    target
-  );
-  return normalizeRow(saved[0]);
+  const saved = await prisma.eventPartnership.upsert({
+    where: {
+      sourceEventId_targetEventId: { sourceEventId: source, targetEventId: target },
+    },
+    create: {
+      id,
+      sourceEventId: source,
+      targetEventId: target,
+      status: "PENDING",
+      createdByUserId: actorUserId,
+    },
+    update: {
+      status: "PENDING",
+      createdByUserId: actorUserId,
+      respondedByUserId: null,
+    },
+  });
+
+  return normalizeRow(saved);
 }
 
 export async function updatePartnershipStatus(input: {
@@ -157,17 +158,15 @@ export async function updatePartnershipStatus(input: {
     throw new Error("Only the target event can accept or reject this invitation.");
   }
 
-  await prisma.$executeRawUnsafe(
-    `UPDATE "EventPartnership"
-     SET "status" = ?, "respondedByUserId" = ?, "updatedAt" = CURRENT_TIMESTAMP
-     WHERE "id" = ?`,
-    input.nextStatus,
-    input.actorUserId,
-    input.partnershipId
-  );
-  const updated = await getPartnershipById(input.partnershipId);
-  if (!updated) throw new Error("Partnership not found after update.");
-  return updated;
+  const updated = await prisma.eventPartnership.update({
+    where: { id: input.partnershipId },
+    data: {
+      status: input.nextStatus,
+      respondedByUserId: input.actorUserId,
+    },
+  });
+
+  return normalizeRow(updated);
 }
 
 export async function unlinkPartnership(input: {
@@ -184,25 +183,25 @@ export async function unlinkPartnership(input: {
   if (!actorInEvent) {
     throw new Error("Partnership does not belong to this event.");
   }
-  await prisma.$executeRawUnsafe(
-    `UPDATE "EventPartnership"
-     SET "status" = 'CANCELLED', "respondedByUserId" = ?, "updatedAt" = CURRENT_TIMESTAMP
-     WHERE "id" = ?`,
-    input.actorUserId,
-    row.id
-  );
+  await prisma.eventPartnership.update({
+    where: { id: row.id },
+    data: {
+      status: "CANCELLED",
+      respondedByUserId: input.actorUserId,
+    },
+  });
 }
 
 export async function getAcceptedPartnerEventIds(eventId: string): Promise<string[]> {
-  const rows = await prisma.$queryRawUnsafe<Record<string, unknown>[]>(
-    `SELECT "sourceEventId","targetEventId" FROM "EventPartnership"
-     WHERE ("sourceEventId" = ? OR "targetEventId" = ?)
-       AND "status" = 'ACCEPTED'`,
-    eventId,
-    eventId
-  );
+  const rows = await prisma.eventPartnership.findMany({
+    where: {
+      status: "ACCEPTED",
+      OR: [{ sourceEventId: eventId }, { targetEventId: eventId }],
+    },
+    select: { sourceEventId: true, targetEventId: true },
+  });
   return rows.map((row) =>
-    String(row.sourceEventId) === eventId ? String(row.targetEventId) : String(row.sourceEventId)
+    row.sourceEventId === eventId ? row.targetEventId : row.sourceEventId
   );
 }
 
@@ -215,10 +214,9 @@ export async function getEventTitlesByIds(eventIds: string[]): Promise<EventLite
 }
 
 async function getPartnershipById(partnershipId: string): Promise<PartnershipRecord | null> {
-  const rows = await prisma.$queryRawUnsafe<Record<string, unknown>[]>(
-    `SELECT * FROM "EventPartnership" WHERE "id" = ? LIMIT 1`,
-    partnershipId
-  );
-  if (rows.length === 0) return null;
-  return normalizeRow(rows[0]);
+  const row = await prisma.eventPartnership.findUnique({
+    where: { id: partnershipId },
+  });
+  if (!row) return null;
+  return normalizeRow(row);
 }

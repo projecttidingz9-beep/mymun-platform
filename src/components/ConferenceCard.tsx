@@ -3,6 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { Conference } from "@/lib/types";
+import { resolveConferenceBannerImage } from "@/lib/conference-media";
 
 interface ConferenceCardProps {
   conference: Conference;
@@ -18,7 +19,7 @@ const LEVEL_BADGE: Record<string, { class: string; emoji: string }> = {
 
 function SeatsBar({ registered, capacity }: { registered: number; capacity: number }) {
   const pct = Math.round((registered / capacity) * 100);
-  const color = pct > 85 ? "#dc2626" : pct > 65 ? "#d97706" : "#16a34a";
+  const color = pct > 85 ? "var(--danger)" : pct > 65 ? "var(--warning)" : "var(--success)";
   return (
     <div>
       <div className="flex justify-between text-xs mb-1" style={{ color: "var(--fg-muted)" }}>
@@ -37,7 +38,8 @@ function SeatsBar({ registered, capacity }: { registered: number; capacity: numb
 
 export default function ConferenceCard({ conference: c }: ConferenceCardProps) {
   const badge = LEVEL_BADGE[c.level] || LEVEL_BADGE["Open"];
-  const hasBanner = Boolean(c.bannerImageUrl);
+  const bannerImageUrl = resolveConferenceBannerImage({ conference: c });
+  const hasBanner = Boolean(bannerImageUrl);
   const hasLogo = Boolean(c.logoImageUrl);
   const logoFallback = c.title
     .split(" ")
@@ -48,25 +50,31 @@ export default function ConferenceCard({ conference: c }: ConferenceCardProps) {
   const statusBadgeTone =
     c.statusBadgeLabel === "Event Ended"
       ? "badge-gray"
-      : c.statusBadgeLabel?.startsWith("Phase ")
+      : c.statusBadgeLabel === "Register Now"
         ? "badge-green"
-        : "badge-blue";
+        : c.statusBadgeLabel === "Currently Registrations Closed"
+          ? "badge-gold"
+          : "badge-blue";
 
   return (
     <Link href={`/conference/${c.id}`} className="block group card rounded-[1.5rem] overflow-hidden cursor-pointer">
       {/* Card Header / Color Banner */}
-      <div
-        className={`relative h-36 ${hasBanner ? "" : `bg-gradient-to-br ${c.color}`} flex items-end p-5 overflow-hidden`}
-        style={
-          hasBanner
-            ? {
-                backgroundImage: `linear-gradient(to bottom, rgba(0, 0, 0, 0.1), rgba(0, 0, 0, 0.5)), url("${c.bannerImageUrl}")`,
-                backgroundSize: "cover",
-                backgroundPosition: "center",
-              }
-            : undefined
-        }
-      >
+      <div className={`relative h-36 ${hasBanner ? "" : `bg-gradient-to-br ${c.color}`} flex items-end p-5 overflow-hidden`}>
+        {hasBanner && bannerImageUrl && (
+          <Image
+            src={bannerImageUrl}
+            alt={`${c.title} banner`}
+            fill
+            className="object-cover"
+            sizes="(max-width: 768px) 100vw, 420px"
+          />
+        )}
+        {hasBanner && (
+          <div
+            className="absolute inset-0"
+            style={{ background: "linear-gradient(to bottom, rgba(0,0,0,0.14), rgba(0,0,0,0.56))" }}
+          />
+        )}
         {/* Background pattern */}
         <div
           className="absolute inset-0 opacity-10"
@@ -102,18 +110,13 @@ export default function ConferenceCard({ conference: c }: ConferenceCardProps) {
         </div>
         {/* Badges top row */}
         <div className="absolute top-4 left-4 right-4 flex items-center justify-between z-[3]">
-          <span className={`badge ${badge.class}`} style={{ background: "rgba(255,255,255,0.2)", color: "white" }}>
+          <span className={`badge ${badge.class}`} style={{ background: "rgba(10,12,18,0.52)", color: "rgba(255,255,255,0.96)" }}>
             {badge.emoji} {c.level}
           </span>
           <div className="flex items-center gap-1.5">
             {c.featured && (
-              <span className="badge" style={{ background: "rgba(255,255,255,0.25)", color: "white" }}>
+              <span className="badge" style={{ background: "rgba(10,12,18,0.52)", color: "rgba(255,255,255,0.96)" }}>
                 ⭐ Featured
-              </span>
-            )}
-            {c.statusBadgeLabel && (
-              <span className={`badge ${statusBadgeTone}`} style={{ backdropFilter: "blur(6px)" }}>
-                {c.statusBadgeLabel}
               </span>
             )}
           </div>
@@ -134,12 +137,24 @@ export default function ConferenceCard({ conference: c }: ConferenceCardProps) {
       {/* Card Body */}
       <div className="p-5 space-y-4">
         <div>
-          <h3
-            className="font-bold text-base leading-snug mb-1 transition-colors group-hover:text-blue-600 line-clamp-2"
-            style={{ color: "var(--fg)" }}
-          >
-            {c.title}
-          </h3>
+          <div className="flex items-start justify-between gap-3 mb-1.5">
+            <h3
+              className="font-bold text-base leading-snug transition-colors group-hover:text-blue-600 line-clamp-2"
+              style={{ color: "var(--fg)" }}
+            >
+              {c.title}
+            </h3>
+            <div className="flex items-center gap-1.5 flex-shrink-0 pt-0.5">
+              {c.featured && (
+                <span className="badge badge-gold text-[10px] px-2 py-0.5">Featured</span>
+              )}
+              {c.statusBadgeLabel && (
+                <span className={`badge ${statusBadgeTone} text-[10px] px-2 py-0.5`}>
+                  {c.statusBadgeLabel}
+                </span>
+              )}
+            </div>
+          </div>
           <div className="flex flex-wrap items-center gap-2 text-xs" style={{ color: "var(--fg-muted)" }}>
             <span className="flex items-center gap-1">
               <svg width="11" height="11" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">

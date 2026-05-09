@@ -1,0 +1,21 @@
+import type { MetadataRoute } from "next";
+
+export default function manifest(): MetadataRoute.Manifest {
+  return {
+    name: "Tidingz",
+    short_name: "Tidingz",
+    description:
+      "Discover, organize, and participate in Model UN conferences worldwide — marketplace, registration, and delegate tools.",
+    start_url: "/",
+    display: "standalone",
+    background_color: "#0f0f12",
+    theme_color: "#1a1a2e",
+    icons: [
+      {
+        src: "/icon",
+        sizes: "32x32",
+        type: "image/png",
+      },
+    ],
+  };
+}

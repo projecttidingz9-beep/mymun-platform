@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getRequestActor } from "@/lib/server/auth";
+import { getRequestActor, requireEventOrganizerAccess } from "@/lib/server/auth";
 import { upsertRegistrationFromClient } from "@/lib/server/registration-sync";
 
 export async function POST(request: NextRequest) {
@@ -10,9 +10,16 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
+    const eventId = String(body.eventId || "");
+    if (!eventId) {
+      return NextResponse.json({ error: "eventId is required." }, { status: 400 });
+    }
+    if (!(await requireEventOrganizerAccess(actor, eventId))) {
+      return NextResponse.json({ error: "You do not have access to this conference." }, { status: 403 });
+    }
     const registration = await upsertRegistrationFromClient({
       registrationId: body.registrationId,
-      eventId: body.eventId,
+      eventId,
       eventTitle: body.eventTitle,
       eventStartDateIso: body.eventStartDateIso,
       eventEndDateIso: body.eventEndDateIso,
@@ -26,7 +33,8 @@ export async function POST(request: NextRequest) {
       organizerStatus: body.organizerStatus,
     });
     return NextResponse.json({ registration });
-  } catch {
-    return NextResponse.json({ error: "Failed to sync registration." }, { status: 400 });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to sync registration.";
+    return NextResponse.json({ error: message }, { status: 400 });
   }
 }

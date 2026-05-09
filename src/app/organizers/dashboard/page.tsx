@@ -6,9 +6,11 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
+import AppRouteSkeleton from "@/components/AppRouteSkeleton";
 import QrScannerPanel from "@/components/QrScannerPanel";
 import { ensureServerSession } from "@/lib/client/session";
 import { useAuth } from "@/lib/auth-context";
+import { hasOrganizerConferenceAccess } from "@/lib/organizer-access";
 import {
   OrganizerBankingDetails,
   OrganizerConference,
@@ -346,7 +348,8 @@ export default function OrganizerDashboardPage() {
   const {
     user,
     isLoggedIn,
-    organizerConferences,
+    authReady,
+    organizerConferences: rawOrganizerConferences,
     removeOrganizerConference,
     updateApplicantStatus,
     addAnnouncement,
@@ -359,7 +362,16 @@ export default function OrganizerDashboardPage() {
     updateRegistrationCategoryConfig,
     addConferenceAward,
     removeConferenceAward,
+    updateOrganizerConferenceStatus,
   } = useAuth();
+
+  const organizerConferences = useMemo(
+    () =>
+      rawOrganizerConferences.filter((conference) =>
+        hasOrganizerConferenceAccess({ id: user?.id, email: user?.email }, conference)
+      ),
+    [rawOrganizerConferences, user?.id, user?.email]
+  );
 
   const [selectedConferenceId, setSelectedConferenceId] = useState<string>("");
   const [activeSection, setActiveSection] = useState<OrganizerSectionId>("overview");
@@ -884,10 +896,7 @@ export default function OrganizerDashboardPage() {
 
   useEffect(() => {
     if (!isLoggedIn || !user) return;
-    void ensureServerSession({
-      email: user.email,
-      name: user.name,
-    });
+    void ensureServerSession();
   }, [isLoggedIn, user]);
 
   const selectedConference = useMemo(() => {
@@ -1026,16 +1035,28 @@ export default function OrganizerDashboardPage() {
           .filter(Boolean),
         conferenceSchedule: previewScheduleDraft,
       });
-      await fetch(`/api/organizers/conference-config/${selectedConference.id}`, {
+      const response = await fetch(`/api/organizers/conference-config/${selectedConference.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ ...previewDraft, conferenceSchedule: previewScheduleDraft }),
-      }).catch(() => null);
+        body: JSON.stringify({
+          ...previewDraft,
+          conferenceSchedule: previewScheduleDraft,
+          ownerUserId: selectedConference.ownerUserId || user?.id,
+          ownerEmail: selectedConference.ownerEmail || user?.email,
+          organizerTeamEmails: (selectedConference.organizerTeam || [])
+            .map((member) => member.email.trim().toLowerCase())
+            .filter(Boolean),
+        }),
+      });
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => ({}))) as { error?: string };
+        throw new Error(payload.error || "Failed to save preview settings.");
+      }
       setPreviewSaveStatus("Preview and policy changes saved.");
       window.setTimeout(() => setPreviewSaveStatus(""), 3500);
-    } catch {
-      setPreviewSaveStatus("Unable to save preview settings. Please try again.");
+    } catch (error) {
+      setPreviewSaveStatus(error instanceof Error ? error.message : "Unable to save preview settings. Please try again.");
     }
   };
 
@@ -1784,8 +1805,9 @@ export default function OrganizerDashboardPage() {
   };
 
   // Prevent SSR/client auth divergence from localStorage-backed state.
-  if (!hydrated) return null;
-  if (!isLoggedIn || !user) return null;
+  if (!hydrated || !authReady || !isLoggedIn || !user) {
+    return <AppRouteSkeleton />;
+  }
 
   const totalApplicants = organizerConferences.reduce((acc, conference) => acc + conference.applicants.length, 0);
   const totalAccepted = organizerConferences.reduce(
@@ -1868,6 +1890,9 @@ export default function OrganizerDashboardPage() {
               </div>
               <Link href="/organizers/create" className="btn btn-primary text-sm w-full sm:w-[320px] justify-center">
                 + Create New Conference
+              </Link>
+              <Link href="/organizers/payments" className="btn btn-ghost text-sm w-full sm:w-[320px] justify-center">
+                Manual payments
               </Link>
             </div>
           </header>
@@ -2180,7 +2205,29 @@ export default function OrganizerDashboardPage() {
                       <h2 className="text-2xl font-bold" style={{ color: "var(--fg)" }}>
                         {selectedConference.title}
                       </h2>
-                      <div className="badge badge-blue">Editing page content</div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className={`badge ${STATUS_STYLES[selectedConference.status]}`}>
+                          {selectedConference.status}
+                        </span>
+                        {selectedConference.status !== "Published" ? (
+                          <button
+                            type="button"
+                            className="btn btn-primary text-xs"
+                            onClick={() => updateOrganizerConferenceStatus(selectedConference.id, "Published")}
+                          >
+                            Publish Conference
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            className="btn btn-ghost text-xs"
+                            onClick={() => updateOrganizerConferenceStatus(selectedConference.id, "Review")}
+                          >
+                            Move to Review
+                          </button>
+                        )}
+                        <div className="badge badge-blue">Editing page content</div>
+                      </div>
                     </div>
                     <div className="grid sm:grid-cols-3 gap-3 text-sm">
                       <p style={{ color: "var(--fg-muted)" }}><strong style={{ color: "var(--fg)" }}>Dates:</strong> {selectedConference.startDate} → {selectedConference.endDate}</p>
@@ -2512,6 +2559,11 @@ export default function OrganizerDashboardPage() {
                             onChange={(event) => setPreviewDraft((prev) => ({ ...prev, tags: event.target.value }))}
                           />
                         </div>
+                      </div>
+                      <div className="mt-4 flex justify-end">
+                        <button type="button" className="btn btn-primary text-xs" onClick={savePreviewSettings}>
+                          Save stats and tags
+                        </button>
                       </div>
                     </div>
                   )}

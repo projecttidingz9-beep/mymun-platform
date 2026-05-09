@@ -24,6 +24,10 @@
 .DS_Store
 *.pem
 
+# local uploads / screenshots (do not commit)
+WhatsApp*.jpeg
+WhatsApp*.jpg
+
 # debug
 npm-debug.log*
 yarn-debug.log*

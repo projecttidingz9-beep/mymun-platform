@@ -5,14 +5,14 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
-import { CONFERENCES } from "@/lib/data";
 import { useAuth } from "@/lib/auth-context";
 import { OrganizerCommittee, Registration, RegistrationCategory } from "@/lib/types";
 import { getPhaseStatus, resolveRegistrationPrice } from "@/lib/pricing";
+import { getMarketplaceConferences } from "@/lib/marketplace-conferences";
 
 type Step = 1 | 2 | 3 | 4;
 
-const createConfirmationId = () => `MYM-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+const createConfirmationId = () => `TZ-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
 
 const getCategoryTypeLabel = (applicationType?: RegistrationCategory["applicationType"]) => {
   if (applicationType === "delegation") return "Delegation";
@@ -46,15 +46,13 @@ export default function CheckoutPage() {
   const [portfolioPreferencePrimary, setPortfolioPreferencePrimary] = useState("");
   const [portfolioPreferenceSecondary, setPortfolioPreferenceSecondary] = useState("");
   const [answers, setAnswers] = useState<Record<string, string | number | boolean | string[]>>({});
-  const [cardNumber, setCardNumber] = useState("");
-  const [cardName, setCardName] = useState(user?.name || "");
-  const [expiry, setExpiry] = useState("");
-  const [cvv, setCvv] = useState("");
   const [loading, setLoading] = useState(false);
   const [uploadedFiles, setUploadedFiles] = useState<Record<string, string[]>>({});
 
   const organizerConference = organizerConferences.find((conference) => conference.id === params.id);
-  const marketplaceConference = CONFERENCES.find((conference) => conference.id === params.id);
+  const marketplaceConference = getMarketplaceConferences(organizerConferences).find(
+    (conference) => conference.id === params.id
+  );
 
   useEffect(() => {
     if (!isLoggedIn) {
@@ -136,46 +134,50 @@ export default function CheckoutPage() {
     );
   })();
 
-  const formatCardNumber = (value: string) =>
-    value.replace(/\D/g, "").slice(0, 16).replace(/(.{4})/g, "$1 ").trim();
-  const formatExpiry = (value: string) =>
-    value.replace(/\D/g, "").slice(0, 4).replace(/^(\d{2})(\d)/, "$1/$2");
-
   const handlePay = async () => {
     if (!selectedCategory) return;
     setLoading(true);
-    await new Promise((resolve) => setTimeout(resolve, 1800));
-    const confId = createConfirmationId();
-
-    const registration: Registration = {
-      id: confId,
-      conferenceId: String(params.id),
-      conferenceTitle: displayTitle,
-      categoryId: selectedCategory.id,
-      categoryName: selectedCategory.name,
-      committeeId: selectedCommitteeId || undefined,
-      committeeName: selectedCommittee?.name,
-      committeePreferences: [selectedCommitteeId, secondPreferenceCommitteeId, thirdPreferenceCommitteeId].filter(Boolean),
-      portfolioPreferencesByCommittee: selectedCommitteeId
-        ? {
-            [selectedCommitteeId]: [portfolioPreferencePrimary, portfolioPreferenceSecondary].filter(Boolean),
-          }
-        : {},
-      country: undefined,
-      formAnswers: Object.fromEntries(
+    try {
+      const registrationId = createConfirmationId();
+      const formAnswers = Object.fromEntries(
         Object.entries(answers).filter(([key]) => !key.startsWith("cq-"))
-      ),
-      pricingPhaseId: priceResult.phaseId,
-      pricingPhaseName: priceResult.phaseName,
-      status: "Confirmed",
-      registeredAt: new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }),
-      paid: true,
-      amount: priceResult.amount,
-    };
-
-    addRegistration(registration);
-    setLoading(false);
-    router.push("/dashboard");
+      );
+      const res = await fetch("/api/registrations", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          registrationId,
+          eventId: String(params.id),
+          categoryId: selectedCategory.id,
+          categoryName: selectedCategory.name,
+          committeeConfigId: selectedCommitteeId || undefined,
+          committeeName: selectedCommittee?.name,
+          portfolioName: portfolioPreferencePrimary || undefined,
+          committeePreferences: [selectedCommitteeId, secondPreferenceCommitteeId, thirdPreferenceCommitteeId].filter(
+            Boolean
+          ),
+          portfolioPreferencesByCommittee: selectedCommitteeId
+            ? {
+                [selectedCommitteeId]: [portfolioPreferencePrimary, portfolioPreferenceSecondary].filter(Boolean),
+              }
+            : {},
+          formAnswers,
+        }),
+      });
+      const payload = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        clientRegistration?: Registration;
+      };
+      if (!res.ok || !payload.clientRegistration) {
+        alert(payload.error || "Registration failed. If this conference was created only on this device, publish it from the organizer dashboard so it exists on the server.");
+        return;
+      }
+      addRegistration(payload.clientRegistration);
+      router.push("/dashboard");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const isStep1Valid = !!selectedCategoryId;
@@ -183,11 +185,45 @@ export default function CheckoutPage() {
     (field) => !field.required || answers[field.id] !== undefined
   ) && delegationSizeValid;
   const isStep3Valid = (!selectedCategory?.requiresCommitteeSelection || !!selectedCommitteeId) && committeeQuestionsValid;
-  const isStep4Valid = cardNumber.replace(/\s/g, "").length === 16 && !!cardName && expiry.length === 5 && cvv.length >= 3;
+  const isStep4Valid = true;
 
-  if (user?.role === "organizer") return null;
+  if (user?.role === "organizer") {
+    return (
+      <>
+        <Navbar />
+        <div className="app-shell min-h-[45vh] flex flex-col items-center justify-center px-6">
+          <p className="text-sm" style={{ color: "var(--fg-muted)" }}>
+            Redirecting organizers to the conference page…
+          </p>
+        </div>
+        <Footer />
+      </>
+    );
+  }
 
-  if (!organizerConference && !marketplaceConference) return null;
+  if (!organizerConference && !marketplaceConference) {
+    return (
+      <>
+        <Navbar />
+        <div className="app-shell">
+          <div className="max-w-2xl mx-auto">
+            <div className="app-card text-center py-14">
+              <h1 className="app-title">Conference Not Found</h1>
+              <p className="app-subtitle mt-2">
+                This conference may not be live yet or the link is invalid.
+              </p>
+              <div className="mt-6">
+                <Link href="/marketplace" className="btn btn-primary">
+                  Back to Marketplace
+                </Link>
+              </div>
+            </div>
+          </div>
+        </div>
+        <Footer />
+      </>
+    );
+  }
 
   return (
     <>
@@ -526,19 +562,16 @@ export default function CheckoutPage() {
 
           {step === 4 && (
             <div className="card p-8 rounded-2xl space-y-4">
-              <h2 className="text-xl font-bold" style={{ color: "var(--fg)" }}>Preview & Payment</h2>
+              <h2 className="text-xl font-bold" style={{ color: "var(--fg)" }}>Preview & confirm</h2>
+              <p className="text-xs leading-relaxed" style={{ color: "var(--fg-muted)" }}>
+                Tidingz records your registration on our servers. Paid conferences use manual payment confirmation by default — complete payment using the instructions on the conference page after submitting.
+              </p>
               <div className="rounded-xl p-4 space-y-1" style={{ background: "var(--bg-subtle)", border: "1px solid var(--border)" }}>
                 <p className="text-sm font-semibold" style={{ color: "var(--fg)" }}>Review your submission</p>
                 <p className="text-xs" style={{ color: "var(--fg-muted)" }}>Name: {fullName || "N/A"}</p>
                 <p className="text-xs" style={{ color: "var(--fg-muted)" }}>Phone: {phone || "N/A"}</p>
                 <p className="text-xs" style={{ color: "var(--fg-muted)" }}>Category: {selectedCategory?.name || "N/A"}</p>
                 <p className="text-xs" style={{ color: "var(--fg-muted)" }}>Committee: {selectedCommittee?.name || "N/A"}</p>
-              </div>
-              <input value={cardNumber} onChange={(event) => setCardNumber(formatCardNumber(event.target.value))} className="input-base" placeholder="Card Number" maxLength={19} />
-              <input value={cardName} onChange={(event) => setCardName(event.target.value)} className="input-base" placeholder="Name on Card" />
-              <div className="grid grid-cols-2 gap-4">
-                <input value={expiry} onChange={(event) => setExpiry(formatExpiry(event.target.value))} className="input-base" placeholder="MM/YY" maxLength={5} />
-                <input value={cvv} onChange={(event) => setCvv(event.target.value.replace(/\D/g, "").slice(0, 4))} className="input-base" placeholder="CVV" type="password" maxLength={4} />
               </div>
               <div className="rounded-xl p-4 space-y-2" style={{ background: "var(--bg-subtle)", border: "1px solid var(--border)" }}>
                 <div className="flex justify-between text-sm">
@@ -558,7 +591,7 @@ export default function CheckoutPage() {
               <div className="flex gap-3">
                 <button onClick={() => setStep(3)} className="btn btn-ghost flex-1">← Back</button>
                 <button onClick={handlePay} disabled={!isStep4Valid || loading} className="btn btn-primary flex-[2]" style={{ opacity: isStep4Valid && !loading ? 1 : 0.5 }}>
-                  {loading ? "Processing..." : `Pay ${currencySymbol}${priceResult.amount}.00`}
+                  {loading ? "Submitting..." : priceResult.amount <= 0 ? "Confirm free registration" : `Submit registration (${currencySymbol}${priceResult.amount}.00)`}
                 </button>
               </div>
             </div>

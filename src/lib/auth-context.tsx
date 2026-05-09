@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useState, ReactNode } from "react";
+import React, { createContext, useContext, useEffect, useState, ReactNode } from "react";
 import {
   ConferenceReview,
   DelegateMunAward,
@@ -20,7 +20,7 @@ import {
   OrganizerAnnouncement,
   UserNotification,
 } from "./types";
-import { MOCK_USER, MOCK_ORGANIZER_CONFERENCES } from "./data";
+import { hasOrganizerConferenceAccess, isOrganizerUser } from "./organizer-access";
 
 const buildDefaultStatusEmailTemplates = (conferenceTitle: string): OrganizerStatusEmailTemplates => ({
   allotted: {
@@ -449,6 +449,10 @@ const normalizeOrganizerConference = (raw: unknown): OrganizerConference | null 
 
   return {
     id: String(conference.id ?? `org-${Date.now()}`),
+    ownerUserId:
+      conference.ownerUserId === undefined ? undefined : String(conference.ownerUserId),
+    ownerEmail:
+      conference.ownerEmail === undefined ? undefined : String(conference.ownerEmail),
     title: String(conference.title ?? "Untitled Conference"),
     city: String(conference.city ?? ""),
     country: String(conference.country ?? ""),
@@ -559,6 +563,7 @@ const normalizeOrganizerConference = (raw: unknown): OrganizerConference | null 
           const member = entry as Record<string, unknown>;
           return {
             id: String(member.id ?? `team-${index}`),
+            userId: member.userId ? String(member.userId) : undefined,
             name: String(member.name ?? ""),
             email: String(member.email ?? ""),
             role:
@@ -747,9 +752,33 @@ const normalizeUser = (raw: unknown): User | null => {
   };
 };
 
+const normalizeEmail = (value: string | undefined | null) => (value || "").trim().toLowerCase();
+
+const getOrganizerConferencesStorageKey = (identity: { id?: string | null; email?: string | null }) => {
+  const id = (identity.id || "").trim();
+  const email = normalizeEmail(identity.email);
+  if (id) return `tidingz_organizer_conferences:${id}`;
+  if (email) return `tidingz_organizer_conferences:${email}`;
+  return "tidingz_organizer_conferences:anonymous";
+};
+
+const stampOwnershipIfMissing = (
+  conference: OrganizerConference,
+  identity: { id?: string | null; email?: string | null }
+): OrganizerConference => {
+  if (conference.ownerUserId || conference.ownerEmail) return conference;
+  return {
+    ...conference,
+    ownerUserId: identity.id || undefined,
+    ownerEmail: identity.email || undefined,
+  };
+};
+
 interface AuthContextType {
   user: User | null;
   isLoggedIn: boolean;
+  /** True after client mount — avoids blank flashes before localStorage hydrates. */
+  authReady: boolean;
   organizerConferences: OrganizerConference[];
   login: (email: string, name?: string, role?: "delegate" | "organizer" | "admin") => void;
   logout: () => void;
@@ -822,6 +851,7 @@ interface AuthContextType {
     reviewId: string,
     patch: Partial<Pick<ConferenceReview, "status" | "featured">>
   ) => void;
+  removeConferenceReview: (conferenceId: string, reviewId: string, userId: string) => void;
   addConferenceAward: (conferenceId: string, award: Omit<OrganizerAwardConfig, "id">) => void;
   removeConferenceAward: (conferenceId: string, awardId: string) => void;
   updateApplicantStatus: (conferenceId: string, applicantId: string, status: OrganizerApplicant["status"]) => void;
@@ -885,6 +915,7 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType>({
   user: null,
   isLoggedIn: false,
+  authReady: false,
   organizerConferences: [],
   login: () => {},
   logout: () => {},
@@ -899,6 +930,7 @@ const AuthContext = createContext<AuthContextType>({
   updateRegistrationCategoryConfig: () => {},
   addConferenceReview: () => {},
   moderateConferenceReview: () => {},
+  removeConferenceReview: () => {},
   addConferenceAward: () => {},
   removeConferenceAward: () => {},
   updateApplicantStatus: () => {},
@@ -916,6 +948,11 @@ const AuthContext = createContext<AuthContextType>({
 });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const [authReady, setAuthReady] = useState(false);
+  useEffect(() => {
+    queueMicrotask(() => setAuthReady(true));
+  }, []);
+
   const [user, setUser] = useState<User | null>(() => {
     if (typeof window === "undefined") return null;
     const storedUser = localStorage.getItem("tidingz_user");
@@ -936,25 +973,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   });
   const [organizerConferences, setOrganizerConferences] = useState<OrganizerConference[]>(() => {
     if (typeof window === "undefined") return [];
-    const storedOrganizerConferences = localStorage.getItem("tidingz_organizer_conferences");
-    if (!storedOrganizerConferences) {
-      const hasStoredUser = !!localStorage.getItem("tidingz_user");
-      if (hasStoredUser) {
-        localStorage.setItem("tidingz_organizer_conferences", JSON.stringify(MOCK_ORGANIZER_CONFERENCES));
-        return MOCK_ORGANIZER_CONFERENCES.map(recomputeCommitteeAllotments);
-      }
-      return [];
+    let storedUser: User | null = null;
+    try {
+      storedUser = normalizeUser(JSON.parse(localStorage.getItem("tidingz_user") || "null"));
+    } catch {
+      storedUser = null;
     }
+    const storageKey = getOrganizerConferencesStorageKey({
+      id: storedUser?.id,
+      email: storedUser?.email,
+    });
+    const storedOrganizerConferences =
+      localStorage.getItem(storageKey) || localStorage.getItem("tidingz_organizer_conferences");
+    if (!storedOrganizerConferences) return [];
     try {
       const parsed = JSON.parse(storedOrganizerConferences);
       if (!Array.isArray(parsed)) return [];
       const normalized = parsed
         .map((entry) => normalizeOrganizerConference(entry))
         .filter((entry): entry is OrganizerConference => !!entry);
-      localStorage.setItem("tidingz_organizer_conferences", JSON.stringify(normalized));
-      return normalized.map(recomputeCommitteeAllotments);
+      const withOwner = normalized.map((conference) =>
+        stampOwnershipIfMissing(conference, { id: storedUser?.id, email: storedUser?.email })
+      );
+      localStorage.setItem(storageKey, JSON.stringify(withOwner));
+      return withOwner.map(recomputeCommitteeAllotments);
     } catch {
-      localStorage.removeItem("tidingz_organizer_conferences");
+      localStorage.removeItem(storageKey);
       return [];
     }
   });
@@ -969,25 +1013,111 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return [];
     }
   });
+  const scheduleOrganizerConferenceState = (next: OrganizerConference[]) => {
+    window.setTimeout(() => setOrganizerConferences(next), 0);
+  };
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!isOrganizerUser(user)) {
+      scheduleOrganizerConferenceState([]);
+      return;
+    }
+    const storageKey = getOrganizerConferencesStorageKey({
+      id: user?.id,
+      email: user?.email,
+    });
+    let storedOrganizerConferences = localStorage.getItem(storageKey);
+    if (!storedOrganizerConferences) {
+      const legacy = localStorage.getItem("tidingz_organizer_conferences");
+      if (legacy) {
+        storedOrganizerConferences = legacy;
+      }
+    }
+    if (!storedOrganizerConferences) {
+      scheduleOrganizerConferenceState([]);
+      return;
+    }
+    try {
+      const parsed = JSON.parse(storedOrganizerConferences);
+      if (!Array.isArray(parsed)) {
+        scheduleOrganizerConferenceState([]);
+        return;
+      }
+      const normalized = parsed
+        .map((entry) => normalizeOrganizerConference(entry))
+        .filter((entry): entry is OrganizerConference => !!entry)
+        .map((conference) =>
+          stampOwnershipIfMissing(conference, { id: user?.id, email: user?.email })
+        )
+        .map(recomputeCommitteeAllotments)
+        .filter((conference) =>
+          hasOrganizerConferenceAccess({ id: user?.id, email: user?.email }, conference)
+        );
+      localStorage.setItem(storageKey, JSON.stringify(normalized));
+      scheduleOrganizerConferenceState(normalized);
+    } catch {
+      scheduleOrganizerConferenceState([]);
+    }
+  }, [user, user?.id, user?.email, user?.role]);
 
   const login: AuthContextType["login"] = (email, name, role = "delegate") => {
+    const normalizedEmail = email.trim().toLowerCase();
+    const normalizedName =
+      name || email.split("@")[0].replace(/\./g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
     const loggedInUser = normalizeUser({
-      ...MOCK_USER,
-      email,
-      name: name || email.split("@")[0].replace(/\./g, " ").replace(/\b\w/g, c => c.toUpperCase()),
+      id: normalizedEmail,
+      email: normalizedEmail,
+      name: normalizedName,
       role,
-      avatar: (name || email)[0].toUpperCase(),
+      avatar: normalizedName[0]?.toUpperCase() || "U",
+      school: "",
+      country: "",
+      profileVisibility: "public",
+      munParticipations: [],
+      munAwards: [],
+      registeredConferences: [],
+      notifications: [],
     });
     if (!loggedInUser) return;
     setUser(loggedInUser);
     localStorage.setItem("tidingz_user", JSON.stringify(loggedInUser));
-    if (organizerConferences.length === 0) {
-      persistOrganizerConferences(MOCK_ORGANIZER_CONFERENCES.map(recomputeCommitteeAllotments));
+    const storageKey = getOrganizerConferencesStorageKey({
+      id: loggedInUser.id,
+      email: loggedInUser.email,
+    });
+    let storedOrganizerConferences = localStorage.getItem(storageKey);
+    if (!storedOrganizerConferences) {
+      const legacy = localStorage.getItem("tidingz_organizer_conferences");
+      if (legacy) storedOrganizerConferences = legacy;
+    }
+    if (!storedOrganizerConferences) {
+      setOrganizerConferences([]);
+      return;
+    }
+    try {
+      const parsed = JSON.parse(storedOrganizerConferences);
+      if (!Array.isArray(parsed)) {
+        setOrganizerConferences([]);
+        return;
+      }
+      const normalized = parsed
+        .map((entry) => normalizeOrganizerConference(entry))
+        .filter((entry): entry is OrganizerConference => !!entry)
+        .map((conference) =>
+          stampOwnershipIfMissing(conference, { id: loggedInUser.id, email: loggedInUser.email })
+        )
+        .map(recomputeCommitteeAllotments);
+      localStorage.setItem(storageKey, JSON.stringify(normalized));
+      setOrganizerConferences(normalized);
+    } catch {
+      setOrganizerConferences([]);
     }
   };
 
   const logout = () => {
     setUser(null);
+    setOrganizerConferences([]);
     localStorage.removeItem("tidingz_user");
   };
 
@@ -1000,7 +1130,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(updated);
     localStorage.setItem("tidingz_user", JSON.stringify(updated));
 
-    const current = ensureOrganizerSeed(organizerConferences);
+    const current = organizerConferences;
     const next = current.map((conference) => {
       if (conference.id !== reg.conferenceId) return conference;
       const committeePreferences = reg.committeePreferences && reg.committeePreferences.length > 0
@@ -1040,8 +1170,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const persistOrganizerConferences = (next: OrganizerConference[]) => {
     const normalized = next.map(recomputeCommitteeAllotments);
-    setOrganizerConferences(normalized);
-    localStorage.setItem("tidingz_organizer_conferences", JSON.stringify(normalized));
+    const storageKey = getOrganizerConferencesStorageKey({
+      id: user?.id,
+      email: user?.email,
+    });
+    localStorage.setItem(storageKey, JSON.stringify(normalized));
+    if (!isOrganizerUser(user)) {
+      setOrganizerConferences([]);
+      return;
+    }
+    setOrganizerConferences(
+      normalized.filter((conference) =>
+        hasOrganizerConferenceAccess(
+          { id: user?.id, email: user?.email },
+          conference
+        )
+      )
+    );
   };
 
   const triggerStatusEmail = ({
@@ -1070,6 +1215,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       headers: { "Content-Type": "application/json" },
       credentials: "include",
       body: JSON.stringify({
+        eventId: conference.id,
         to: recipientEmail,
         templateKey,
         subjectTemplate: selectedTemplate.subject,
@@ -1124,18 +1270,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const ensureOrganizerSeed = (current: OrganizerConference[]) => {
-    if (current.length > 0) return current;
-    return MOCK_ORGANIZER_CONFERENCES;
-  };
-
   const addOrganizerConference: AuthContextType["addOrganizerConference"] = (payload) => {
-    const current = ensureOrganizerSeed(organizerConferences);
+    const current = organizerConferences;
     const next: OrganizerConference[] = [
       {
         ...payload,
         id: `org-${Date.now()}`,
-        status: "Review",
+        ownerUserId: user?.id,
+        ownerEmail: user?.email,
+        status: "Draft",
         applicants: [],
         announcements: [],
         statusEmailTemplates: normalizeStatusEmailTemplates(payload.statusEmailTemplates, payload.title),
@@ -1146,13 +1289,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const removeOrganizerConference: AuthContextType["removeOrganizerConference"] = (conferenceId) => {
-    const current = ensureOrganizerSeed(organizerConferences);
+    const current = organizerConferences;
     const next = current.filter((conference) => conference.id !== conferenceId);
     persistOrganizerConferences(next);
   };
 
   const updateOrganizerConferenceStatus: AuthContextType["updateOrganizerConferenceStatus"] = (conferenceId, status) => {
-    const current = ensureOrganizerSeed(organizerConferences);
+    const current = organizerConferences;
     const next = current.map((conference) =>
       conference.id === conferenceId ? { ...conference, status } : conference
     );
@@ -1163,7 +1306,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     conferenceId,
     patch
   ) => {
-    const current = ensureOrganizerSeed(organizerConferences);
+    const current = organizerConferences;
     const next = current.map((conference) =>
       conference.id === conferenceId
         ? {
@@ -1184,7 +1327,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     committeeId,
     patch
   ) => {
-    const current = ensureOrganizerSeed(organizerConferences);
+    const current = organizerConferences;
     const next = current.map((conference) => {
       if (conference.id !== conferenceId) return conference;
       return {
@@ -1198,7 +1341,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const addOrganizerCommittee: AuthContextType["addOrganizerCommittee"] = (conferenceId, committee) => {
-    const current = ensureOrganizerSeed(organizerConferences);
+    const current = organizerConferences;
     const next = current.map((conference) => {
       if (conference.id !== conferenceId) return conference;
       const nextCommittee: OrganizerCommittee = {
@@ -1221,7 +1364,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const removeOrganizerCommittee: AuthContextType["removeOrganizerCommittee"] = (conferenceId, committeeId) => {
-    const current = ensureOrganizerSeed(organizerConferences);
+    const current = organizerConferences;
     const next = current.map((conference) => {
       if (conference.id !== conferenceId) return conference;
       return {
@@ -1237,7 +1380,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     categoryId,
     patch
   ) => {
-    const current = ensureOrganizerSeed(organizerConferences);
+    const current = organizerConferences;
     const next = current.map((conference) => {
       if (conference.id !== conferenceId) return conference;
       return {
@@ -1251,7 +1394,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const addConferenceReview: AuthContextType["addConferenceReview"] = (conferenceId, payload) => {
-    const current = ensureOrganizerSeed(organizerConferences);
+    const current = organizerConferences;
     const next = current.map((conference) => {
       if (conference.id !== conferenceId) return conference;
       const review: ConferenceReview = {
@@ -1275,7 +1418,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     reviewId,
     patch
   ) => {
-    const current = ensureOrganizerSeed(organizerConferences);
+    const current = organizerConferences;
     const next = current.map((conference) => {
       if (conference.id !== conferenceId) return conference;
       return {
@@ -1283,6 +1426,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         reviews: (conference.reviews || []).map((review) =>
           review.id === reviewId ? { ...review, ...patch } : review
         ),
+      };
+    });
+    persistOrganizerConferences(next);
+  };
+
+  const removeConferenceReview: AuthContextType["removeConferenceReview"] = (conferenceId, reviewId, userId) => {
+    const current = organizerConferences;
+    const next = current.map((conference) => {
+      if (conference.id !== conferenceId) return conference;
+      return {
+        ...conference,
+        reviews: (conference.reviews || []).filter((review) => !(review.id === reviewId && review.userId === userId)),
       };
     });
     persistOrganizerConferences(next);
@@ -1348,7 +1503,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     };
 
-    const current = ensureOrganizerSeed(organizerConferences);
+    const current = organizerConferences;
     const next = current.map((conference) => {
       if (conference.id !== conferenceId) return conference;
       const createdAward = {
@@ -1368,7 +1523,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const removeConferenceAward: AuthContextType["removeConferenceAward"] = (conferenceId, awardId) => {
-    const current = ensureOrganizerSeed(organizerConferences);
+    const current = organizerConferences;
     const next = current.map((conference) => {
       if (conference.id !== conferenceId) return conference;
       return {
@@ -1380,7 +1535,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const updateApplicantStatus: AuthContextType["updateApplicantStatus"] = (conferenceId, applicantId, status) => {
-    const current = ensureOrganizerSeed(organizerConferences);
+    const current = organizerConferences;
     const next = current.map((conference) => {
       if (conference.id !== conferenceId) return conference;
       return {
@@ -1399,7 +1554,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const toggleApplicantPayment: AuthContextType["toggleApplicantPayment"] = (conferenceId, applicantId) => {
-    const current = ensureOrganizerSeed(organizerConferences);
+    const current = organizerConferences;
     const next = current.map((conference) => {
       if (conference.id !== conferenceId) return conference;
       return {
@@ -1413,7 +1568,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const addAnnouncement: AuthContextType["addAnnouncement"] = (conferenceId, title, message) => {
-    const current = ensureOrganizerSeed(organizerConferences);
+    const current = organizerConferences;
     const announcement: OrganizerAnnouncement = {
       id: `an-${Date.now()}`,
       title,
@@ -1438,7 +1593,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     portfolioId,
     allowOverride = false,
   }) => {
-    const current = ensureOrganizerSeed(organizerConferences);
+    const current = organizerConferences;
     const conference = current.find((entry) => entry.id === conferenceId);
     if (!conference) return { ok: false, message: "Conference not found." };
 
@@ -1564,7 +1719,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const unassignApplicant: AuthContextType["unassignApplicant"] = (conferenceId, applicantId) => {
-    const current = ensureOrganizerSeed(organizerConferences);
+    const current = organizerConferences;
     const conference = current.find((entry) => entry.id === conferenceId);
     if (!conference) return { ok: false, message: "Conference not found." };
     const applicant = conference.applicants.find((entry) => entry.id === applicantId);
@@ -1614,7 +1769,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const waitlistApplicant: AuthContextType["waitlistApplicant"] = (conferenceId, applicantId) => {
-    const current = ensureOrganizerSeed(organizerConferences);
+    const current = organizerConferences;
     const conference = current.find((entry) => entry.id === conferenceId);
     if (!conference) return { ok: false, message: "Conference not found." };
     const applicant = conference.applicants.find((entry) => entry.id === applicantId);
@@ -1623,9 +1778,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const clearAssignment = unassignApplicant(conferenceId, applicantId);
     if (!clearAssignment.ok) return clearAssignment;
 
-    const refreshed = ensureOrganizerSeed(
-      JSON.parse(localStorage.getItem("tidingz_organizer_conferences") || "[]") as OrganizerConference[]
-    );
+    const refreshed = organizerConferences;
     const next: OrganizerConference[] = refreshed.map((entry) => {
       if (entry.id !== conferenceId) return entry;
       return {
@@ -1670,7 +1823,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const inviteApplicant: AuthContextType["inviteApplicant"] = (conferenceId, applicantId) => {
-    const current = ensureOrganizerSeed(organizerConferences);
+    const current = organizerConferences;
     const conference = current.find((entry) => entry.id === conferenceId);
     if (!conference) return { ok: false, message: "Conference not found." };
     const applicant = conference.applicants.find((entry) => entry.id === applicantId);
@@ -1724,7 +1877,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     committeeId,
     seatCount
   ) => {
-    const current = ensureOrganizerSeed(organizerConferences);
+    const current = organizerConferences;
     const next = current.map((conference) => {
       if (conference.id !== conferenceId) return conference;
       return {
@@ -1762,6 +1915,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       value={{
         user,
         isLoggedIn: !!user,
+        authReady,
         organizerConferences,
         login,
         logout,
@@ -1776,6 +1930,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         updateRegistrationCategoryConfig,
         addConferenceReview,
         moderateConferenceReview,
+        removeConferenceReview,
         addConferenceAward,
         removeConferenceAward,
         updateApplicantStatus,

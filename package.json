@@ -7,8 +7,18 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "typecheck": "tsc --noEmit",
     "prisma:generate": "prisma generate",
-    "prisma:migrate": "prisma migrate dev"
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:migrate:deploy": "prisma migrate deploy",
+    "db:seed": "npx tsx prisma/seed.ts",
+    "db:reset": "prisma migrate reset --force",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "cf:build": "opennextjs-cloudflare build",
+    "cf:preview": "opennextjs-cloudflare build && wrangler dev",
+    "cf:deploy": "opennextjs-cloudflare build && wrangler deploy"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.7.0",
@@ -21,16 +31,21 @@
     "html5-qrcode": "^2.3.8",
     "jose": "^6.2.2",
     "jspdf": "^4.2.1",
-    "next": "16.2.1",
+    "next": "16.2.3",
     "pg": "^8.16.3",
     "prisma": "^7.7.0",
     "qrcode": "^1.5.4",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "resend": "^6.12.2",
-    "three": "^0.184.0"
+    "three": "^0.184.0",
+    "zod": "^4.4.3"
+  },
+  "prisma": {
+    "seed": "npx tsx prisma/seed.ts"
   },
   "devDependencies": {
+    "@opennextjs/cloudflare": "^1.6.0",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/qrcode": "^1.5.6",
@@ -38,8 +53,13 @@
     "@types/react-dom": "^19",
     "@types/three": "^0.184.0",
     "eslint": "^9",
-    "eslint-config-next": "16.2.1",
+    "@playwright/test": "^1.51.0",
+    "eslint-config-next": "16.2.3",
+    "jsdom": "^26.1.0",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "tsx": "^4.20.0",
+    "typescript": "^5",
+    "vitest": "^3.2.4",
+    "wrangler": "^4.15.2"
   }
 }

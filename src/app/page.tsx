@@ -7,11 +7,10 @@ import { motion, useReducedMotion } from "framer-motion";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import AuthModal from "@/components/AuthModal";
-import ConferenceCard from "@/components/ConferenceCard";
 import ScrollShell from "@/components/ScrollShell";
 import Reveal from "@/components/Reveal";
 import WebGLLoader from "@/components/3d/WebGLLoader";
-import { CONFERENCES } from "@/lib/data";
+import { useAuth } from "@/lib/auth-context";
 
 const HeroScene = dynamic(() => import("@/components/3d/HeroScene"), {
   ssr: false,
@@ -69,12 +68,46 @@ const VEIL_SOFT: React.CSSProperties = {
 };
 
 export default function HomePage() {
+  const { isLoggedIn, user } = useAuth();
   const [authOpen, setAuthOpen] = useState(false);
+  const [newsletterEmail, setNewsletterEmail] = useState("");
+  const [newsletterBusy, setNewsletterBusy] = useState(false);
+  const [newsletterNote, setNewsletterNote] = useState<string | null>(null);
   const [sceneReady, setSceneReady] = useState(false);
+  const [sceneEnabled, setSceneEnabled] = useState(false);
   const openAuthModal = () => setAuthOpen(true);
-  const featured = CONFERENCES.filter((c) => c.featured).slice(0, 3);
+
+  const subscribeNewsletter = async () => {
+    setNewsletterNote(null);
+    if (!newsletterEmail.includes("@")) {
+      setNewsletterNote("Enter a valid email.");
+      return;
+    }
+    setNewsletterBusy(true);
+    try {
+      const res = await fetch("/api/newsletter", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: newsletterEmail }),
+      });
+      const data = (await res.json().catch(() => ({}))) as { error?: string; message?: string };
+      if (!res.ok) {
+        setNewsletterNote(data.error || "Could not subscribe.");
+        return;
+      }
+      setNewsletterNote(data.message || "You’re on the list.");
+      setNewsletterEmail("");
+    } finally {
+      setNewsletterBusy(false);
+    }
+  };
   const reduced = useReducedMotion();
   const scrollProgressRef = useRef(0);
+  const isOrganizerUser = user?.role === "organizer" || user?.role === "admin";
+  const shouldEnableScene =
+    typeof window !== "undefined" &&
+    !window.matchMedia("(prefers-reduced-motion: reduce)").matches &&
+    !window.matchMedia("(max-width: 768px)").matches;
 
   // Track overall scroll progress (0..1) and hand it to the WebGL scene so it
   // can evolve subtly from section to section (camera pull-back, drift, tilt).
@@ -98,6 +131,16 @@ export default function HomePage() {
   // device rejected the WebGL context), hide the loader so the user is never
   // trapped behind it.
   useEffect(() => {
+    if (!shouldEnableScene) return;
+    const schedule = (window as Window & { requestIdleCallback?: (cb: () => void) => number }).requestIdleCallback;
+    if (schedule) {
+      schedule(() => setSceneEnabled(true));
+    } else {
+      window.setTimeout(() => setSceneEnabled(true), 350);
+    }
+  }, [shouldEnableScene]);
+
+  useEffect(() => {
     if (sceneReady) return;
     const t = window.setTimeout(() => setSceneReady(true), 4000);
     return () => window.clearTimeout(t);
@@ -106,7 +149,7 @@ export default function HomePage() {
   return (
     <ScrollShell>
       <div className="lux-shell lux-shell-immersive min-h-screen flex flex-col">
-        <WebGLLoader visible={!sceneReady} />
+        <WebGLLoader visible={sceneEnabled && !sceneReady} />
 
         {/* Persistent WebGL backdrop. One canvas carries the aesthetic across
             every section, giving the page continuous 3D presence without the
@@ -116,10 +159,12 @@ export default function HomePage() {
           className="fixed inset-0 z-0 pointer-events-none"
           style={{ background: "#0b0d12" }}
         >
-          <HeroScene
-            scrollProgressRef={scrollProgressRef}
-            onFirstFrame={() => setSceneReady(true)}
-          />
+          {sceneEnabled ? (
+            <HeroScene
+              scrollProgressRef={scrollProgressRef}
+              onFirstFrame={() => setSceneReady(true)}
+            />
+          ) : null}
         </div>
 
         <Navbar openAuthModal={openAuthModal} />
@@ -202,14 +247,24 @@ export default function HomePage() {
               }}
               className="mt-12 flex flex-col sm:flex-row gap-4"
             >
-              <button
-                type="button"
-                onClick={openAuthModal}
-                className="lux-button-primary text-base"
-                style={{ padding: "16px 34px" }}
-              >
-                Begin your journey
-              </button>
+              {!isLoggedIn ? (
+                <button
+                  type="button"
+                  onClick={openAuthModal}
+                  className="lux-button-primary text-base"
+                  style={{ padding: "16px 34px" }}
+                >
+                  Begin your journey
+                </button>
+              ) : (
+                <Link
+                  href={isOrganizerUser ? "/organizers/dashboard" : "/marketplace"}
+                  className="lux-button-primary text-base"
+                  style={{ padding: "16px 34px" }}
+                >
+                  {isOrganizerUser ? "Go to organizer dashboard" : "Continue to marketplace"}
+                </Link>
+              )}
               <Link
                 href="/marketplace"
                 className="lux-button-ghost text-base"
@@ -396,22 +451,10 @@ export default function HomePage() {
               </Reveal>
             </div>
 
-            <div className="grid md:grid-cols-3 gap-6">
-              {featured.map((c, i) => (
-                <motion.div
-                  key={c.id}
-                  initial={{ opacity: 0, y: 36 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true, margin: "-10% 0px" }}
-                  transition={{
-                    duration: 1,
-                    delay: reduced ? 0 : i * 0.1,
-                    ease: [0.2, 0.7, 0.2, 1],
-                  }}
-                >
-                  <ConferenceCard conference={c} />
-                </motion.div>
-              ))}
+            <div className="lux-card p-8 text-center">
+              <p className="text-sm" style={{ color: "var(--fg-immersive-muted)" }}>
+                Featured conferences will appear here once organizers publish live events.
+              </p>
             </div>
           </div>
         </section>
@@ -455,14 +498,24 @@ export default function HomePage() {
             </Reveal>
             <Reveal delay={0.3}>
               <div className="mt-12 flex justify-center">
-                <button
-                  type="button"
-                  onClick={openAuthModal}
-                  className="lux-button-primary text-base"
-                  style={{ padding: "16px 34px" }}
-                >
-                  Create free account
-                </button>
+                {!isLoggedIn ? (
+                  <button
+                    type="button"
+                    onClick={openAuthModal}
+                    className="lux-button-primary text-base"
+                    style={{ padding: "16px 34px" }}
+                  >
+                    Create free account
+                  </button>
+                ) : (
+                  <Link
+                    href={isOrganizerUser ? "/organizers/dashboard" : "/marketplace"}
+                    className="lux-button-primary text-base"
+                    style={{ padding: "16px 34px" }}
+                  >
+                    {isOrganizerUser ? "Open organizer dashboard" : "Browse conferences"}
+                  </Link>
+                )}
               </div>
             </Reveal>
           </div>
@@ -574,7 +627,9 @@ export default function HomePage() {
                   Email us →
                 </a>
                 <a
-                  href="#"
+                  href="https://x.com"
+                  target="_blank"
+                  rel="noopener noreferrer"
                   className="lux-button-ghost text-base"
                   style={{ padding: "14px 30px" }}
                 >
@@ -606,24 +661,35 @@ export default function HomePage() {
                     New conferences and application deadlines, sent weekly.
                   </p>
                 </div>
-                <div className="flex gap-2 w-full sm:w-auto">
-                  <input
-                    type="email"
-                    placeholder="your@email.com"
-                    className="flex-1 sm:w-60 text-sm px-4 py-3 rounded-xl outline-none"
-                    style={{
-                      background: "rgba(255,255,255,0.07)",
-                      border: "1.5px solid rgba(243,237,224,0.18)",
-                      color: "var(--fg-immersive)",
-                    }}
-                  />
-                  <button
-                    type="button"
-                    className="lux-button-primary text-sm"
-                    style={{ padding: "12px 22px", whiteSpace: "nowrap" }}
-                  >
-                    Subscribe
-                  </button>
+                <div className="flex flex-col gap-2 w-full sm:w-auto">
+                  <div className="flex gap-2 w-full sm:w-auto">
+                    <input
+                      type="email"
+                      placeholder="your@email.com"
+                      value={newsletterEmail}
+                      onChange={(e) => setNewsletterEmail(e.target.value)}
+                      className="flex-1 sm:w-60 text-sm px-4 py-3 rounded-xl outline-none"
+                      style={{
+                        background: "rgba(255,255,255,0.07)",
+                        border: "1.5px solid rgba(243,237,224,0.18)",
+                        color: "var(--fg-immersive)",
+                      }}
+                    />
+                    <button
+                      type="button"
+                      className="lux-button-primary text-sm"
+                      style={{ padding: "12px 22px", whiteSpace: "nowrap" }}
+                      disabled={newsletterBusy}
+                      onClick={subscribeNewsletter}
+                    >
+                      {newsletterBusy ? "…" : "Subscribe"}
+                    </button>
+                  </div>
+                  {newsletterNote && (
+                    <p className="text-xs" style={{ color: "var(--fg-immersive-muted)" }}>
+                      {newsletterNote}
+                    </p>
+                  )}
                 </div>
               </div>
             </Reveal>

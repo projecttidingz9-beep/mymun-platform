@@ -116,6 +116,7 @@ export interface Conference {
   region: "Asia" | "Europe" | "Americas" | "Africa" | "Oceania";
   startDate: string;
   endDate: string;
+  registrationOpenDate?: string;
   registrationDeadline: string;
   price: number;
   currency: string;
@@ -252,6 +253,8 @@ export interface OrganizerAssignmentLog {
 
 export interface OrganizerConference {
   id: string;
+  ownerUserId?: string;
+  ownerEmail?: string;
   title: string;
   city: string;
   country: string;
@@ -322,6 +325,7 @@ export interface OrganizerPreviousEdition {
 
 export interface OrganizerTeamMember {
   id: string;
+  userId?: string;
   name: string;
   email: string;
   role: string;
@@ -415,15 +419,21 @@ export interface OrganizerOverviewAnalytics {
 
 export interface OrganizerConferencePreviewConfig {
   eventId: string;
+  ownerUserId?: string;
+  ownerEmail?: string;
+  organizerTeamEmails?: string[];
   title?: string;
   city?: string;
   country?: string;
   organizerName?: string;
   contactDetail?: string;
   tags?: string[];
+  capacity?: number;
+  level?: "High School" | "University" | "Open";
   venue?: string;
   startDate?: string;
   endDate?: string;
+  registrationDeadline?: string;
   description?: string;
   termsAndConditions?: string;
   refundPolicy?: string;

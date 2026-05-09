@@ -33,6 +33,7 @@ export default function MarketplacePage() {
   const { user, organizerConferences } = useAuth();
   const isOrganizerUser = user?.role === "organizer";
   const [search, setSearch] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
   const [level, setLevel] = useState("All");
   const [region, setRegion] = useState("All");
   const [maxPrice, setMaxPrice] = useState(250);
@@ -54,6 +55,28 @@ export default function MarketplacePage() {
     () => getMarketplaceConferences(organizerConferences),
     [organizerConferences]
   );
+  const indexedConferences = useMemo(
+    () =>
+      allConferences.map((conference) => ({
+        conference,
+        searchText: [
+          conference.title,
+          conference.city,
+          conference.country,
+          ...conference.committees.map((committee) => committee.name),
+        ]
+          .join(" ")
+          .toLowerCase(),
+      })),
+    [allConferences]
+  );
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setSearchQuery(search.trim().toLowerCase());
+    }, 180);
+    return () => window.clearTimeout(timer);
+  }, [search]);
 
   const filtered = useMemo(() => {
     const normalizedSeatsMin = Math.min(seatsMin, seatsMax);
@@ -63,13 +86,10 @@ export default function MarketplacePage() {
     const deadlineFromValue = parseDayValue(deadlineFrom);
     const deadlineToValue = parseDayValue(deadlineTo);
 
-    let result = allConferences.filter((c) => {
+    let result = indexedConferences
+      .filter(({ conference: c, searchText }) => {
       const matchSearch =
-        !search ||
-        c.title.toLowerCase().includes(search.toLowerCase()) ||
-        c.city.toLowerCase().includes(search.toLowerCase()) ||
-        c.country.toLowerCase().includes(search.toLowerCase()) ||
-        c.committees.some((cm) => cm.name.toLowerCase().includes(search.toLowerCase()));
+        !searchQuery || searchText.includes(searchQuery);
       const matchLevel = level === "All" || c.level === level;
       const matchRegion = region === "All" || c.region === region;
       const matchPrice = c.price <= maxPrice;
@@ -100,7 +120,8 @@ export default function MarketplacePage() {
         matchDeadlineTo &&
         matchFeatured
       );
-    });
+      })
+      .map(({ conference }) => conference);
 
     result = [...result].sort((a, b) => {
       switch (sort) {
@@ -115,8 +136,8 @@ export default function MarketplacePage() {
 
     return result;
   }, [
-    allConferences,
-    search,
+    indexedConferences,
+    searchQuery,
     level,
     region,
     maxPrice,
@@ -478,14 +499,7 @@ export default function MarketplacePage() {
             style={{ color: "var(--fg)" }}
           >
             Find your next{" "}
-            <span
-              style={{
-                background: "linear-gradient(120deg, #e7c390 10%, #f4e2c6 50%, #b28b57 90%)",
-                WebkitBackgroundClip: "text",
-                backgroundClip: "text",
-                color: "transparent",
-              }}
-            >
+            <span className="text-gradient">
               conference
             </span>
             .
@@ -651,28 +665,32 @@ export default function MarketplacePage() {
                 className="lux-eyebrow"
                 style={{ color: "var(--fg-muted)" }}
               >
-                Nothing matches
+                {allConferences.length === 0 ? "No live conferences yet" : "Nothing matches"}
               </p>
               <p
                 className="mt-4 text-2xl font-semibold"
                 style={{ color: "var(--fg)", letterSpacing: "-0.02em" }}
               >
-                No conferences found
+                {allConferences.length === 0 ? "No conferences live yet" : "No conferences found"}
               </p>
               <p
                 className="mt-3 max-w-md mx-auto"
                 style={{ color: "var(--fg-muted)" }}
               >
-                Try adjusting your filters or search term to broaden the horizon.
+                {allConferences.length === 0
+                  ? "No conferences live yet — check back soon."
+                  : "Try adjusting your filters or search term to broaden the horizon."}
               </p>
-              <button
-                type="button"
-                onClick={clearAll}
-                className="lux-button-primary text-sm mt-8"
-                style={{ padding: "12px 22px" }}
-              >
-                Clear filters
-              </button>
+              {allConferences.length > 0 && (
+                <button
+                  type="button"
+                  onClick={clearAll}
+                  className="lux-button-primary text-sm mt-8"
+                  style={{ padding: "12px 22px" }}
+                >
+                  Clear filters
+                </button>
+              )}
             </div>
           )}
         </div>

@@ -1,22 +1,29 @@
 import { SignJWT, jwtVerify } from "jose";
+import { env } from "./env";
 
 export type SessionRole = "delegate" | "organizer" | "admin";
 
-type SessionClaims = {
+export type SessionClaims = {
   email: string;
   role: SessionRole;
   name?: string;
+  /** JWT `sub` — user id */
+  sub?: string;
+  /** Issued session version; must match User.sessionVersion (sign-out everywhere). */
+  sv?: number;
 };
 
-const DEFAULT_SECRET = "change-me-session-secret";
-
 function getSecret() {
-  return new TextEncoder().encode(process.env.AUTH_SESSION_SECRET || DEFAULT_SECRET);
+  return new TextEncoder().encode(env.authSessionSecret());
 }
 
-export async function signSessionToken(claims: SessionClaims) {
-  return await new SignJWT(claims)
+export async function signSessionToken(
+  claims: SessionClaims & { sub: string; sv: number }
+) {
+  const { sub, sv, ...rest } = claims;
+  return await new SignJWT({ ...rest, sv })
     .setProtectedHeader({ alg: "HS256" })
+    .setSubject(sub)
     .setIssuedAt()
     .setExpirationTime("7d")
     .sign(getSecret());
@@ -24,7 +31,7 @@ export async function signSessionToken(claims: SessionClaims) {
 
 export async function verifySessionToken(token: string) {
   const verified = await jwtVerify(token, getSecret(), { algorithms: ["HS256"] });
-  const payload = verified.payload as SessionClaims;
+  const payload = verified.payload as SessionClaims & { sub?: string };
   if (!payload.email || !payload.role) return null;
-  return payload;
+  return payload as SessionClaims & { sub?: string };
 }

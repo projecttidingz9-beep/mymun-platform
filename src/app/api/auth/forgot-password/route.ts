@@ -46,7 +46,7 @@ export async function POST(request: NextRequest) {
       await resend.emails.send({
         from: fromEmail,
         to: user.email,
-        subject: "Reset your MyMUN password",
+        subject: "Reset your Tidingz password",
         text:
           `Hi ${user.name},\n\n` +
           `Use this link to reset your password (valid for ${RESET_TOKEN_TTL_MINUTES} minutes):\n` +

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/server/prisma";
 import { hashPassword, validateNewPassword } from "@/lib/server/password";
 import { signSessionToken } from "@/lib/server/session-token";
+import { prismaUserRoleToSession } from "@/lib/server/user-role";
 
 export async function POST(request: NextRequest) {
   try {
@@ -35,18 +36,21 @@ export async function POST(request: NextRequest) {
         role: role === "organizer" ? "ORGANIZER" : "DELEGATE",
         passwordHash,
       },
-      select: { email: true, name: true, role: true },
+      select: { id: true, email: true, name: true, role: true, sessionVersion: true },
     });
 
+    const sessionRole = prismaUserRoleToSession(user.role);
     const token = await signSessionToken({
       email: user.email,
-      role: role,
+      role: sessionRole,
       name: user.name,
+      sub: user.id,
+      sv: user.sessionVersion,
     });
     const response = NextResponse.json({
       ok: true,
       name: user.name,
-      role: user.role === "ORGANIZER" ? "organizer" : "delegate",
+      role: sessionRole,
     });
     response.cookies.set("mymun_session", token, {
       httpOnly: true,

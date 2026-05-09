@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getRequestActor, requireOrganizer, resolveActorUserId } from "@/lib/server/auth";
+import { getRequestActor, requireEventOrganizerAccess, requireOrganizer, resolveActorUserId } from "@/lib/server/auth";
 import { unlinkPartnership, updatePartnershipStatus } from "@/lib/server/organizer-partners";
 
 export async function PATCH(
@@ -20,6 +20,9 @@ export async function PATCH(
   const partnershipId = String(params.partnershipId || "");
   if (!eventId || !partnershipId) {
     return NextResponse.json({ error: "eventId and partnershipId are required." }, { status: 400 });
+  }
+  if (!(await requireEventOrganizerAccess(actor, eventId))) {
+    return NextResponse.json({ error: "You do not have access to this conference." }, { status: 403 });
   }
 
   const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
@@ -66,6 +69,9 @@ export async function DELETE(
   const partnershipId = String(params.partnershipId || "");
   if (!eventId || !partnershipId) {
     return NextResponse.json({ error: "eventId and partnershipId are required." }, { status: 400 });
+  }
+  if (!(await requireEventOrganizerAccess(actor, eventId))) {
+    return NextResponse.json({ error: "You do not have access to this conference." }, { status: 403 });
   }
 
   try {

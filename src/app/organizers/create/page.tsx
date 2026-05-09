@@ -75,21 +75,19 @@ export default function CreateOrganizerConferencePage() {
             isOpen: true,
             deadlineOverride: registrationDeadline,
             basePrice: 0,
-            requiresCommitteeSelection: true,
+            requiresCommitteeSelection: false,
             formFields: [],
             pricingPhases: [],
           },
         ],
         committees: [],
       });
-      setSubmitMessage("Conference created. We will contact you shortly for verification.");
+      setSubmitMessage("Conference created as Draft. Go to your dashboard and click Publish to make it visible on the marketplace.");
       router.push("/organizers/dashboard");
     } finally {
       setIsSubmitting(false);
     }
   };
-
-  if (!hydrated) return null;
 
   return (
     <div className="min-h-screen" style={{ background: "var(--bg)" }}>
@@ -97,13 +95,26 @@ export default function CreateOrganizerConferencePage() {
       <AuthModal isOpen={authOpen} onClose={() => setAuthOpen(false)} />
       <main className="pt-28 pb-16 px-4 sm:px-6">
         <div className="max-w-4xl mx-auto">
+          {!hydrated ? (
+            <div className="app-card space-y-4">
+              <div className="skeleton h-8 w-48 rounded-lg" />
+              <div className="skeleton h-4 w-full max-w-md rounded-md" />
+              <div className="grid md:grid-cols-2 gap-4 mt-6">
+                <div className="skeleton h-12 rounded-xl w-full" />
+                <div className="skeleton h-12 rounded-xl w-full" />
+                <div className="skeleton h-12 rounded-xl w-full" />
+                <div className="skeleton h-12 rounded-xl w-full" />
+              </div>
+              <div className="skeleton h-32 rounded-xl w-full mt-4" />
+            </div>
+          ) : (
           <div className="app-card">
             <div className="app-header" style={{ marginBottom: 18 }}>
               <div className="app-header-copy">
                 <div className="section-label mb-2">Organizer Onboarding</div>
                 <h1 className="app-title">Create Conference</h1>
                 <p className="app-subtitle mt-2">
-                  Submit essential details first. Our team will verify your conference and then unlock full setup.
+                  Create your conference as Draft, then open your dashboard and click Publish when ready to go live.
                 </p>
               </div>
             </div>
@@ -222,6 +233,7 @@ export default function CreateOrganizerConferencePage() {
               </button>
             </div>
           </div>
+          )}
         </div>
       </main>
       <Footer />

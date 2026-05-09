@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
@@ -10,9 +10,10 @@ import AuthModal from "@/components/AuthModal";
 import { useAuth } from "@/lib/auth-context";
 import { getCategoryStartingPrice, getActivePhase, getPhaseStatus } from "@/lib/pricing";
 import {
-  getMarketplaceConferences,
   mapOrganizerConferenceToMarketplaceConference,
 } from "@/lib/marketplace-conferences";
+import { resolveConferenceBannerImage } from "@/lib/conference-media";
+import { hasOrganizerConferenceAccess } from "@/lib/organizer-access";
 
 type Tab = "overview" | "committees" | "schedule" | "organizer" | "reviews";
 
@@ -47,7 +48,14 @@ const DEFAULT_OVERVIEW_DOCUMENTS = [
 export default function ConferenceDetailPage() {
   const params = useParams();
   const router = useRouter();
-  const { isLoggedIn, user, organizerConferences, addConferenceReview } = useAuth();
+  const {
+    isLoggedIn,
+    user,
+    organizerConferences,
+    addConferenceReview,
+    updateOrganizerConferenceConfig,
+    removeConferenceReview,
+  } = useAuth();
   const [tab, setTab] = useState<Tab>("overview");
   const [authOpen, setAuthOpen] = useState(false);
   const [reviewDraft, setReviewDraft] = useState({
@@ -61,17 +69,23 @@ export default function ConferenceDetailPage() {
   const [tagDraft, setTagDraft] = useState("");
   const [editableStats, setEditableStats] = useState<Record<string, string | number>>({});
   const [reviewMessage, setReviewMessage] = useState<string | null>(null);
+  const [shareOpen, setShareOpen] = useState(false);
+  const [shareMessage, setShareMessage] = useState<string | null>(null);
   const [instantReviews, setInstantReviews] = useState<
     Array<{ id: string; userName: string; rating: number; comment: string; sourceConferenceTitle: string; featured?: boolean }>
   >([]);
 
-  const mergedConferences = useMemo(
-    () => getMarketplaceConferences(organizerConferences),
-    [organizerConferences]
-  );
-  const conference = mergedConferences.find((c) => c.id === params.id);
   const organizerConference = organizerConferences.find((event) => event.id === params.id);
-  const acceptedPartnerConferences = useMemo(() => {
+  const conference = organizerConference
+    ? mapOrganizerConferenceToMarketplaceConference(organizerConference)
+    : undefined;
+  const canPreviewUnpublishedConference = Boolean(
+    organizerConference &&
+      isLoggedIn &&
+      (user?.role === "organizer" || user?.role === "admin") &&
+      hasOrganizerConferenceAccess({ id: user?.id, email: user?.email }, organizerConference)
+  );
+  const acceptedPartnerConferences = (() => {
     if (!organizerConference) return [];
     const partnerIds = new Set([
       ...(organizerConference.partnerConferenceIds || []),
@@ -80,8 +94,8 @@ export default function ConferenceDetailPage() {
         .map((link) => link.partnerConferenceId),
     ]);
     return organizerConferences.filter((entry) => partnerIds.has(entry.id));
-  }, [organizerConference, organizerConferences]);
-  const acceptedPartnerTitles = useMemo(() => {
+  })();
+  const acceptedPartnerTitles = (() => {
     if (!organizerConference) return [];
     const fromConferences = acceptedPartnerConferences.map((entry) => entry.title);
     const fromLinks = (organizerConference.partnerLinks || [])
@@ -89,13 +103,15 @@ export default function ConferenceDetailPage() {
       .map((link) => link.partnerConferenceTitle || "Partner MUN")
       .filter(Boolean);
     return Array.from(new Set([...fromConferences, ...fromLinks]));
-  }, [organizerConference, acceptedPartnerConferences]);
-  const mergedOrganizerConferences = useMemo(
-    () => (organizerConference ? [organizerConference, ...acceptedPartnerConferences] : []),
-    [organizerConference, acceptedPartnerConferences]
-  );
+  })();
+  const mergedOrganizerConferences = organizerConference
+    ? [organizerConference, ...acceptedPartnerConferences]
+    : [];
 
-  if (!conference && !organizerConference) {
+  if (
+    (!conference && !organizerConference) ||
+    (organizerConference && organizerConference.status !== "Published" && !canPreviewUnpublishedConference)
+  ) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ background: "var(--bg)" }}>
         <div className="relative text-center">
@@ -135,7 +151,7 @@ export default function ConferenceDetailPage() {
   const derivedCapacity = organizerConference
     ? mergedOrganizerConferences.reduce((sum, entry) => sum + entry.capacity, 0)
     : c.capacity;
-  const pct = Math.round((derivedRegistered / derivedCapacity) * 100);
+  const pct = derivedCapacity > 0 ? Math.round((derivedRegistered / derivedCapacity) * 100) : 0;
   const seatsLeft = derivedCapacity - derivedRegistered;
   const currencySymbol = c.currency === "USD" ? "$" : c.currency === "EUR" ? "€" : c.currency === "GBP" ? "£" : "$";
   const mergedRegistrationCategories = organizerConference
@@ -192,7 +208,7 @@ export default function ConferenceDetailPage() {
     ? mergedOrganizerConferences.map((entry) => entry.title).join(" x ")
     : c.title;
   const displayOrganizerName = organizerConference
-    ? mergedOrganizerConferences.map((entry) => entry.organizerName).join(" + ")
+    ? organizerConference.organizerName
     : c.organizer;
   const displayDescription = organizerConference
     ? mergedOrganizerConferences
@@ -211,7 +227,7 @@ export default function ConferenceDetailPage() {
   const displayLinkedin = organizerConference?.socialLinks?.linkedin;
   const displayTwitter = organizerConference?.socialLinks?.twitter;
   const editableTags = Array.from(new Set([...c.tags, ...addedTags]));
-  const heroBannerImage = organizerConference?.bannerImageUrl || c.bannerImageUrl;
+  const heroBannerImage = resolveConferenceBannerImage({ conference: c, organizerConference });
   const heroLogoImage = organizerConference?.logoImageUrl || c.logoImageUrl;
   const heroLogoFallback = displayTitle
     .split(" ")
@@ -299,6 +315,7 @@ export default function ConferenceDetailPage() {
         seatsRemaining: cm.seatCount - cm.allotted,
         portfolios: cm.portfolios ?? [],
         chairName: cm.chairName,
+        chairs: cm.chairs ?? [],
         sourceConferenceTitle: cm.sourceConferenceTitle,
         documents: cm.documents || [],
       }))
@@ -315,6 +332,27 @@ export default function ConferenceDetailPage() {
     ? (organizerConference.reviews || []).filter((review) => review.status === "pending")
     : [];
   const reviewsToShow = organizerConference ? [...instantReviews, ...localPendingReviews, ...mergedReviews] : instantReviews;
+  const averageRating = reviewsToShow.length
+    ? (
+        reviewsToShow.reduce((sum, review) => sum + Math.max(1, Math.min(5, Number(review.rating) || 0)), 0) /
+        reviewsToShow.length
+      ).toFixed(1)
+    : "0.0";
+  const countryMatrix = displayCommittees.map((committee) => {
+    const listedPortfolios = (committee.portfolios || []).flatMap((portfolio) => {
+      const totalSeats = Math.max(1, portfolio.seatCount || 1);
+      const availableSeats = Math.max(0, totalSeats - (portfolio.assignedApplicantIds?.length || 0));
+      return Array.from({ length: totalSeats }).map((_, seatIndex) => ({
+        label: totalSeats > 1 ? `${portfolio.name} ${seatIndex + 1}` : portfolio.name,
+        available: seatIndex < availableSeats,
+      }));
+    });
+    if (listedPortfolios.length > 0) return listedPortfolios;
+    return Array.from({ length: committee.size }).map((_, seatIndex) => ({
+      label: `Member ${seatIndex + 1}`,
+      available: seatIndex < committee.seatsRemaining,
+    }));
+  });
 
   const handleRegister = () => {
     if (!isLoggedIn) { setAuthOpen(true); return; }
@@ -322,12 +360,52 @@ export default function ConferenceDetailPage() {
     router.push(`/checkout/${c.id}`);
   };
 
+  const saveOverviewMeta = () => {
+    if (!organizerConference || !isOrganizerUser) return;
+    updateOrganizerConferenceConfig(organizerConference.id, {
+      tags: editableTags,
+      capacity: Number(editableStats.Capacity) || organizerConference.capacity,
+      level:
+        editableStats.Level === "High School" || editableStats.Level === "University" || editableStats.Level === "Open"
+          ? editableStats.Level
+          : organizerConference.level,
+    });
+    setReviewMessage("Conference stats and tags saved.");
+  };
+
+  const copyShareLink = async () => {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      setShareMessage("Conference link copied.");
+      window.setTimeout(() => setShareMessage(null), 1800);
+    } catch {
+      setShareMessage("Could not copy link. Please copy the URL manually.");
+    }
+  };
+
+  const shareVia = (platform: "whatsapp" | "twitter" | "instagram") => {
+    const link = encodeURIComponent(window.location.href);
+    const text = encodeURIComponent(`Register for ${displayTitle}: ${window.location.href}`);
+    if (platform === "whatsapp") window.open(`https://wa.me/?text=${text}`, "_blank", "noopener,noreferrer");
+    if (platform === "twitter") window.open(`https://twitter.com/intent/tweet?text=${text}`, "_blank", "noopener,noreferrer");
+    if (platform === "instagram") {
+      void copyShareLink();
+      window.open(`https://www.instagram.com/`, "_blank", "noopener,noreferrer");
+    }
+    if (!link) return;
+  };
+
+  const removeOwnReview = (reviewId: string) => {
+    if (!organizerConference || !user?.id) return;
+    removeConferenceReview(organizerConference.id, reviewId, user.id);
+  };
+
   const tabs: { key: Tab; label: string }[] = [
     { key: "overview", label: "Overview" },
     { key: "committees", label: `Committees (${organizerConference ? mergedCommittees.length : c.committees.length})` },
     { key: "schedule", label: "Schedule" },
     { key: "organizer", label: "Organizer" },
-    { key: "reviews", label: `Reviews (${organizerConference ? mergedReviews.length : 0})` },
+    { key: "reviews", label: `Reviews (${reviewsToShow.length})` },
   ];
 
   return (
@@ -337,7 +415,7 @@ export default function ConferenceDetailPage() {
       <AuthModal isOpen={authOpen} onClose={() => setAuthOpen(false)} />
 
       <div className="conference-banner-shell pt-24">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-4">
+        <div className="max-w-7xl 2xl:max-w-[1320px] mx-auto px-4 sm:px-6 2xl:px-8 pt-4">
           <div className="conference-banner-frame relative aspect-[18/6] min-h-[170px] md:min-h-[260px]">
             {heroBannerImage ? (
               <Image
@@ -360,13 +438,28 @@ export default function ConferenceDetailPage() {
               className="absolute inset-0"
               style={{
                 background:
-                  "linear-gradient(180deg, color-mix(in srgb, var(--fg) 16%, transparent) 0%, color-mix(in srgb, var(--fg) 28%, transparent) 72%, color-mix(in srgb, var(--fg) 40%, transparent) 100%)",
+                  "linear-gradient(180deg, rgba(9,11,16,0.12) 0%, rgba(9,11,16,0.36) 58%, rgba(9,11,16,0.72) 100%)",
               }}
             />
+            <div className="absolute inset-x-0 bottom-0 p-6 sm:p-8 text-white z-10">
+              <div className="flex flex-wrap items-center gap-2 mb-3">
+                <span className="badge" style={{ background: "rgba(255,255,255,0.16)", color: "#fff" }}>{c.level}</span>
+                <span className="badge" style={{ background: "rgba(255,255,255,0.16)", color: "#fff" }}>{c.region}</span>
+                {c.featured && <span className="badge" style={{ background: "rgba(231,195,144,0.95)", color: "#1a1108" }}>Featured</span>}
+              </div>
+              <h1 className="lux-display max-w-4xl" style={{ color: "#fff", fontSize: "clamp(2rem, 4.6vw, 4rem)" }}>
+                {displayTitle}
+              </h1>
+              <div className="mt-4 grid sm:grid-cols-3 gap-3">
+                <span className="conference-pill rounded-2xl px-4 py-3 text-sm font-medium">Place: {displayLocation}</span>
+                <span className="conference-pill rounded-2xl px-4 py-3 text-sm font-medium">Dates: {c.startDate} - {c.endDate}</span>
+                <span className="conference-pill rounded-2xl px-4 py-3 text-sm font-medium">Venue: {organizerConference?.venue || c.location}</span>
+              </div>
+            </div>
           </div>
         </div>
 
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-12 pb-16 relative">
+        <div className="max-w-7xl 2xl:max-w-[1320px] mx-auto px-4 sm:px-6 2xl:px-8 py-10 pb-24 relative">
           {/* Breadcrumb */}
           <div
             className="flex items-center gap-2 text-xs tracking-[0.22em] uppercase mb-10"
@@ -383,55 +476,9 @@ export default function ConferenceDetailPage() {
             <span style={{ color: "var(--fg)" }}>{displayTitle}</span>
           </div>
 
-          <div className="grid lg:grid-cols-[minmax(0,1fr)_360px] gap-8 lg:gap-10 items-start">
-            <div className="flex-1">
-              <div className="flex flex-wrap gap-2 mb-6">
-                <span
-                  className="text-[10px] font-semibold px-3 py-1 rounded-full"
-                  style={{
-                    background: "var(--bg-subtle)",
-                    color: "var(--fg)",
-                    letterSpacing: "0.22em",
-                    textTransform: "uppercase",
-                    border: "1px solid var(--border)",
-                  }}
-                >
-                  {c.level}
-                </span>
-                {c.featured && (
-                  <span
-                    className="text-[10px] font-semibold px-3 py-1 rounded-full"
-                    style={{
-                      background:
-                        "linear-gradient(120deg, #e7c390 0%, #d8ac72 55%, #b8925a 100%)",
-                      color: "#1a1108",
-                      letterSpacing: "0.22em",
-                      textTransform: "uppercase",
-                    }}
-                  >
-                    Featured
-                  </span>
-                )}
-                <span
-                  className="text-[10px] font-semibold px-3 py-1 rounded-full"
-                  style={{
-                    background: "var(--bg-subtle)",
-                    color: "var(--fg)",
-                    letterSpacing: "0.22em",
-                    textTransform: "uppercase",
-                    border: "1px solid var(--border)",
-                  }}
-                >
-                  {c.region}
-                </span>
-              </div>
-
-              <h1
-                className="lux-display max-w-3xl"
-                style={{ color: "var(--fg)" }}
-              >
-                {displayTitle}
-              </h1>
+          <div className="grid lg:grid-cols-[minmax(0,1fr)_360px] 2xl:grid-cols-[minmax(0,1fr)_390px] gap-8 lg:gap-10 2xl:gap-12 items-stretch">
+            <div className="flex-1 min-h-[420px] flex flex-col">
+              <h2 className="text-3xl font-semibold" style={{ color: "var(--fg)" }}>{displayTitle}</h2>
               <div className="mt-6 flex items-center gap-4">
                 <div
                   className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl overflow-hidden flex items-center justify-center text-2xl font-black"
@@ -467,27 +514,27 @@ export default function ConferenceDetailPage() {
                 </p>
               )}
 
-              <div
-                className="mt-8 grid sm:grid-cols-3 gap-4"
-                style={{ color: "var(--fg-muted)" }}
-              >
-                <span className="conference-pill rounded-2xl px-4 py-3 text-base font-medium flex items-center gap-2">
-                  <span style={{ color: "var(--accent-warm)" }}>●</span>
-                  {displayLocation}
-                </span>
-                <span className="conference-pill rounded-2xl px-4 py-3 text-base font-medium flex items-center gap-2">
-                  <span style={{ color: "var(--accent-warm)" }}>●</span>
-                  {c.startDate} – {c.endDate}
-                </span>
-                <span className="conference-pill rounded-2xl px-4 py-3 text-base font-medium flex items-center gap-2">
-                  <span style={{ color: "var(--accent-warm)" }}>●</span>
-                  Deadline {c.registrationDeadline}
-                </span>
+              <div className="mt-8 flex flex-wrap items-center gap-3">
+                <button type="button" className="btn btn-outline-blue text-xs" onClick={() => setShareOpen(true)}>
+                  Share Conference
+                </button>
+                {shareMessage && <span className="text-xs" style={{ color: "var(--success)" }}>{shareMessage}</span>}
               </div>
+              <div className="mt-6 grid sm:grid-cols-2 gap-3 max-w-3xl">
+                <div className="conference-surface rounded-xl px-4 py-3">
+                  <p className="text-[10px] uppercase tracking-[0.16em]" style={{ color: "var(--fg-muted)" }}>Organized by</p>
+                  <p className="text-sm font-semibold mt-1" style={{ color: "var(--fg)" }}>{displayOrganizerName}</p>
+                </div>
+                <div className="conference-surface rounded-xl px-4 py-3">
+                  <p className="text-[10px] uppercase tracking-[0.16em]" style={{ color: "var(--fg-muted)" }}>Registration deadline</p>
+                  <p className="text-sm font-semibold mt-1" style={{ color: "var(--fg)" }}>{c.registrationDeadline}</p>
+                </div>
+              </div>
+              <div className="hidden lg:block flex-1 min-h-[26px]" />
             </div>
 
             {/* Registration Card */}
-            <div className="conference-hero-card w-full max-w-[420px] mx-auto lg:mx-0 lux-card p-7 flex-shrink-0 lg:sticky lg:top-28">
+            <div className="conference-hero-card w-full max-w-[420px] 2xl:max-w-[390px] mx-auto lg:mx-0 lux-card p-7 flex-shrink-0 lg:sticky lg:top-24 2xl:top-28 self-start lg:min-h-[420px] lg:flex lg:flex-col">
               <p
                 className="text-[10px] font-semibold"
                 style={{
@@ -496,7 +543,7 @@ export default function ConferenceDetailPage() {
                   textTransform: "uppercase",
                 }}
               >
-                Starting from
+                {activeCategoryPhase?.name || "Registration"}
               </p>
               <div className="flex items-baseline gap-2 mt-3">
                 <span
@@ -510,7 +557,7 @@ export default function ConferenceDetailPage() {
                   {dynamicStartingPrice}
                 </span>
                 <span className="text-xs" style={{ color: "var(--fg-muted)" }}>
-                  per delegate
+                  {activeCategoryPhase ? `${activeCategoryPhase.name} pricing` : "per delegate"}
                 </span>
               </div>
               <p
@@ -519,7 +566,7 @@ export default function ConferenceDetailPage() {
               >
                 {activeCategoryPhase
                   ? `${activeCategoryPhase.name} phase is active`
-                  : "Base pricing currently active"}
+                  : "Pricing details update from organizer dashboard"}
               </p>
               {phaseStatusChips.length > 0 && (
                 <div className="mt-3 flex flex-wrap gap-1.5">
@@ -605,12 +652,14 @@ export default function ConferenceDetailPage() {
                     : "Sign in to register →"}
               </button>
 
+              <div className="mt-auto pt-2">
               <p
                 className="mt-4 text-[11px] text-center"
                 style={{ color: "var(--fg-muted)" }}
               >
-                Free cancellation before {c.registrationDeadline}
+                Registration deadline: {c.registrationDeadline}
               </p>
+              </div>
             </div>
           </div>
         </div>
@@ -626,7 +675,7 @@ export default function ConferenceDetailPage() {
           borderBottom: "1px solid var(--border)",
         }}
       >
-        <div className="max-w-7xl mx-auto px-6">
+        <div className="max-w-7xl 2xl:max-w-[1320px] mx-auto px-6 2xl:px-8">
           <div className="flex gap-1 py-2 overflow-x-auto">
             {tabs.map((t) => (
               <button
@@ -659,7 +708,7 @@ export default function ConferenceDetailPage() {
       </div>
 
       {/* Content */}
-      <div className="max-w-7xl mx-auto px-6 py-12 relative z-10 isolate">
+      <div className="max-w-7xl 2xl:max-w-[1320px] mx-auto px-6 2xl:px-8 py-12 relative z-10 isolate">
         {tab === "overview" && (
           <div className="grid lg:grid-cols-3 gap-10">
             <div className="lg:col-span-2 space-y-8">
@@ -807,6 +856,39 @@ export default function ConferenceDetailPage() {
                   </div>
                 </div>
               )}
+              <div className="lux-card p-6 sm:p-7">
+                <h2 className="text-2xl font-bold mb-4" style={{ color: "var(--fg)" }}>Partner MUN</h2>
+                <div className="grid md:grid-cols-2 gap-4">
+                  {(acceptedPartnerConferences.length > 0
+                    ? acceptedPartnerConferences
+                    : []).map((partner) => (
+                    <div key={partner.id} className="conference-surface rounded-2xl p-4">
+                      <p className="text-sm font-semibold" style={{ color: "var(--fg)" }}>{partner.title}</p>
+                      <p className="text-xs mt-1" style={{ color: "var(--fg-muted)" }}>{partner.city}, {partner.country}</p>
+                    </div>
+                  ))}
+                  {acceptedPartnerConferences.length === 0 && (
+                    <p className="text-sm" style={{ color: "var(--fg-muted)" }}>No partner MUNs linked yet.</p>
+                  )}
+                </div>
+              </div>
+              <div className="lux-card p-6 sm:p-7">
+                <h2 className="text-2xl font-bold mb-4" style={{ color: "var(--fg)" }}>Previous Editions</h2>
+                <div className="grid md:grid-cols-2 gap-4">
+                  {((organizerConference?.previousEditions ?? []).length > 0
+                    ? organizerConference?.previousEditions ?? []
+                    : []).map((edition) => (
+                    <div key={edition.id} className="conference-surface rounded-2xl p-4">
+                      <p className="text-sm font-semibold" style={{ color: "var(--fg)" }}>{edition.year} - {edition.title}</p>
+                      <p className="text-xs mt-1" style={{ color: "var(--fg-muted)" }}>{edition.delegates} delegates</p>
+                      {edition.highlights && <p className="text-xs mt-1" style={{ color: "var(--fg-muted)" }}>{edition.highlights}</p>}
+                    </div>
+                  ))}
+                  {(organizerConference?.previousEditions ?? []).length === 0 && (
+                    <p className="text-sm" style={{ color: "var(--fg-muted)" }}>No previous editions added yet.</p>
+                  )}
+                </div>
+              </div>
             </div>
 
             <div className="space-y-5">
@@ -871,30 +953,11 @@ export default function ConferenceDetailPage() {
                   </div>
                 )}
               </div>
-              <div className="card p-5 rounded-2xl">
-                <h3 className="font-bold mb-3 text-sm" style={{ color: "var(--fg)" }}>Partner MUN</h3>
-                <div className="space-y-2">
-                  {(acceptedPartnerTitles.length > 0
-                    ? acceptedPartnerTitles
-                    : ["Global Youth Forum MUN", "Diplomacy Summit MUN"]).map((entry) => (
-                    <p key={entry} className="text-xs" style={{ color: "var(--fg-muted)" }}>
-                      {entry}
-                    </p>
-                  ))}
-                </div>
-              </div>
-              <div className="card p-5 rounded-2xl">
-                <h3 className="font-bold mb-3 text-sm" style={{ color: "var(--fg)" }}>Previous Editions</h3>
-                <div className="space-y-2">
-                  {((organizerConference?.previousEditions ?? []).length > 0
-                    ? (organizerConference?.previousEditions ?? []).map((edition) => `${edition.year}: ${edition.title} (${edition.delegates} delegates)`)
-                    : ["2025: Tidingz International MUN (420 delegates)", "2024: Tidingz Premier MUN (360 delegates)"]).map((entry) => (
-                    <p key={entry} className="text-xs" style={{ color: "var(--fg-muted)" }}>
-                      {entry}
-                    </p>
-                  ))}
-                </div>
-              </div>
+              {isOrganizerUser && (
+                <button type="button" className="btn btn-primary text-xs w-full" onClick={saveOverviewMeta}>
+                  Save conference stats and tags
+                </button>
+              )}
             </div>
           </div>
         )}
@@ -957,23 +1020,21 @@ export default function ConferenceDetailPage() {
                         <p className="text-sm" style={{ color: "var(--fg-muted)" }}>No committee documents uploaded yet.</p>
                       )}
                     </div>
-                    {(cm.portfolios ?? []).length > 0 && (
+                    {(cm.chairName || (cm as { chairs?: Array<{ id: string; name: string; role?: string; email?: string }> }).chairs?.length) && (
                       <div className="pt-3" style={{ borderTop: "1px solid var(--border)" }}>
                         <p className="text-[10px] font-black uppercase tracking-widest mb-2" style={{ color: "var(--fg-muted)" }}>
-                          Seat Matrix
+                          Chairs
                         </p>
-                        <div className="space-y-1">
-                          {(cm.portfolios ?? []).map((portfolio) => {
-                            const remaining = portfolio.seatCount - portfolio.assignedApplicantIds.length;
-                            return (
-                              <div key={portfolio.id} className="flex items-center justify-between text-xs">
-                                <span style={{ color: "var(--fg-muted)" }}>{portfolio.name}</span>
-                                <span style={{ color: remaining > 0 ? "#16a34a" : "#dc2626" }}>
-                                  {remaining > 0 ? `${remaining} available` : "Filled"}
-                                </span>
-                              </div>
-                            );
-                          })}
+                        <div className="grid sm:grid-cols-2 gap-2">
+                          {((cm as { chairs?: Array<{ id: string; name: string; role?: string; email?: string }> }).chairs || [
+                            { id: `${cm.id}-chair`, name: cm.chairName || "TBA", role: "Chair", email: undefined },
+                          ]).map((chair) => (
+                            <div key={chair.id} className="conference-surface rounded-xl p-2">
+                              <p className="text-xs font-semibold" style={{ color: "var(--fg)" }}>{chair.name}</p>
+                              {chair.role && <p className="text-[11px]" style={{ color: "var(--fg-muted)" }}>{chair.role}</p>}
+                              {chair.email && <p className="text-[11px]" style={{ color: "var(--fg-muted)" }}>{chair.email}</p>}
+                            </div>
+                          ))}
                         </div>
                       </div>
                     )}
@@ -989,8 +1050,8 @@ export default function ConferenceDetailPage() {
                   <div key={`${committee.id}-matrix`} className="card p-5 rounded-2xl">
                     <p className="text-sm font-semibold mb-3" style={{ color: "var(--fg)" }}>{committee.name}</p>
                     <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-2">
-                      {Array.from({ length: committee.size }).map((_, seatIndex) => {
-                        const available = seatIndex < committee.seatsRemaining;
+                      {(countryMatrix[displayCommittees.findIndex((entry) => entry.id === committee.id)] || []).map((seat, seatIndex) => {
+                        const available = seat.available;
                         return (
                           <span
                             key={`${committee.id}-seat-${seatIndex}`}
@@ -1001,7 +1062,7 @@ export default function ConferenceDetailPage() {
                               border: `1px solid ${available ? "rgba(22,163,74,0.35)" : "rgba(220,38,38,0.35)"}`,
                             }}
                           >
-                            Seat {seatIndex + 1}
+                            {seat.label}
                           </span>
                         );
                       })}
@@ -1086,7 +1147,7 @@ export default function ConferenceDetailPage() {
                   <p className="text-sm" style={{ color: "var(--fg-muted)" }}>Verified Conference Organizer</p>
                   <div className="flex items-center gap-1 mt-1">
                     {[...Array(5)].map((_, i) => <span key={i} className="text-amber-400 text-sm">★</span>)}
-                    <span className="text-xs ml-1" style={{ color: "var(--fg-muted)" }}>4.9/5 (120 reviews)</span>
+                    <span className="text-xs ml-1" style={{ color: "var(--fg-muted)" }}>{averageRating}/5 ({reviewsToShow.length} reviews)</span>
                   </div>
                 </div>
               </div>
@@ -1122,13 +1183,16 @@ export default function ConferenceDetailPage() {
                 <p className="text-xs font-semibold uppercase tracking-[0.2em] mb-3" style={{ color: "var(--fg-muted)" }}>
                   Additional Organizers
                 </p>
-                <div className="space-y-2">
+                <div className="grid sm:grid-cols-2 gap-2">
                   {((organizerConference?.organizerTeam || []).length > 0
                     ? organizerConference?.organizerTeam || []
                     : [{ id: "placeholder-org", name: "Operations Team", role: "Lead Organizer", email: displayOrganizerEmail }]).map((member) => (
-                    <div key={member.id} className="rounded-xl px-3 py-2 conference-surface">
+                    <div key={member.id} className="rounded-xl px-3 py-3 conference-surface">
                       <p className="text-sm font-semibold" style={{ color: "var(--fg)" }}>{member.name}</p>
                       <p className="text-xs" style={{ color: "var(--fg-muted)" }}>{member.role}</p>
+                      {"email" in member && member.email && (
+                        <p className="text-xs mt-1" style={{ color: "var(--fg-muted)" }}>{member.email}</p>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -1147,7 +1211,18 @@ export default function ConferenceDetailPage() {
                     <div key={review.id} className="card p-5 rounded-2xl">
                       <div className="flex items-center justify-between">
                         <p className="text-sm font-bold" style={{ color: "var(--fg)" }}>{review.userName}</p>
-                        <span className="badge badge-blue">{review.rating}/5</span>
+                        <div className="flex items-center gap-2">
+                          <span className="badge badge-blue">{review.rating}/5</span>
+                          {organizerConference && user?.id && "userId" in review && review.userId === user.id && (
+                            <button
+                              type="button"
+                              className="btn btn-danger-ghost text-xs"
+                              onClick={() => removeOwnReview(review.id)}
+                            >
+                              Delete
+                            </button>
+                          )}
+                        </div>
                       </div>
                       <p className="text-[11px]" style={{ color: "var(--fg-muted)" }}>
                         {"sourceConferenceTitle" in review ? review.sourceConferenceTitle : displayTitle}
@@ -1229,6 +1304,23 @@ export default function ConferenceDetailPage() {
       </div>
 
       <Footer />
+      {shareOpen && (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center px-4" style={{ background: "rgba(0,0,0,0.45)" }}>
+          <div className="card rounded-2xl p-5 w-full max-w-sm">
+            <h3 className="text-base font-semibold" style={{ color: "var(--fg)" }}>Share conference</h3>
+            <p className="text-xs mt-1" style={{ color: "var(--fg-muted)" }}>
+              Share this registration link on social profiles.
+            </p>
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              <button type="button" className="btn btn-outline-blue text-xs" onClick={() => shareVia("whatsapp")}>WhatsApp</button>
+              <button type="button" className="btn btn-outline-blue text-xs" onClick={() => shareVia("twitter")}>X / Twitter</button>
+              <button type="button" className="btn btn-outline-blue text-xs" onClick={() => shareVia("instagram")}>Instagram</button>
+              <button type="button" className="btn btn-primary text-xs" onClick={() => void copyShareLink()}>Copy Link</button>
+            </div>
+            <button type="button" className="btn btn-ghost text-xs w-full mt-3" onClick={() => setShareOpen(false)}>Close</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

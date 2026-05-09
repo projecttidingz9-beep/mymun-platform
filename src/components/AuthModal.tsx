@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import Image from "next/image";
 import { useAuth } from "@/lib/auth-context";
 
@@ -9,6 +9,31 @@ interface AuthModalProps {
   onClose: () => void;
   defaultTab?: "signin" | "register";
 }
+
+type GoogleCredentialResponse = {
+  credential?: string;
+};
+
+type GoogleApi = {
+  accounts?: {
+    id?: {
+      initialize: (config: {
+        client_id: string;
+        callback: (response: GoogleCredentialResponse) => void;
+      }) => void;
+      renderButton: (
+        element: HTMLElement,
+        options: {
+          theme: "outline";
+          size: "large";
+          shape: "pill";
+          text: "signin_with" | "signup_with";
+          width: number;
+        }
+      ) => void;
+    };
+  };
+};
 
 export default function AuthModal({ isOpen, onClose, defaultTab = "signin" }: AuthModalProps) {
   const { login } = useAuth();
@@ -24,9 +49,16 @@ export default function AuthModal({ isOpen, onClose, defaultTab = "signin" }: Au
   const [forgotMode, setForgotMode] = useState(false);
   const [forgotEmail, setForgotEmail] = useState("");
   const [forgotNotice, setForgotNotice] = useState("");
+  const [googleLoading, setGoogleLoading] = useState(false);
+  const [googleRole, setGoogleRole] = useState<"delegate" | "organizer">("delegate");
+  const [googlePendingCredential, setGooglePendingCredential] = useState("");
+  const [showGoogleRoleStep, setShowGoogleRoleStep] = useState(false);
   const overlayRef = useRef<HTMLDivElement>(null);
+  const googleButtonRef = useRef<HTMLDivElement>(null);
+  const googleClientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || "";
+  const googleEnabled = googleClientId.trim().length > 0;
 
-  const closeModal = () => {
+  const closeModal = useCallback(() => {
     setTab(defaultTab);
     setError("");
     setEmail("");
@@ -37,8 +69,12 @@ export default function AuthModal({ isOpen, onClose, defaultTab = "signin" }: Au
     setForgotMode(false);
     setForgotEmail("");
     setForgotNotice("");
+    setGoogleLoading(false);
+    setGoogleRole("delegate");
+    setGooglePendingCredential("");
+    setShowGoogleRoleStep(false);
     onClose();
-  };
+  }, [defaultTab, onClose]);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => e.key === "Escape" && onClose();
@@ -46,7 +82,41 @@ export default function AuthModal({ isOpen, onClose, defaultTab = "signin" }: Au
     return () => document.removeEventListener("keydown", handler);
   }, [onClose]);
 
-  if (!isOpen) return null;
+  const completeGoogleSignIn = useCallback(async (credential: string, selectedRole?: "delegate" | "organizer") => {
+    if (!credential) return;
+    setError("");
+    setGoogleLoading(true);
+    const response = await fetch("/api/auth/google", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({
+        idToken: credential,
+        role: selectedRole,
+      }),
+    });
+    const payload = (await response.json().catch(() => ({}))) as {
+      ok?: boolean;
+      error?: string;
+      requiresRole?: boolean;
+      email?: string;
+      name?: string;
+      role?: "delegate" | "organizer" | "admin";
+    };
+    if (payload.requiresRole) {
+      setGooglePendingCredential(credential);
+      setShowGoogleRoleStep(true);
+      setGoogleLoading(false);
+      return;
+    }
+    if (!response.ok || !payload.email) {
+      setError(payload.error || "Google sign-in failed.");
+      setGoogleLoading(false);
+      return;
+    }
+    login(payload.email, payload.name || undefined, payload.role || "delegate");
+    closeModal();
+  }, [closeModal, login]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -108,6 +178,49 @@ export default function AuthModal({ isOpen, onClose, defaultTab = "signin" }: Au
       setForgotLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (!isOpen || !googleEnabled || forgotMode || showGoogleRoleStep) return;
+    const renderGoogleButton = () => {
+      const googleApi = (window as Window & { google?: GoogleApi }).google;
+      if (!googleApi?.accounts?.id || !googleButtonRef.current) return;
+      googleApi.accounts.id.initialize({
+        client_id: googleClientId,
+        callback: (response: GoogleCredentialResponse) => {
+          const credential = response.credential || "";
+          if (!credential) {
+            setError("Google Sign-In did not return a credential.");
+            return;
+          }
+          void completeGoogleSignIn(credential);
+        },
+      });
+      googleButtonRef.current.innerHTML = "";
+      googleApi.accounts.id.renderButton(googleButtonRef.current, {
+        theme: "outline",
+        size: "large",
+        shape: "pill",
+        text: tab === "signin" ? "signin_with" : "signup_with",
+        width: 320,
+      });
+    };
+
+    const existingScript = document.querySelector('script[src="https://accounts.google.com/gsi/client"]');
+    if (existingScript) {
+      renderGoogleButton();
+      return;
+    }
+
+    const script = document.createElement("script");
+    script.src = "https://accounts.google.com/gsi/client";
+    script.async = true;
+    script.defer = true;
+    script.onload = () => renderGoogleButton();
+    script.onerror = () => setError("Unable to load Google Sign-In.");
+    document.head.appendChild(script);
+  }, [isOpen, googleEnabled, forgotMode, showGoogleRoleStep, googleClientId, tab, completeGoogleSignIn]);
+
+  if (!isOpen) return null;
 
   return (
     <div
@@ -180,6 +293,57 @@ export default function AuthModal({ isOpen, onClose, defaultTab = "signin" }: Au
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="px-8 pb-8 space-y-4">
+          {googleEnabled && !forgotMode && (
+            <div className="space-y-3">
+              {!showGoogleRoleStep ? (
+                <>
+                  <div ref={googleButtonRef} className="w-full flex justify-center" />
+                  <p className="text-center text-xs" style={{ color: "var(--fg-muted)" }}>
+                    or continue with email
+                  </p>
+                </>
+              ) : (
+                <div className="space-y-3 rounded-2xl p-4" style={{ background: "var(--bg-subtle)", border: "1px solid var(--border)" }}>
+                  <p className="text-sm font-semibold" style={{ color: "var(--fg)" }}>
+                    Choose account type for Google sign-up
+                  </p>
+                  <select
+                    value={googleRole}
+                    onChange={(event) => setGoogleRole(event.target.value === "organizer" ? "organizer" : "delegate")}
+                    className="input-base"
+                  >
+                    <option value="delegate">Participant</option>
+                    <option value="organizer">Organizer</option>
+                  </select>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      className="btn btn-primary text-xs flex-1"
+                      disabled={googleLoading}
+                      onClick={() => void completeGoogleSignIn(googlePendingCredential, googleRole)}
+                    >
+                      {googleLoading ? "Finishing..." : "Continue with Google"}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-ghost text-xs"
+                      onClick={() => {
+                        setShowGoogleRoleStep(false);
+                        setGooglePendingCredential("");
+                      }}
+                    >
+                      Back
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+          {!googleEnabled && !forgotMode && (
+            <p className="text-xs text-center" style={{ color: "var(--fg-muted)" }}>
+              Google Sign-In is not configured.
+            </p>
+          )}
           {tab === "register" && (
             <div className="space-y-4">
               <div>

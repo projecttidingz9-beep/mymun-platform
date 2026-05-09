@@ -4,12 +4,13 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
+import AppRouteSkeleton from "@/components/AppRouteSkeleton";
 import { ensureServerSession } from "@/lib/client/session";
 import { useAuth } from "@/lib/auth-context";
 
 export default function NotificationsPage() {
   const router = useRouter();
-  const { user, isLoggedIn, notifications, markNotificationRead } = useAuth();
+  const { user, isLoggedIn, authReady, notifications, markNotificationRead } = useAuth();
 
   useEffect(() => {
     if (!isLoggedIn) router.push("/");
@@ -17,10 +18,12 @@ export default function NotificationsPage() {
 
   useEffect(() => {
     if (!isLoggedIn || !user) return;
-    void ensureServerSession({ email: user.email, name: user.name });
+    void ensureServerSession();
   }, [isLoggedIn, user]);
 
-  if (!isLoggedIn || !user) return null;
+  if (!authReady || !isLoggedIn || !user) {
+    return <AppRouteSkeleton />;
+  }
 
   const myNotifications = notifications.filter(
     (notification) =>

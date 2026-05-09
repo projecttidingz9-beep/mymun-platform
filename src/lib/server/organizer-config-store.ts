@@ -1,13 +1,28 @@
 import { OrganizerConferencePreviewConfig } from "@/lib/types";
+import { prisma } from "./prisma";
 
-const previewConfigStore = new Map<string, OrganizerConferencePreviewConfig>();
+const JSON_PREFIX = "__preview_json__:";
 
-export function getOrganizerPreviewConfig(eventId: string) {
-  return previewConfigStore.get(eventId) || null;
+function decodeStoredDescription(value: string | null | undefined): OrganizerConferencePreviewConfig | null {
+  if (!value || !value.startsWith(JSON_PREFIX)) return null;
+  try {
+    const parsed = JSON.parse(value.slice(JSON_PREFIX.length)) as OrganizerConferencePreviewConfig;
+    return parsed;
+  } catch {
+    return null;
+  }
 }
 
-export function setOrganizerPreviewConfig(eventId: string, patch: OrganizerConferencePreviewConfig) {
-  const current = previewConfigStore.get(eventId) || { eventId };
+export async function getOrganizerPreviewConfig(eventId: string) {
+  const row = await prisma.organizerConferenceConfig.findUnique({
+    where: { eventId },
+    select: { description: true },
+  });
+  return decodeStoredDescription(row?.description) || null;
+}
+
+export async function setOrganizerPreviewConfig(eventId: string, patch: OrganizerConferencePreviewConfig) {
+  const current = (await getOrganizerPreviewConfig(eventId)) || { eventId };
   const merged: OrganizerConferencePreviewConfig = {
     ...current,
     ...patch,
@@ -16,6 +31,15 @@ export function setOrganizerPreviewConfig(eventId: string, patch: OrganizerConfe
       ...(patch.socialLinks || {}),
     },
   };
-  previewConfigStore.set(eventId, merged);
+  await prisma.organizerConferenceConfig.upsert({
+    where: { eventId },
+    update: {
+      description: `${JSON_PREFIX}${JSON.stringify(merged)}`,
+    },
+    create: {
+      eventId,
+      description: `${JSON_PREFIX}${JSON.stringify(merged)}`,
+    },
+  });
   return merged;
 }

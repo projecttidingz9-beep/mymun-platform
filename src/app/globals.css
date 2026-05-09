@@ -671,6 +671,13 @@ html.dark .conference-detail-page .conference-hero-card {
   border: 1px solid var(--border);
 }
 
+.conference-detail-page .conference-banner-frame .conference-pill {
+  background: rgba(255, 255, 255, 0.14);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  backdrop-filter: blur(6px);
+}
+
 html.dark .conference-detail-page .conference-pill {
   background: rgba(17, 20, 28, 0.74);
   color: var(--fg);
@@ -1844,6 +1851,20 @@ html.dark .organizer-dashboard .card {
   color: var(--fg);
 }
 
+.marketplace-page .lux-card {
+  background: color-mix(in srgb, var(--bg) 96%, transparent 4%);
+  color: var(--fg);
+  border: 1px solid var(--border);
+}
+
+.marketplace-page .lux-input,
+.marketplace-page .lux-select,
+.marketplace-page .lux-textarea {
+  background: color-mix(in srgb, var(--bg) 94%, var(--bg-subtle) 6%);
+  border: 1px solid var(--border);
+  color: var(--fg);
+}
+
 .marketplace-page .lux-input::placeholder {
   color: var(--fg-muted);
 }
@@ -1859,6 +1880,12 @@ html.dark .organizer-dashboard .card {
   background: color-mix(in srgb, var(--bg) 96%, var(--bg-subtle) 4%);
 }
 
+.marketplace-page .lux-chip {
+  color: var(--fg);
+  border-color: var(--border);
+  background: color-mix(in srgb, var(--bg) 95%, var(--bg-subtle) 5%);
+}
+
 .marketplace-page .lux-pill-dot {
   background: var(--blue);
   box-shadow: 0 0 10px color-mix(in srgb, var(--blue) 55%, transparent);
@@ -1872,6 +1899,18 @@ html.dark .marketplace-page .lux-pill {
   color: rgba(243, 237, 224, 0.78);
   border-color: rgba(243, 237, 224, 0.14);
   background: rgba(243, 237, 224, 0.04);
+}
+
+html.dark .marketplace-page .lux-card {
+  background: rgba(17, 20, 28, 0.72);
+  border: 1px solid rgba(243, 237, 224, 0.1);
+  color: var(--fg);
+}
+
+html.dark .marketplace-page .lux-chip {
+  color: rgba(243, 237, 224, 0.86);
+  border-color: rgba(243, 237, 224, 0.16);
+  background: rgba(243, 237, 224, 0.05);
 }
 
 html.dark .marketplace-page .lux-subdisplay {
@@ -1965,4 +2004,29 @@ html.dark .marketplace-page .lux-subdisplay {
 hr {
   border: none;
   border-top: 1px solid var(--border);
+}
+
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: auto;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+
+.skip-link:focus {
+  position: fixed;
+  left: 12px;
+  top: 12px;
+  width: auto;
+  height: auto;
+  padding: 10px 14px;
+  z-index: 9999;
+  border-radius: 10px;
+  background: var(--fg);
+  color: var(--bg);
+  font-weight: 600;
+  font-size: 14px;
+  outline: 2px solid var(--accent-warm);
 }

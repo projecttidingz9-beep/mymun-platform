@@ -1,12 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifySessionToken } from "@/lib/server/session-token";
+import { validateSessionToken } from "@/lib/server/auth";
 
 const protectedApiPatterns = [
   /^\/api\/passes\//,
   /^\/api\/checkins$/,
+  /^\/api\/registrations$/,
   /^\/api\/registrations\/sync$/,
   /^\/api\/notifications\/me$/,
+  /^\/api\/notifications\/stream$/,
   /^\/api\/organizers\//,
+  /^\/api\/user\//,
 ];
 
 const organizerOnlyPatterns = [
@@ -20,9 +23,10 @@ const organizerOnlyPatterns = [
 const delegateOnlyPatterns = [
   /^\/api\/passes\/me$/,
   /^\/api\/notifications\/me$/,
+  /^\/api\/registrations$/,
 ];
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const path = request.nextUrl.pathname;
   const isProtected = protectedApiPatterns.some((pattern) => pattern.test(path));
   if (!isProtected) return NextResponse.next();
@@ -37,18 +41,18 @@ export async function middleware(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
 
-  const payload = await verifySessionToken(token).catch(() => null);
-  if (!payload) {
+  const actor = await validateSessionToken(token);
+  if (!actor) {
     return NextResponse.json({ error: "Invalid session." }, { status: 401 });
   }
 
   const isOrganizerOnly = organizerOnlyPatterns.some((pattern) => pattern.test(path));
-  if (isOrganizerOnly && !["organizer", "admin"].includes(payload.role)) {
+  if (isOrganizerOnly && !["organizer", "admin"].includes(actor.role)) {
     return NextResponse.json({ error: "Organizer role required." }, { status: 403 });
   }
 
   const isDelegateOnly = delegateOnlyPatterns.some((pattern) => pattern.test(path));
-  if (isDelegateOnly && !["delegate", "organizer", "admin"].includes(payload.role)) {
+  if (isDelegateOnly && !["delegate", "organizer", "admin"].includes(actor.role)) {
     return NextResponse.json({ error: "Delegate access required." }, { status: 403 });
   }
 
@@ -56,5 +60,14 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/api/:path*"],
+  matcher: [
+    "/api/passes/:path*",
+    "/api/checkins",
+    "/api/registrations",
+    "/api/registrations/sync",
+    "/api/notifications/me",
+    "/api/notifications/stream",
+    "/api/organizers/:path*",
+    "/api/user/:path*",
+  ],
 };

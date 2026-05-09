@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getRequestActor, requireOrganizer, resolveActorUserId } from "@/lib/server/auth";
+import { getRequestActor, requireEventOrganizerAccess, requireOrganizer, resolveActorUserId } from "@/lib/server/auth";
 import { invitePartnerEvent, listEventPartnerships } from "@/lib/server/organizer-partners";
 
 export async function GET(
@@ -15,6 +15,9 @@ export async function GET(
   const eventId = String(params.eventId || "");
   if (!eventId) {
     return NextResponse.json({ error: "eventId is required." }, { status: 400 });
+  }
+  if (!(await requireEventOrganizerAccess(actor, eventId))) {
+    return NextResponse.json({ error: "You do not have access to this conference." }, { status: 403 });
   }
 
   try {
@@ -43,6 +46,9 @@ export async function POST(
   const eventId = String(params.eventId || "");
   if (!eventId) {
     return NextResponse.json({ error: "eventId is required." }, { status: 400 });
+  }
+  if (!(await requireEventOrganizerAccess(actor, eventId))) {
+    return NextResponse.json({ error: "You do not have access to this conference." }, { status: 403 });
   }
 
   const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;

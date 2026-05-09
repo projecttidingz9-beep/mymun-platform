@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getRequestActor, requireOrganizer } from "@/lib/server/auth";
+import { getRequestActor, requireEventOrganizerAccess, requireOrganizer, resolveActorUserId } from "@/lib/server/auth";
 import { getOrganizerPreviewConfig, setOrganizerPreviewConfig } from "@/lib/server/organizer-config-store";
 
 export async function GET(
@@ -16,8 +16,11 @@ export async function GET(
   if (!eventId) {
     return NextResponse.json({ error: "eventId is required." }, { status: 400 });
   }
+  if (!(await requireEventOrganizerAccess(actor, eventId))) {
+    return NextResponse.json({ error: "You do not have access to this conference." }, { status: 403 });
+  }
 
-  return NextResponse.json({ config: getOrganizerPreviewConfig(eventId) });
+  return NextResponse.json({ config: await getOrganizerPreviewConfig(eventId) });
 }
 
 export async function PATCH(
@@ -34,17 +37,39 @@ export async function PATCH(
   if (!eventId) {
     return NextResponse.json({ error: "eventId is required." }, { status: 400 });
   }
+  const actorUserId = await resolveActorUserId(actor);
+  if (!(await requireEventOrganizerAccess(actor, eventId))) {
+    return NextResponse.json({ error: "You do not have access to this conference." }, { status: 403 });
+  }
 
   const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
-  const saved = setOrganizerPreviewConfig(eventId, {
+  const saved = await setOrganizerPreviewConfig(eventId, {
     eventId,
+    ownerUserId: typeof body.ownerUserId === "string" ? body.ownerUserId : actorUserId || undefined,
+    ownerEmail: typeof body.ownerEmail === "string" ? body.ownerEmail : actor?.email || undefined,
+    organizerTeamEmails: Array.isArray(body.organizerTeamEmails)
+      ? body.organizerTeamEmails.map((entry) => String(entry).trim().toLowerCase()).filter(Boolean)
+      : undefined,
     title: typeof body.title === "string" ? body.title : undefined,
     city: typeof body.city === "string" ? body.city : undefined,
     country: typeof body.country === "string" ? body.country : undefined,
     organizerName: typeof body.organizerName === "string" ? body.organizerName : undefined,
+    contactDetail: typeof body.contactDetail === "string" ? body.contactDetail : undefined,
+    tags: Array.isArray(body.tags) ? body.tags.map((entry) => String(entry)).filter(Boolean) : undefined,
+    capacity:
+      typeof body.capacity === "number"
+        ? body.capacity
+        : typeof body.capacity === "string"
+          ? Number(body.capacity)
+          : undefined,
+    level:
+      body.level === "High School" || body.level === "University" || body.level === "Open"
+        ? body.level
+        : undefined,
     venue: typeof body.venue === "string" ? body.venue : undefined,
     startDate: typeof body.startDate === "string" ? body.startDate : undefined,
     endDate: typeof body.endDate === "string" ? body.endDate : undefined,
+    registrationDeadline: typeof body.registrationDeadline === "string" ? body.registrationDeadline : undefined,
     description: typeof body.description === "string" ? body.description : undefined,
     termsAndConditions:
       typeof body.termsAndConditions === "string" ? body.termsAndConditions : undefined,

@@ -3,6 +3,7 @@ import { RegistrationStatus } from "@/generated/prisma/enums";
 import { hashToken, signPassToken } from "@/lib/server/pass-token";
 import { prisma } from "@/lib/server/prisma";
 import { upsertRegistrationFromClient } from "@/lib/server/registration-sync";
+import { getRequestActor, requireEventOrganizerAccess, requireOrganizer } from "@/lib/server/auth";
 
 function resolveReleaseAt(startDate: Date, requestedReleaseAt?: string) {
   if (requestedReleaseAt) return new Date(requestedReleaseAt);
@@ -13,6 +14,10 @@ function resolveReleaseAt(startDate: Date, requestedReleaseAt?: string) {
 
 export async function POST(request: NextRequest) {
   try {
+    const actor = await getRequestActor(request);
+    if (!requireOrganizer(actor)) {
+      return NextResponse.json({ error: "Organizer role required." }, { status: 403 });
+    }
     const body = await request.json();
     let registration = await prisma.registration.findUnique({
       where: { id: String(body.registrationId) },
@@ -29,6 +34,9 @@ export async function POST(request: NextRequest) {
 
     if (!registration) {
       return NextResponse.json({ error: "Registration not found." }, { status: 404 });
+    }
+    if (!(await requireEventOrganizerAccess(actor, registration.eventId))) {
+      return NextResponse.json({ error: "You do not have access to this conference." }, { status: 403 });
     }
 
     const eligible =
@@ -79,7 +87,7 @@ export async function POST(request: NextRequest) {
         registrationId: registration.id,
         title: "Digital pass issued",
         message: `Your digital delegate pass for ${registration.event.title} is now available.`,
-        type: "pass_issued",
+        type: "PASS_RELEASED",
       },
     });
 
@@ -90,7 +98,8 @@ export async function POST(request: NextRequest) {
       qrToken: token,
       alreadyIssued: false,
     });
-  } catch {
-    return NextResponse.json({ error: "Failed to issue delegate pass." }, { status: 500 });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to issue delegate pass.";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

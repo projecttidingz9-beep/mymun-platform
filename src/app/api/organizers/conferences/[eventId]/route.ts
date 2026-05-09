@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getRequestActor, requireOrganizer } from "@/lib/server/auth";
+import { getRequestActor, requireEventOrganizerAccess, requireOrganizer } from "@/lib/server/auth";
 import { prisma } from "@/lib/server/prisma";
 
 export async function DELETE(
@@ -15,6 +15,9 @@ export async function DELETE(
   const eventId = String(params.eventId || "");
   if (!eventId) {
     return NextResponse.json({ error: "eventId is required." }, { status: 400 });
+  }
+  if (!(await requireEventOrganizerAccess(actor, eventId))) {
+    return NextResponse.json({ error: "You do not have access to this conference." }, { status: 403 });
   }
 
   const paidRegistrationCount = await prisma.registration.count({

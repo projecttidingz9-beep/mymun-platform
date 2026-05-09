@@ -15,6 +15,8 @@ function ResetPasswordForm() {
   const [tokenCheckLoading, setTokenCheckLoading] = useState(true);
   const [tokenValid, setTokenValid] = useState(false);
   const [tokenMessage, setTokenMessage] = useState("");
+  const [formError, setFormError] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
 
   useEffect(() => {
     if (!token) {
@@ -48,16 +50,18 @@ function ResetPasswordForm() {
   }, [token]);
 
   const onSubmit = async () => {
+    setFormError("");
+    setSuccessMessage("");
     if (!token || !tokenValid) {
-      alert("Invalid reset link.");
+      setFormError("Invalid reset link.");
       return;
     }
     if (!password || !confirmPassword) {
-      alert("Please fill both password fields.");
+      setFormError("Please fill both password fields.");
       return;
     }
     if (password !== confirmPassword) {
-      alert("Passwords do not match.");
+      setFormError("Passwords do not match.");
       return;
     }
     setLoading(true);
@@ -69,11 +73,11 @@ function ResetPasswordForm() {
       });
       const payload = (await response.json().catch(() => ({}))) as { error?: string };
       if (!response.ok) {
-        alert(payload.error || "Could not reset password.");
+        setFormError(payload.error || "Could not reset password.");
         return;
       }
-      alert("Password reset successful. Please sign in.");
-      router.push("/");
+      setSuccessMessage("Password reset successful. Redirecting you to sign in…");
+      setTimeout(() => router.push("/"), 1200);
     } finally {
       setLoading(false);
     }
@@ -98,6 +102,19 @@ function ResetPasswordForm() {
       >
         {tokenCheckLoading ? "Verifying reset link..." : tokenMessage}
       </div>
+      {(formError || successMessage) && (
+        <div
+          className="rounded-xl px-4 py-3 text-xs mb-4"
+          style={{
+            background: successMessage ? "rgba(22,163,74,0.12)" : "rgba(220,38,38,0.12)",
+            color: successMessage ? "#15803d" : "#b91c1c",
+            border: successMessage ? "1px solid rgba(22,163,74,0.24)" : "1px solid rgba(220,38,38,0.24)",
+          }}
+          role="status"
+        >
+          {successMessage || formError}
+        </div>
+      )}
       <div className="space-y-3">
         <input
           type="password"

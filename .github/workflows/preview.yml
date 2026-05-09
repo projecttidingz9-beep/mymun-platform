@@ -1,0 +1,21 @@
+# Optional: wire to your preview host (e.g. Vercel + Neon branch DB).
+name: Preview
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run prisma:generate
+      - run: npm run build
+      # Add: deploy to preview + run migrations against branch DATABASE_URL

@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { SessionRole, verifySessionToken } from "./session-token";
-import { UserRole } from "@/generated/prisma/enums";
 import { prisma } from "./prisma";
+import { getOrganizerPreviewConfig } from "./organizer-config-store";
 
 export type RequestActor = {
   email: string;
@@ -18,36 +18,102 @@ export async function getRequestActor(request: NextRequest): Promise<RequestActo
   const token = bearerToken || cookieToken;
   if (!token) return null;
 
-  const payload = await verifySessionToken(token).catch(() => null);
-  if (!payload) return null;
-  return { email: payload.email, role: payload.role, name: payload.name };
+  return validateSessionToken(token);
 }
 
 export function requireOrganizer(actor: RequestActor | null) {
   return actor?.role === "organizer" || actor?.role === "admin";
 }
 
+const normalizeEmail = (value: string | undefined | null) => (value || "").trim().toLowerCase();
+
+/**
+ * Verifies the JWT and enforces `User.sessionVersion` (revoked sessions) and account lock.
+ */
+export async function validateSessionToken(token: string): Promise<RequestActor | null> {
+  const payload = await verifySessionToken(token).catch(() => null);
+  if (!payload?.email || !payload.role) return null;
+  const email = normalizeEmail(payload.email);
+  const sub = typeof payload.sub === "string" ? payload.sub : undefined;
+  const svClaim = typeof payload.sv === "number" ? payload.sv : undefined;
+
+  const user = sub
+    ? await prisma.user.findFirst({
+        where: { id: sub, email },
+        select: {
+          id: true,
+          sessionVersion: true,
+          deletedAt: true,
+          lockedUntil: true,
+        },
+      })
+    : await prisma.user.findUnique({
+        where: { email },
+        select: {
+          id: true,
+          sessionVersion: true,
+          deletedAt: true,
+          lockedUntil: true,
+        },
+      });
+
+  if (!user || user.deletedAt) return null;
+  if (user.lockedUntil && user.lockedUntil > new Date()) return null;
+  const effectiveSv = svClaim ?? 0;
+  if (effectiveSv !== user.sessionVersion) return null;
+
+  return {
+    email,
+    role: payload.role,
+    name: payload.name,
+  };
+}
+
+export async function requireEventOrganizerAccess(
+  actor: RequestActor | null,
+  eventId: string
+): Promise<boolean> {
+  if (!requireOrganizer(actor)) return false;
+  if (actor?.role === "admin") return true;
+  const actorUserId = await resolveActorUserId(actor);
+  const actorEmail = normalizeEmail(actor?.email);
+  if (!actorUserId && !actorEmail) return false;
+
+  const teamMember = actorUserId
+    ? await prisma.eventTeamMember.findFirst({
+        where: {
+          eventId,
+          userId: actorUserId,
+          acceptedAt: { not: null },
+        },
+      })
+    : null;
+  if (teamMember) return true;
+
+  const event = await prisma.event.findUnique({
+    where: { id: eventId },
+    select: { ownerUserId: true },
+  });
+  if (actorUserId && event?.ownerUserId && event.ownerUserId === actorUserId) return true;
+
+  const config = await getOrganizerPreviewConfig(eventId);
+  if (!config) return false;
+
+  const ownerUserId = (config.ownerUserId || "").trim();
+  const ownerEmail = normalizeEmail(config.ownerEmail);
+  if (actorUserId && ownerUserId && actorUserId === ownerUserId) return true;
+  if (actorEmail && ownerEmail && actorEmail === ownerEmail) return true;
+
+  const teamEmails = (config.organizerTeamEmails || []).map((entry) => normalizeEmail(entry));
+  return actorEmail ? teamEmails.includes(actorEmail) : false;
+}
+
+/** Resolve DB user id from session — read-only (no upsert). Login/register/google create the row first. */
 export async function resolveActorUserId(actor: RequestActor | null): Promise<string | null> {
   if (!actor) return null;
-  const role =
-    actor.role === "admin"
-      ? UserRole.ADMIN
-      : actor.role === "organizer"
-        ? UserRole.ORGANIZER
-        : UserRole.DELEGATE;
-  const fallbackName = actor.email.split("@")[0] || "Organizer";
-  const user = await prisma.user.upsert({
+  const user = await prisma.user.findUnique({
     where: { email: actor.email },
-    update: {
-      name: actor.name || fallbackName,
-      role,
-    },
-    create: {
-      email: actor.email,
-      name: actor.name || fallbackName,
-      role,
-    },
     select: { id: true },
   });
-  return user.id;
+  return user?.id ?? null;
 }

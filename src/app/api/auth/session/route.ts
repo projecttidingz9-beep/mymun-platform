@@ -1,41 +1,43 @@
 import { NextRequest, NextResponse } from "next/server";
-import { signSessionToken } from "@/lib/server/session-token";
+import { getRequestActor, resolveActorUserId } from "@/lib/server/auth";
 import { prisma } from "@/lib/server/prisma";
+import { signSessionToken } from "@/lib/server/session-token";
+import { prismaUserRoleToSession } from "@/lib/server/user-role";
+
+/** Return current session + DB user id (if the user row exists). */
+export async function GET(request: NextRequest) {
+  const actor = await getRequestActor(request);
+  if (!actor) {
+    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  }
+  const userId = await resolveActorUserId(actor);
+  return NextResponse.json({
+    actor: { email: actor.email, role: actor.role, name: actor.name, userId },
+  });
+}
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
-    const email = String(body.email || "").trim().toLowerCase();
-    const name = String(body.name || email.split("@")[0] || "user");
-
-    if (!email || !email.includes("@")) {
-      return NextResponse.json({ error: "Valid email is required." }, { status: 400 });
+    const actor = await getRequestActor(request);
+    if (!actor) {
+      return NextResponse.json({ error: "Active session required." }, { status: 401 });
     }
-    const user = await prisma.user.upsert({
-      where: { email },
-      update: {
-        name,
-      },
-      create: {
-        email,
-        name,
-        role: "DELEGATE",
-      },
-      select: {
-        email: true,
-        name: true,
-        role: true,
-      },
+    const user = await prisma.user.findUnique({
+      where: { email: actor.email },
+      select: { id: true, email: true, name: true, role: true, sessionVersion: true },
     });
-    const role = user.role === "ADMIN" ? "admin" : user.role === "ORGANIZER" ? "organizer" : "delegate";
-
+    if (!user) {
+      return NextResponse.json({ error: "User not found." }, { status: 401 });
+    }
     const token = await signSessionToken({
       email: user.email,
-      role,
+      role: prismaUserRoleToSession(user.role),
       name: user.name,
+      sub: user.id,
+      sv: user.sessionVersion,
     });
 
-    const response = NextResponse.json({ ok: true, role });
+    const response = NextResponse.json({ ok: true, role: actor.role });
     response.cookies.set("mymun_session", token, {
       httpOnly: true,
       sameSite: "lax",

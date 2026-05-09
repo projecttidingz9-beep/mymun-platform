@@ -1,5 +1,6 @@
 import { createHash } from "crypto";
 import { SignJWT, jwtVerify } from "jose";
+import { env } from "./env";
 
 type PassClaims = {
   passId: string;
@@ -7,10 +8,8 @@ type PassClaims = {
   eventId: string;
 };
 
-const DEFAULT_SECRET = "change-me-in-production";
-
 function getSecret() {
-  return new TextEncoder().encode(process.env.PASS_QR_SECRET || DEFAULT_SECRET);
+  return new TextEncoder().encode(env.passQrSecret());
 }
 
 export async function signPassToken(claims: PassClaims) {

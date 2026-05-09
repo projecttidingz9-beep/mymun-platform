@@ -3,21 +3,21 @@ import Image from "next/image";
 
 const NAV_LINKS = [
   { label: "Home", href: "/" },
-  { label: "About", href: "/#philosophy" },
+  { label: "About", href: "/about" },
   { label: "Conferences", href: "/marketplace" },
-  { label: "Contact", href: "/#contact" },
+  { label: "Contact", href: "/contact" },
 ];
 
 const LEGAL_LINKS = [
-  { label: "Privacy Policy", href: "#" },
-  { label: "Terms & Conditions", href: "#" },
+  { label: "Privacy Policy", href: "/legal/privacy" },
+  { label: "Terms & Conditions", href: "/legal/terms" },
 ];
 
 const SOCIAL_LINKS = [
-  { label: "X", href: "#", icon: "𝕏" },
-  { label: "LinkedIn", href: "#", icon: "in" },
-  { label: "Instagram", href: "#", icon: "◎" },
-  { label: "YouTube", href: "#", icon: "▶" },
+  { label: "X", href: "https://x.com", icon: "𝕏" },
+  { label: "LinkedIn", href: "https://linkedin.com", icon: "in" },
+  { label: "Instagram", href: "https://instagram.com", icon: "◎" },
+  { label: "YouTube", href: "https://youtube.com", icon: "▶" },
 ];
 
 export default function Footer() {
@@ -46,6 +46,8 @@ export default function Footer() {
                 <a
                   key={social.label}
                   href={social.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
                   aria-label={social.label}
                   className="w-9 h-9 rounded-xl flex items-center justify-center text-sm font-semibold footer-social"
                 >

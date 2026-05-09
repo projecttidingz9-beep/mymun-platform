@@ -3,6 +3,8 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/lib/auth-context";
 import ThemeController from "@/components/ThemeController";
+import CookieConsent from "@/components/CookieConsent";
+import { ToastProvider } from "@/components/Toast";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -29,9 +31,17 @@ export default function RootLayout({
   return (
     <html lang="en" className={inter.variable} suppressHydrationWarning>
       <body className="min-h-screen flex flex-col antialiased">
+        <a href="#main-content" className="skip-link">
+          Skip to main content
+        </a>
         <ThemeController />
         <AuthProvider>
-          {children}
+          <ToastProvider>
+            <div id="main-content" className="flex-1 flex flex-col min-h-0 outline-none" tabIndex={-1}>
+              {children}
+            </div>
+            <CookieConsent />
+          </ToastProvider>
         </AuthProvider>
       </body>
     </html>

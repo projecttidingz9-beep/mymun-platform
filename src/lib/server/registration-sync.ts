@@ -25,6 +25,14 @@ const mapStatus = (status?: SyncRegistrationPayload["organizerStatus"]): Registr
 };
 
 export async function upsertRegistrationFromClient(payload: SyncRegistrationPayload) {
+  const existingEvent = await prisma.event.findUnique({
+    where: { id: payload.eventId },
+    select: { id: true },
+  });
+  if (!existingEvent) {
+    throw new Error("Event not found for registration sync.");
+  }
+
   const user = await prisma.user.upsert({
     where: { email: payload.userEmail },
     update: { name: payload.userName },
@@ -35,15 +43,9 @@ export async function upsertRegistrationFromClient(payload: SyncRegistrationPayl
     },
   });
 
-  const event = await prisma.event.upsert({
+  const event = await prisma.event.update({
     where: { id: payload.eventId },
-    update: {
-      title: payload.eventTitle,
-      startDate: new Date(payload.eventStartDateIso),
-      endDate: new Date(payload.eventEndDateIso),
-    },
-    create: {
-      id: payload.eventId,
+    data: {
       title: payload.eventTitle,
       startDate: new Date(payload.eventStartDateIso),
       endDate: new Date(payload.eventEndDateIso),
