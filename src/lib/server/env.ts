@@ -1,5 +1,18 @@
 import { z } from "zod";
 
+/** Strip whitespace/CRLF and surrounding quotes (common when pasting into hosting dashboards). */
+function normalizeAdminEmailInput(val: unknown): unknown {
+  if (typeof val !== "string") return val;
+  let s = val.replace(/\r/g, "").trim();
+  while (
+    (s.startsWith('"') && s.endsWith('"')) ||
+    (s.startsWith("'") && s.endsWith("'"))
+  ) {
+    s = s.slice(1, -1).trim();
+  }
+  return s;
+}
+
 /** During `next build`, Prisma/API routes may load before real `.env` is applied — fill placeholders only then. */
 function applyBuildTimeEnvPlaceholders() {
   const isNextBuild = process.env.npm_lifecycle_event === "build";
@@ -23,6 +36,11 @@ function applyBuildTimeEnvPlaceholders() {
 
 applyBuildTimeEnvPlaceholders();
 
+if (typeof process.env.ADMIN_EMAIL === "string") {
+  const n = normalizeAdminEmailInput(process.env.ADMIN_EMAIL);
+  if (typeof n === "string") process.env.ADMIN_EMAIL = n;
+}
+
 const optionalNonEmpty = z
   .string()
   .optional()
@@ -37,7 +55,7 @@ const envSchema = z.object({
   AUTH_SESSION_SECRET: z.string().min(1),
   PASS_QR_SECRET: z.string().min(1),
   /** Platform super-admin — must match session email for `/admin` and `/api/admin/*`. */
-  ADMIN_EMAIL: z.string().email(),
+  ADMIN_EMAIL: z.preprocess(normalizeAdminEmailInput, z.string().email()),
   GOOGLE_CLIENT_ID: optionalNonEmpty,
   NEXT_PUBLIC_GOOGLE_CLIENT_ID: optionalNonEmpty,
   RESEND_API_KEY: optionalNonEmpty,
