@@ -3,41 +3,72 @@
 import Link from "next/link";
 import Image from "next/image";
 import { useParams } from "next/navigation";
-import { useMemo, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
+import AppRouteSkeleton from "@/components/AppRouteSkeleton";
 import { useAuth } from "@/lib/auth-context";
 import { DelegateMunAward, DelegateMunParticipation, User } from "@/lib/types";
 
+/** Keyed by delegate id so fetch state resets when the route param changes (no sync setState in effects). */
 export default function DelegateProfilePage() {
   const params = useParams();
-  const { user } = useAuth();
   const delegateId = String(params.id || "");
+  return <DelegateProfileInner key={delegateId} delegateId={delegateId} />;
+}
+
+function DelegateProfileInner({ delegateId }: { delegateId: string }) {
+  const { user } = useAuth();
   const hydrated = useSyncExternalStore(
     () => () => {},
     () => true,
     () => false
   );
 
-  const profile = useMemo<User | null>(() => {
-    if (hydrated && user?.id === delegateId) return user;
+  const [remoteProfile, setRemoteProfile] = useState<User | null>(null);
+  const [othersLoaded, setOthersLoaded] = useState(false);
 
-    if (hydrated && typeof window !== "undefined") {
-      const stored = localStorage.getItem("tidingz_user");
-      if (stored) {
-        try {
-          const parsed = JSON.parse(stored) as User;
-          if (parsed?.id === delegateId) return parsed;
-        } catch {
-          // ignore malformed storage
+  const isOwnProfile = Boolean(hydrated && delegateId && user?.id === delegateId);
+
+  useEffect(() => {
+    if (!delegateId || !hydrated || isOwnProfile) return;
+
+    let cancelled = false;
+    void fetch(`/api/users/${delegateId}/profile`, { credentials: "include" })
+      .then(async (response) => {
+        if (cancelled) return;
+        if (!response.ok) {
+          setRemoteProfile(null);
+          return;
         }
-      }
-    }
-    return null;
-  }, [delegateId, hydrated, user]);
+        const data = (await response.json().catch(() => ({}))) as { user?: User };
+        setRemoteProfile(data.user ?? null);
+      })
+      .finally(() => {
+        if (!cancelled) setOthersLoaded(true);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [delegateId, hydrated, isOwnProfile]);
+
+  const loading = !hydrated || (!isOwnProfile && !othersLoaded);
+
+  const profile = user?.id === delegateId ? user : remoteProfile ?? null;
 
   const profileVisibility = profile?.profileVisibility ?? "public";
   const isVisible = profileVisibility === "public";
+
+  if (loading) {
+    return (
+      <>
+        <Navbar />
+        <AppRouteSkeleton />
+        <Footer />
+      </>
+    );
+  }
 
   if (!profile) {
     return (

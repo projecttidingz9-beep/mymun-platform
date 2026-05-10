@@ -1,8 +1,16 @@
+import { moneyNumber } from "@/lib/server/decimal-money";
 import { prisma } from "./prisma";
 
 const dayStart = (d: Date) => new Date(d).setHours(0, 0, 0, 0);
 
-type PhaseRow = { id: string; name: string; startDate: Date; endDate: Date; basePrice: number; committeePriceJson: string | null };
+type PhaseRow = {
+  id: string;
+  name: string;
+  startDate: Date;
+  endDate: Date;
+  basePrice: unknown;
+  committeePriceJson: string | null;
+};
 
 function getActivePhaseRow(phases: PhaseRow[], reference: Date): PhaseRow | null {
   const current = dayStart(reference);
@@ -56,7 +64,7 @@ export async function resolveServerRegistrationAmount(params: {
     const committee = event.organizerConfig.committees.find((c) => c.id === committeeId);
     if (committee?.basePrice != null) {
       return {
-        amount: committee.basePrice,
+        amount: moneyNumber(committee.basePrice),
         currency,
         phaseId: active.id,
         phaseName: active.name,
@@ -81,7 +89,7 @@ export async function resolveServerRegistrationAmount(params: {
   }
 
   return {
-    amount: active.basePrice,
+    amount: moneyNumber(active.basePrice),
     currency,
     phaseId: active.id,
     phaseName: active.name,

@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import AuthModal from "@/components/AuthModal";
+import type { Conference } from "@/lib/types";
 import { useAuth } from "@/lib/auth-context";
 import { getCategoryStartingPrice, getActivePhase, getPhaseStatus } from "@/lib/pricing";
 import {
@@ -14,6 +15,7 @@ import {
 } from "@/lib/marketplace-conferences";
 import { resolveConferenceBannerImage } from "@/lib/conference-media";
 import { hasOrganizerConferenceAccess } from "@/lib/organizer-access";
+import AppRouteSkeleton from "@/components/AppRouteSkeleton";
 
 type Tab = "overview" | "committees" | "schedule" | "organizer" | "reviews";
 
@@ -75,10 +77,37 @@ export default function ConferenceDetailPage() {
     Array<{ id: string; userName: string; rating: number; comment: string; sourceConferenceTitle: string; featured?: boolean }>
   >([]);
 
-  const organizerConference = organizerConferences.find((event) => event.id === params.id);
-  const conference = organizerConference
+  const eventKey = String(params.id ?? "");
+  const [catalogConference, setCatalogConference] = useState<Conference | null>(null);
+  const [catalogLoading, setCatalogLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setCatalogLoading(true);
+      try {
+        const res = await fetch("/api/marketplace", { cache: "no-store" });
+        const data = (await res.json()) as { conferences?: Conference[] };
+        const list = Array.isArray(data.conferences) ? data.conferences : [];
+        const match =
+          list.find((c) => c.id === eventKey || c.slug === eventKey) ?? null;
+        if (!cancelled) setCatalogConference(match);
+      } catch {
+        if (!cancelled) setCatalogConference(null);
+      } finally {
+        if (!cancelled) setCatalogLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [eventKey]);
+
+  const organizerConference = organizerConferences.find((event) => event.id === eventKey);
+  const conferenceFromOrganizer = organizerConference
     ? mapOrganizerConferenceToMarketplaceConference(organizerConference)
     : undefined;
+  const conference = conferenceFromOrganizer ?? catalogConference ?? undefined;
   const canPreviewUnpublishedConference = Boolean(
     organizerConference &&
       isLoggedIn &&
@@ -108,10 +137,7 @@ export default function ConferenceDetailPage() {
     ? [organizerConference, ...acceptedPartnerConferences]
     : [];
 
-  if (
-    (!conference && !organizerConference) ||
-    (organizerConference && organizerConference.status !== "Published" && !canPreviewUnpublishedConference)
-  ) {
+  if (organizerConference && organizerConference.status !== "Published" && !canPreviewUnpublishedConference) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ background: "var(--bg)" }}>
         <div className="relative text-center">
@@ -139,12 +165,39 @@ export default function ConferenceDetailPage() {
     );
   }
 
-  const c =
-    conference ||
-    (organizerConference
-      ? mapOrganizerConferenceToMarketplaceConference(organizerConference)
-      : null);
-  if (!c) return null;
+  if (!organizerConference && catalogLoading) {
+    return <AppRouteSkeleton />;
+  }
+
+  if (!conference) {
+    return (
+      <div className="min-h-screen flex items-center justify-center" style={{ background: "var(--bg)" }}>
+        <div className="relative text-center">
+          <p
+            className="lux-eyebrow justify-center inline-flex"
+            style={{ color: "var(--fg-muted)" }}
+          >
+            Not found
+          </p>
+          <h1
+            className="mt-5 text-3xl font-semibold"
+            style={{ color: "var(--fg)", letterSpacing: "-0.02em" }}
+          >
+            We couldn&apos;t find that conference.
+          </h1>
+          <Link
+            href="/marketplace"
+            className="lux-button-primary inline-block mt-8"
+            style={{ padding: "12px 22px" }}
+          >
+            Back to marketplace
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  const c = conference;
   const derivedRegistered = organizerConference
     ? mergedOrganizerConferences.reduce((sum, entry) => sum + entry.applicants.length, 0)
     : c.registered;

@@ -9,7 +9,9 @@ export default defineConfig({
     path: "prisma/migrations",
   },
   datasource: {
-    // Prefer DIRECT_URL for migrations (Supabase direct Postgres); fallback to pooled DATABASE_URL.
+    // Prefer DIRECT_URL for migrations. On Supabase, if db.*.supabase.co:5432 fails (IPv4-only),
+    // use the Supavisor session pooler :5432 URL instead — same pattern as DATABASE_URL but port 5432
+    // without ?pgbouncer=true. See https://supabase.com/docs/guides/database/prisma
     url: process.env["DIRECT_URL"]?.trim() || process.env["DATABASE_URL"],
   },
 });

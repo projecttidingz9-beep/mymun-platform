@@ -255,6 +255,8 @@ export interface OrganizerConference {
   id: string;
   ownerUserId?: string;
   ownerEmail?: string;
+  /** ISO 4217 code (from Event.currency). */
+  currency?: string;
   title: string;
   city: string;
   country: string;
@@ -488,6 +490,8 @@ export interface UserNotification {
   userId?: string;
   userEmail?: string;
   conferenceId: string;
+  /** Present when notification relates to a registration row (API-backed). */
+  registrationId?: string;
   title: string;
   message: string;
   type: "assignment" | "waitlist" | "status";

@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import Image from "next/image";
 import { useAuth } from "@/lib/auth-context";
+import { createSupabaseBrowserClient, isSupabaseOAuthConfigured } from "@/lib/supabase/client";
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -56,7 +57,9 @@ export default function AuthModal({ isOpen, onClose, defaultTab = "signin" }: Au
   const overlayRef = useRef<HTMLDivElement>(null);
   const googleButtonRef = useRef<HTMLDivElement>(null);
   const googleClientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || "";
-  const googleEnabled = googleClientId.trim().length > 0;
+  const supabaseOAuthEnabled = isSupabaseOAuthConfigured();
+  const legacyGoogleEnabled = googleClientId.trim().length > 0 && !supabaseOAuthEnabled;
+  const oauthEnabled = supabaseOAuthEnabled || legacyGoogleEnabled;
 
   const closeModal = useCallback(() => {
     setTab(defaultTab);
@@ -117,6 +120,32 @@ export default function AuthModal({ isOpen, onClose, defaultTab = "signin" }: Au
     login(payload.email, payload.name || undefined, payload.role || "delegate");
     closeModal();
   }, [closeModal, login]);
+
+  const startSupabaseGoogleOAuth = useCallback(async () => {
+    setError("");
+    setGoogleLoading(true);
+    try {
+      await fetch("/api/auth/oauth-intent", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(tab === "register" ? { role: registerRole } : {}),
+      });
+      const supabase = createSupabaseBrowserClient();
+      const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent("/dashboard")}`;
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: { redirectTo },
+      });
+      if (error) {
+        setError(error.message);
+        setGoogleLoading(false);
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Google sign-in failed.");
+      setGoogleLoading(false);
+    }
+  }, [tab, registerRole]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -180,7 +209,7 @@ export default function AuthModal({ isOpen, onClose, defaultTab = "signin" }: Au
   };
 
   useEffect(() => {
-    if (!isOpen || !googleEnabled || forgotMode || showGoogleRoleStep) return;
+    if (!isOpen || !legacyGoogleEnabled || forgotMode || showGoogleRoleStep) return;
     const renderGoogleButton = () => {
       const googleApi = (window as Window & { google?: GoogleApi }).google;
       if (!googleApi?.accounts?.id || !googleButtonRef.current) return;
@@ -218,7 +247,7 @@ export default function AuthModal({ isOpen, onClose, defaultTab = "signin" }: Au
     script.onload = () => renderGoogleButton();
     script.onerror = () => setError("Unable to load Google Sign-In.");
     document.head.appendChild(script);
-  }, [isOpen, googleEnabled, forgotMode, showGoogleRoleStep, googleClientId, tab, completeGoogleSignIn]);
+  }, [isOpen, legacyGoogleEnabled, forgotMode, showGoogleRoleStep, googleClientId, tab, completeGoogleSignIn]);
 
   if (!isOpen) return null;
 
@@ -293,9 +322,24 @@ export default function AuthModal({ isOpen, onClose, defaultTab = "signin" }: Au
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="px-8 pb-8 space-y-4">
-          {googleEnabled && !forgotMode && (
+          {oauthEnabled && !forgotMode && (
             <div className="space-y-3">
-              {!showGoogleRoleStep ? (
+              {supabaseOAuthEnabled ? (
+                <>
+                  <button
+                    type="button"
+                    className="lux-button-primary w-full text-base hover:-translate-y-0.5"
+                    style={{ padding: "12px" }}
+                    disabled={googleLoading}
+                    onClick={() => void startSupabaseGoogleOAuth()}
+                  >
+                    {googleLoading ? "Redirecting…" : "Continue with Google"}
+                  </button>
+                  <p className="text-center text-xs" style={{ color: "var(--fg-muted)" }}>
+                    or continue with email
+                  </p>
+                </>
+              ) : !showGoogleRoleStep ? (
                 <>
                   <div ref={googleButtonRef} className="w-full flex justify-center" />
                   <p className="text-center text-xs" style={{ color: "var(--fg-muted)" }}>
@@ -339,9 +383,9 @@ export default function AuthModal({ isOpen, onClose, defaultTab = "signin" }: Au
               )}
             </div>
           )}
-          {!googleEnabled && !forgotMode && (
+          {!oauthEnabled && !forgotMode && (
             <p className="text-xs text-center" style={{ color: "var(--fg-muted)" }}>
-              Google Sign-In is not configured.
+              Google Sign-In is not configured (add Supabase URL/key or Google client ID).
             </p>
           )}
           {tab === "register" && (

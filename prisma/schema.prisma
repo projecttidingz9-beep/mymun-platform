@@ -1,4 +1,5 @@
 // Tidingz — PostgreSQL (Supabase). Use pooled DATABASE_URL at runtime; DIRECT_URL for migrations.
+// RLS is enabled on app tables in migration `20260510140000_supabase_rls_and_extensions` (PostgREST lockdown; Prisma owner bypasses).
 
 generator client {
   provider = "prisma-client"
@@ -100,6 +101,8 @@ model User {
   delegationMembers      DelegationMember[]
   conferenceReviews      ConferenceReview[]
   notificationPreferences UserNotificationPreference[]
+  /** Delegate-facing profile fields (JSON) — source of truth vs client-only localStorage. */
+  delegateProfile        Json?
   createdAt              DateTime                @default(now())
   updatedAt              DateTime                @updatedAt
 }
@@ -183,6 +186,7 @@ model EventPartnership {
   @@index([targetEventId])
 }
 
+/// Partial unique in DB: at most one row per (userId, eventId) where deletedAt IS NULL — see migration `Registration_userId_eventId_active_key`.
 model Registration {
   id                String             @id
   userId            String
@@ -190,7 +194,7 @@ model Registration {
   categoryName      String
   committeeName     String?
   portfolioName     String?
-  amount            Float
+  amount            Decimal            @db.Decimal(12, 2)
   paid              Boolean            @default(false)
   status            RegistrationStatus @default(PENDING)
   allottedAt        DateTime?
@@ -206,13 +210,17 @@ model Registration {
   applicationAnswers ApplicationAnswer[]
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
+
+  @@index([eventId])
+  @@index([userId])
+  @@index([eventId, deletedAt])
 }
 
 model PaymentIntent {
   id                String               @id @default(cuid())
   registrationId    String               @unique
   provider          PaymentProvider
-  amount            Float
+  amount            Decimal              @db.Decimal(12, 2)
   currency          String               @default("INR")
   status            PaymentIntentStatus    @default(PENDING)
   confirmedAt       DateTime?
@@ -321,7 +329,7 @@ model CommitteeConfig {
   chairName         String?
   chairEmail        String?
   seatCount         Int
-  basePrice         Float?
+  basePrice         Decimal?                  @db.Decimal(12, 2)
   visibility        CommitteeVisibility       @default(PUBLIC)
   organizerConfig   OrganizerConferenceConfig @relation(fields: [organizerConfigId], references: [id], onDelete: Cascade)
   questions         ApplicationQuestion[]
@@ -359,7 +367,7 @@ model PricingPhaseConfig {
   name               String
   startDate          DateTime
   endDate            DateTime
-  basePrice          Float
+  basePrice          Decimal                @db.Decimal(12, 2)
   committeePriceJson String?
   organizerConfig    OrganizerConferenceConfig @relation(fields: [organizerConfigId], references: [id], onDelete: Cascade)
   createdAt          DateTime                  @default(now())
@@ -421,6 +429,7 @@ model ConferenceReview {
   event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@unique([eventId, userId])
   @@index([eventId])
 }
 

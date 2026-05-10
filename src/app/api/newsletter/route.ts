@@ -2,16 +2,20 @@ import { NextRequest, NextResponse } from "next/server";
 import { Resend } from "resend";
 import { env } from "@/lib/server/env";
 import { consumeRateLimitBucket } from "@/lib/server/rate-limit-db";
+import { getClientIp } from "@/lib/server/request-ip";
+import { newsletterBodySchema } from "@/lib/server/validators/newsletter";
 
 /** Double-opt-in placeholder: stores intent via email to ops inbox until marketing automation is wired. */
 export async function POST(request: NextRequest) {
-  const body = await request.json().catch(() => ({}));
-  const email = String(body.email || "").trim().toLowerCase();
-  if (!email.includes("@")) {
-    return NextResponse.json({ error: "Valid email required." }, { status: 400 });
+  const raw = await request.json().catch(() => ({}));
+  const parsed = newsletterBodySchema.safeParse(raw);
+  if (!parsed.success) {
+    const msg = parsed.error.issues[0]?.message ?? "Invalid input.";
+    return NextResponse.json({ error: msg }, { status: 400 });
   }
+  const email = parsed.data.email.toLowerCase();
 
-  const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "anon";
+  const ip = getClientIp(request);
   const ok = await consumeRateLimitBucket({
     key: `newsletter:${ip}`,
     windowMs: 60 * 60 * 1000,

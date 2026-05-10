@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/server/prisma";
 import { getRequestActor, requireEventOrganizerAccess, requireOrganizer } from "@/lib/server/auth";
+import { moneyNumber } from "@/lib/server/decimal-money";
 
 /** Manual payments dashboard data — lists PaymentIntent rows for an event. */
 export async function GET(
@@ -32,5 +33,10 @@ export async function GET(
     take: 200,
   });
 
-  return NextResponse.json({ paymentIntents: intents });
+  return NextResponse.json({
+    paymentIntents: intents.map((row) => ({
+      ...row,
+      amount: moneyNumber(row.amount),
+    })),
+  });
 }

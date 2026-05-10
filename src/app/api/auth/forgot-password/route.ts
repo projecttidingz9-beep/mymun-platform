@@ -1,16 +1,37 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Resend } from "resend";
 import { prisma } from "@/lib/server/prisma";
+import { logger } from "@/lib/server/logger";
+import { consumeRateLimitBucket } from "@/lib/server/rate-limit-db";
+import { getClientIp } from "@/lib/server/request-ip";
 import { createPasswordResetToken } from "@/lib/server/reset-token";
+import { forgotPasswordBodySchema } from "@/lib/server/validators/auth";
 
 const RESET_TOKEN_TTL_MINUTES = 30;
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
-    const email = String(body.email || "").trim().toLowerCase();
-    if (!email || !email.includes("@")) {
-      return NextResponse.json({ error: "Valid email is required." }, { status: 400 });
+    const ip = getClientIp(request);
+    const raw = await request.json();
+    const parsed = forgotPasswordBodySchema.safeParse(raw);
+    if (!parsed.success) {
+      const msg = parsed.error.issues[0]?.message ?? "Invalid input.";
+      return NextResponse.json({ error: msg }, { status: 400 });
+    }
+    const email = parsed.data.email.toLowerCase();
+
+    const ipOk = await consumeRateLimitBucket({
+      key: `auth:forgot:${ip}`,
+      windowMs: 60 * 60 * 1000,
+      limit: 10,
+    });
+    const emailOk = await consumeRateLimitBucket({
+      key: `auth:forgot:email:${email}`,
+      windowMs: 60 * 60 * 1000,
+      limit: 5,
+    });
+    if (!ipOk || !emailOk) {
+      return NextResponse.json({ error: "Too many requests. Try again later." }, { status: 429 });
     }
 
     const user = await prisma.user.findUnique({
@@ -52,9 +73,11 @@ export async function POST(request: NextRequest) {
           `Use this link to reset your password (valid for ${RESET_TOKEN_TTL_MINUTES} minutes):\n` +
           `${resetUrl}\n\nIf you did not request this, you can ignore this email.`,
       });
+      logger.info("password_reset_email_sent", { userId: user.id });
+    } else if (process.env.NODE_ENV !== "production") {
+      logger.warn("password_reset_email_skipped_no_resend", { userId: user.id });
     } else {
-      // Fallback for local environments without email credentials.
-      console.info("Password reset link:", resetUrl);
+      logger.error("password_reset_email_misconfigured", { userId: user.id });
     }
 
     return NextResponse.json({ ok: true });

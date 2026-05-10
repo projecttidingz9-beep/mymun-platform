@@ -37,6 +37,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Invalid delegate pass." }, { status: 400 });
     }
 
+    if (pass.releaseAt > new Date()) {
+      return NextResponse.json({ error: "Pass not released yet." }, { status: 409 });
+    }
+
     const existing = await prisma.checkin.findUnique({
       where: {
         passId_eventId: {

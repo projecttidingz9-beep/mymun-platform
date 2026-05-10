@@ -38,6 +38,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Invalid delegate pass." }, { status: 400 });
     }
 
+    if (pass.releaseAt > new Date()) {
+      return NextResponse.json({ error: "Pass not released yet.", valid: false }, { status: 409 });
+    }
+
     const checkedIn = pass.checkins.length > 0 || pass.registration.checkedIn;
     return NextResponse.json({
       valid: true,

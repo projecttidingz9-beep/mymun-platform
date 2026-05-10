@@ -1,8 +1,14 @@
-/** Next.js instrumentation hook — extend with @sentry/nextjs when DSN is configured. */
+import * as Sentry from "@sentry/nextjs";
+
 export async function register() {
+  if (!process.env.SENTRY_DSN?.trim()) return;
+
   if (process.env.NEXT_RUNTIME === "nodejs") {
-    // Example:
-    // const { init } = await import("@sentry/nextjs");
-    // if (process.env.SENTRY_DSN) init({ dsn: process.env.SENTRY_DSN });
+    await import("./sentry.server.config");
+  }
+  if (process.env.NEXT_RUNTIME === "edge") {
+    await import("./sentry.edge.config");
   }
 }
+
+export const onRequestError = Sentry.captureRequestError;

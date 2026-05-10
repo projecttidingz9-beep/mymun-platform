@@ -3,6 +3,17 @@ import { RegistrationStatus } from "@/generated/prisma/enums";
 import { prisma } from "@/lib/server/prisma";
 import { getAppConfig } from "@/lib/app-config";
 
+/** One active registration per user per event (see DB partial unique index). */
+export class DuplicateActiveRegistrationError extends Error {
+  readonly existingRegistrationId: string;
+
+  constructor(existingRegistrationId: string) {
+    super("You already have an active registration for this conference.");
+    this.name = "DuplicateActiveRegistrationError";
+    this.existingRegistrationId = existingRegistrationId;
+  }
+}
+
 export type RegistrationCheckoutResult = {
   registrationId: string;
   paymentIntentId: string;
@@ -28,6 +39,18 @@ export async function createRegistrationAndPayment(params: {
 }): Promise<RegistrationCheckoutResult> {
   const { paymentsMode } = getAppConfig();
   const amount = Math.max(0, Math.round(params.amount * 100) / 100);
+
+  const duplicate = await prisma.registration.findFirst({
+    where: {
+      userId: params.userId,
+      eventId: params.eventId,
+      deletedAt: null,
+    },
+    select: { id: true },
+  });
+  if (duplicate) {
+    throw new DuplicateActiveRegistrationError(duplicate.id);
+  }
 
   const isFreeAmount = amount <= 0;
   const useFreeDriver = isFreeAmount || paymentsMode === "free";

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getRequestActor, requireEventOrganizerAccess, requireOrganizer, resolveActorUserId } from "@/lib/server/auth";
-import { getOrganizerPreviewConfig, setOrganizerPreviewConfig } from "@/lib/server/organizer-config-store";
+import { getOrganizerPreviewConfig, mergeOrganizerStoredBlob } from "@/lib/server/organizer-config-store";
 
 export async function GET(
   request: NextRequest,
@@ -43,7 +43,7 @@ export async function PATCH(
   }
 
   const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
-  const saved = await setOrganizerPreviewConfig(eventId, {
+  const previewPatch: Record<string, unknown> = {
     eventId,
     ownerUserId: typeof body.ownerUserId === "string" ? body.ownerUserId : actorUserId || undefined,
     ownerEmail: typeof body.ownerEmail === "string" ? body.ownerEmail : actor?.email || undefined,
@@ -106,7 +106,10 @@ export async function PATCH(
           })
           .filter((entry) => entry.day && entry.fromTime && entry.toTime && entry.title)
       : undefined,
-  });
+  };
+
+  await mergeOrganizerStoredBlob(eventId, previewPatch);
+  const saved = await getOrganizerPreviewConfig(eventId);
 
   return NextResponse.json({ config: saved });
 }

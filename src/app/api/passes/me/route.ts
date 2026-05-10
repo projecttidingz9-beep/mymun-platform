@@ -56,7 +56,7 @@ export async function GET(request: NextRequest) {
             releaseAt: pass.releaseAt.toISOString(),
             released: isReleased,
             issuedAt: pass.issuedAt.toISOString(),
-            qrToken: token,
+            qrToken: isReleased ? token : null,
             qrImageDataUrl,
           };
         })

@@ -30,6 +30,9 @@ export async function DELETE(
     );
   }
 
-  await prisma.event.deleteMany({ where: { id: eventId } });
+  await prisma.event.updateMany({
+    where: { id: eventId, deletedAt: null },
+    data: { deletedAt: new Date() },
+  });
   return NextResponse.json({ ok: true });
 }

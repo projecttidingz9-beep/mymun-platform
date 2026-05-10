@@ -43,7 +43,7 @@ export default function CreateOrganizerConferencePage() {
     registrationDeadline &&
     Number(capacity) > 0;
 
-  const handleSubmit = async () => {
+  const handleSubmit = async (): Promise<void> => {
     if (!isLoggedIn) {
       setAuthOpen(true);
       return;
@@ -52,7 +52,7 @@ export default function CreateOrganizerConferencePage() {
     setIsSubmitting(true);
     setSubmitMessage("");
     try {
-      addOrganizerConference({
+      await addOrganizerConference({
         title: title.trim(),
         city: city.trim(),
         country: country.trim(),

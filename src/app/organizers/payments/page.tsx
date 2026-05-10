@@ -163,7 +163,11 @@ export default function OrganizerPaymentsPage() {
                     </div>
                   </td>
                   <td className="px-4 py-3">
-                    {(row.currency || "INR")} {row.amount.toFixed(2)}
+                    {(row.currency || "INR")}{" "}
+                    {Number(row.amount).toLocaleString(undefined, {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}
                   </td>
                   <td className="px-4 py-3">
                     <span className="badge badge-blue">{row.status}</span>

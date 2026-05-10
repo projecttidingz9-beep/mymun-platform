@@ -3,7 +3,10 @@ import { randomUUID } from "crypto";
 import { prisma } from "@/lib/server/prisma";
 import { getRequestActor } from "@/lib/server/auth";
 import { resolveServerRegistrationAmount } from "@/lib/server/resolve-registration-price";
-import { createRegistrationAndPayment } from "@/lib/server/payments";
+import {
+  createRegistrationAndPayment,
+  DuplicateActiveRegistrationError,
+} from "@/lib/server/payments";
 
 export async function POST(request: NextRequest) {
   const actor = await getRequestActor(request);
@@ -118,6 +121,15 @@ export async function POST(request: NextRequest) {
       clientRegistration,
     });
   } catch (error) {
+    if (error instanceof DuplicateActiveRegistrationError) {
+      return NextResponse.json(
+        {
+          error: error.message,
+          existingRegistrationId: error.existingRegistrationId,
+        },
+        { status: 409 }
+      );
+    }
     const message = error instanceof Error ? error.message : "Registration failed.";
     return NextResponse.json({ error: message }, { status: 400 });
   }

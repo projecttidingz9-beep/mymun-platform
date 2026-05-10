@@ -18,7 +18,7 @@ Production-oriented Model UN platform: marketplace, delegate flows, organizer da
 
 ## Environment
 
-Copy `.env.example` → `.env.local`. Critical vars:
+Copy [`.env.example`](./.env.example) → `.env.local`. For **Vercel**, see [`docs/deploy-vercel.md`](docs/deploy-vercel.md). Critical vars:
 
 - **`DATABASE_URL`** / **`DIRECT_URL`** — Postgres (e.g. Supabase).
 - **`AUTH_SESSION_SECRET`** — JWT signing for `mymun_session`.

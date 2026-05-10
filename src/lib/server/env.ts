@@ -40,6 +40,11 @@ const envSchema = z.object({
   NEXT_PUBLIC_APP_URL: optionalNonEmpty,
   PAYMENTS_MODE: z.enum(["free", "manual"]).optional(),
   SENTRY_DSN: optionalNonEmpty,
+  /** Same project DSN as `SENTRY_DSN` when you want browser error reporting (public). */
+  NEXT_PUBLIC_SENTRY_DSN: optionalNonEmpty,
+  /** Supabase Auth (OAuth); optional — enable Google/GitHub etc. in Supabase dashboard. */
+  NEXT_PUBLIC_SUPABASE_URL: optionalNonEmpty,
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: optionalNonEmpty,
   NODE_ENV: z.enum(["development", "production", "test"]).optional(),
 });
 

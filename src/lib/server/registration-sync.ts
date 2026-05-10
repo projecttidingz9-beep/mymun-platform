@@ -52,30 +52,37 @@ export async function upsertRegistrationFromClient(payload: SyncRegistrationPayl
     },
   });
 
-  return await prisma.registration.upsert({
+  const updateData = {
+    userId: user.id,
+    eventId: event.id,
+    categoryName: payload.categoryName,
+    committeeName: payload.committeeName,
+    portfolioName: payload.portfolioName,
+    amount: payload.amount,
+    paid: payload.paid,
+    status: mapStatus(payload.organizerStatus),
+    allottedAt: payload.organizerStatus === "Allotted" ? new Date() : null,
+  };
+
+  const existingActive = await prisma.registration.findFirst({
+    where: { userId: user.id, eventId: event.id, deletedAt: null },
+    select: { id: true },
+  });
+
+  if (existingActive && existingActive.id !== payload.registrationId) {
+    return prisma.registration.update({
+      where: { id: existingActive.id },
+      data: updateData,
+      include: { user: true, event: true },
+    });
+  }
+
+  return prisma.registration.upsert({
     where: { id: payload.registrationId },
-    update: {
-      userId: user.id,
-      eventId: event.id,
-      categoryName: payload.categoryName,
-      committeeName: payload.committeeName,
-      portfolioName: payload.portfolioName,
-      amount: payload.amount,
-      paid: payload.paid,
-      status: mapStatus(payload.organizerStatus),
-      allottedAt: payload.organizerStatus === "Allotted" ? new Date() : null,
-    },
+    update: updateData,
     create: {
       id: payload.registrationId,
-      userId: user.id,
-      eventId: event.id,
-      categoryName: payload.categoryName,
-      committeeName: payload.committeeName,
-      portfolioName: payload.portfolioName,
-      amount: payload.amount,
-      paid: payload.paid,
-      status: mapStatus(payload.organizerStatus),
-      allottedAt: payload.organizerStatus === "Allotted" ? new Date() : null,
+      ...updateData,
     },
     include: {
       user: true,

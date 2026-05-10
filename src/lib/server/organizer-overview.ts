@@ -1,4 +1,5 @@
 import { RegistrationStatus } from "@/generated/prisma/enums";
+import { moneyNumber } from "@/lib/server/decimal-money";
 import { prisma } from "./prisma";
 import { OrganizerOverviewAnalytics } from "@/lib/types";
 
@@ -27,7 +28,7 @@ export async function getOrganizerOverviewAnalytics(eventId: string): Promise<Or
   const rejectedApplications = registrations.filter((entry) => entry.status === RegistrationStatus.REJECTED).length;
 
   const paid = registrations.filter((entry) => entry.paid);
-  const revenueCollected = paid.reduce((sum, entry) => sum + entry.amount, 0);
+  const revenueCollected = paid.reduce((sum, entry) => sum + moneyNumber(entry.amount), 0);
   const paymentCompletionRate =
     totalRegistrations === 0 ? 0 : Math.round((paid.length / totalRegistrations) * 100);
 

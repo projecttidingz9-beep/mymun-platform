@@ -2,16 +2,20 @@ import { NextRequest, NextResponse } from "next/server";
 import { Resend } from "resend";
 import { env } from "@/lib/server/env";
 import { consumeRateLimitBucket } from "@/lib/server/rate-limit-db";
+import { getClientIp } from "@/lib/server/request-ip";
+import { contactBodySchema } from "@/lib/server/validators/contact";
 
 export async function POST(request: NextRequest) {
-  const body = await request.json().catch(() => ({}));
-  const email = String(body.email || "").trim().toLowerCase();
-  const message = String(body.message || "").trim();
-  if (!email.includes("@") || message.length < 10) {
-    return NextResponse.json({ error: "Valid email and message (10+ chars) required." }, { status: 400 });
+  const raw = await request.json().catch(() => ({}));
+  const parsed = contactBodySchema.safeParse(raw);
+  if (!parsed.success) {
+    const msg = parsed.error.issues[0]?.message ?? "Invalid input.";
+    return NextResponse.json({ error: msg }, { status: 400 });
   }
+  const email = parsed.data.email.toLowerCase();
+  const message = parsed.data.message;
 
-  const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "anon";
+  const ip = getClientIp(request);
   const ok = await consumeRateLimitBucket({
     key: `contact:${ip}`,
     windowMs: 60 * 60 * 1000,

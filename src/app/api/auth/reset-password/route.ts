@@ -1,16 +1,31 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/server/prisma";
 import { hashPassword, validateNewPassword } from "@/lib/server/password";
+import { consumeRateLimitBucket } from "@/lib/server/rate-limit-db";
+import { getClientIp } from "@/lib/server/request-ip";
 import { hashResetToken } from "@/lib/server/reset-token";
+import { resetPasswordBodySchema } from "@/lib/server/validators/auth";
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
-    const token = String(body.token || "");
-    const newPassword = String(body.newPassword || "");
-    if (!token || !newPassword) {
-      return NextResponse.json({ error: "Token and new password are required." }, { status: 400 });
+    const ip = getClientIp(request);
+    const ok = await consumeRateLimitBucket({
+      key: `auth:reset:${ip}`,
+      windowMs: 60 * 60 * 1000,
+      limit: 20,
+    });
+    if (!ok) {
+      return NextResponse.json({ error: "Too many attempts. Try again later." }, { status: 429 });
     }
+
+    const raw = await request.json();
+    const parsed = resetPasswordBodySchema.safeParse(raw);
+    if (!parsed.success) {
+      const msg = parsed.error.issues[0]?.message ?? "Invalid input.";
+      return NextResponse.json({ error: msg }, { status: 400 });
+    }
+    const { token, newPassword } = parsed.data;
+
     const passwordError = validateNewPassword(newPassword);
     if (passwordError) {
       return NextResponse.json({ error: passwordError }, { status: 400 });

@@ -65,7 +65,7 @@ export default function DashboardPage() {
     checkedIn: boolean;
     checkedInAt?: string | null;
     qrImageDataUrl?: string;
-    qrToken: string;
+    qrToken: string | null;
   }>>([]);
   const [serverNotifications, setServerNotifications] = useState<Array<{
     id: string;

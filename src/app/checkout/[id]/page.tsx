@@ -6,9 +6,15 @@ import Link from "next/link";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { useAuth } from "@/lib/auth-context";
-import { OrganizerCommittee, Registration, RegistrationCategory } from "@/lib/types";
+import {
+  type Conference,
+  OrganizerCommittee,
+  Registration,
+  RegistrationCategory,
+} from "@/lib/types";
 import { getPhaseStatus, resolveRegistrationPrice } from "@/lib/pricing";
 import { getMarketplaceConferences } from "@/lib/marketplace-conferences";
+import { formatMoney } from "@/lib/format-money";
 
 type Step = 1 | 2 | 3 | 4;
 
@@ -48,11 +54,32 @@ export default function CheckoutPage() {
   const [answers, setAnswers] = useState<Record<string, string | number | boolean | string[]>>({});
   const [loading, setLoading] = useState(false);
   const [uploadedFiles, setUploadedFiles] = useState<Record<string, string[]>>({});
+  const [catalogConference, setCatalogConference] = useState<Conference | null>(null);
 
-  const organizerConference = organizerConferences.find((conference) => conference.id === params.id);
-  const marketplaceConference = getMarketplaceConferences(organizerConferences).find(
-    (conference) => conference.id === params.id
+  const eventKey = String(params.id);
+  const organizerConference = organizerConferences.find((conference) => conference.id === eventKey);
+  const fromLocalList = getMarketplaceConferences(organizerConferences).find(
+    (conference) => conference.id === eventKey || conference.slug === eventKey
   );
+  const marketplaceConference = fromLocalList ?? catalogConference;
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/marketplace", { cache: "no-store" });
+        const data = (await res.json()) as { conferences?: Conference[] };
+        const list = Array.isArray(data.conferences) ? data.conferences : [];
+        const match = list.find((c) => c.id === eventKey || c.slug === eventKey) ?? null;
+        if (!cancelled) setCatalogConference(match);
+      } catch {
+        if (!cancelled) setCatalogConference(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [eventKey]);
 
   useEffect(() => {
     if (!isLoggedIn) {
@@ -67,7 +94,12 @@ export default function CheckoutPage() {
   const displayTitle = organizerConference?.title || marketplaceConference?.title || "Conference";
   const displayCity = organizerConference?.city || marketplaceConference?.city || "";
   const displayStartDate = organizerConference?.startDate || marketplaceConference?.startDate || "";
-  const currencySymbol = marketplaceConference?.currency === "EUR" ? "€" : marketplaceConference?.currency === "GBP" ? "£" : "$";
+  const checkoutCurrency =
+    (typeof organizerConference?.currency === "string" && organizerConference.currency.trim()
+      ? organizerConference.currency.trim()
+      : null) ||
+    marketplaceConference?.currency?.trim() ||
+    "INR";
 
   const rawCategories: RegistrationCategory[] = organizerConference
     ? organizerConference.registrationCategories
@@ -126,6 +158,8 @@ export default function CheckoutPage() {
         source: "category-base" as const,
         status: "base" as const,
       };
+
+  const resolvedFeeDisplay = formatMoney(priceResult.amount, checkoutCurrency);
 
   const committeeQuestionsValid = (() => {
     if (!selectedCommittee) return true;
@@ -262,7 +296,7 @@ export default function CheckoutPage() {
                 <p className="text-sm" style={{ color: "var(--fg-muted)" }}>{displayStartDate} · {displayCity}</p>
               </div>
               <div className="text-right">
-                <p className="text-2xl font-black" style={{ color: "var(--fg)" }}>{currencySymbol}{priceResult.amount}</p>
+                <p className="text-2xl font-black" style={{ color: "var(--fg)" }}>{resolvedFeeDisplay}</p>
                 <p className="text-xs" style={{ color: "var(--fg-muted)" }}>{priceResult.phaseName || "Base pricing"}</p>
               </div>
             </div>
@@ -285,7 +319,7 @@ export default function CheckoutPage() {
                 >
                   <div className="flex items-center justify-between">
                     <span className="font-bold text-sm" style={{ color: "var(--fg)" }}>{category.name}</span>
-                    <span className="badge badge-blue">${category.basePrice}</span>
+                    <span className="badge badge-blue">{formatMoney(category.basePrice, checkoutCurrency)}</span>
                   </div>
                   <p className="text-[11px] mt-1" style={{ color: "var(--blue)" }}>
                     {getCategoryTypeLabel(category.applicationType)}
@@ -576,7 +610,7 @@ export default function CheckoutPage() {
               <div className="rounded-xl p-4 space-y-2" style={{ background: "var(--bg-subtle)", border: "1px solid var(--border)" }}>
                 <div className="flex justify-between text-sm">
                   <span style={{ color: "var(--fg-muted)" }}>Resolved fee</span>
-                  <span style={{ color: "var(--fg)" }}>{currencySymbol}{priceResult.amount}.00</span>
+                  <span style={{ color: "var(--fg)" }}>{resolvedFeeDisplay}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span style={{ color: "var(--fg-muted)" }}>Pricing phase</span>
@@ -591,7 +625,11 @@ export default function CheckoutPage() {
               <div className="flex gap-3">
                 <button onClick={() => setStep(3)} className="btn btn-ghost flex-1">← Back</button>
                 <button onClick={handlePay} disabled={!isStep4Valid || loading} className="btn btn-primary flex-[2]" style={{ opacity: isStep4Valid && !loading ? 1 : 0.5 }}>
-                  {loading ? "Submitting..." : priceResult.amount <= 0 ? "Confirm free registration" : `Submit registration (${currencySymbol}${priceResult.amount}.00)`}
+                  {loading
+                    ? "Submitting..."
+                    : priceResult.amount <= 0
+                      ? "Confirm free registration"
+                      : `Submit registration (${resolvedFeeDisplay})`}
                 </button>
               </div>
             </div>

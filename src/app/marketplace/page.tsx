@@ -5,8 +5,8 @@ import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import ConferenceCard from "@/components/ConferenceCard";
 import AuthModal from "@/components/AuthModal";
+import type { Conference } from "@/lib/types";
 import { useAuth } from "@/lib/auth-context";
-import { getMarketplaceConferences } from "@/lib/marketplace-conferences";
 
 const LEVELS = ["All", "High School", "University", "Elite", "Open", "Hybrid"];
 const REGIONS = ["All", "Asia", "Europe", "Americas", "Africa", "Oceania"];
@@ -30,8 +30,10 @@ function parseDayValue(value: string): number | null {
 }
 
 export default function MarketplacePage() {
-  const { user, organizerConferences } = useAuth();
+  const { user } = useAuth();
   const isOrganizerUser = user?.role === "organizer";
+  const [catalog, setCatalog] = useState<Conference[]>([]);
+  const [catalogLoading, setCatalogLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [level, setLevel] = useState("All");
@@ -51,10 +53,28 @@ export default function MarketplacePage() {
   const desktopFilterWrapRef = useRef<HTMLDivElement>(null);
   const mobileFilterWrapRef = useRef<HTMLDivElement>(null);
 
-  const allConferences = useMemo(
-    () => getMarketplaceConferences(organizerConferences),
-    [organizerConferences]
-  );
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setCatalogLoading(true);
+      try {
+        const res = await fetch("/api/marketplace", { cache: "no-store" });
+        const data = (await res.json()) as { conferences?: Conference[] };
+        if (!cancelled && Array.isArray(data.conferences)) {
+          setCatalog(data.conferences);
+        }
+      } catch {
+        if (!cancelled) setCatalog([]);
+      } finally {
+        if (!cancelled) setCatalogLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const allConferences = catalog;
   const indexedConferences = useMemo(
     () =>
       allConferences.map((conference) => ({
@@ -505,8 +525,9 @@ export default function MarketplacePage() {
             .
           </h1>
           <p className="lux-subdisplay mt-6 max-w-2xl">
-            {allConferences.length} conferences available worldwide — filter by level,
-            region, budget, and dates to find your perfect match.
+            {catalogLoading
+              ? "Loading published conferences…"
+              : `${allConferences.length} conference${allConferences.length === 1 ? "" : "s"} published — filter by level, region, budget, and dates to find your match.`}
           </p>
           {isOrganizerUser && (
             <p className="mt-4 text-sm" style={{ color: "var(--fg-muted)" }}>
@@ -650,7 +671,16 @@ export default function MarketplacePage() {
             </div>
           </div>
 
-          {filtered.length > 0 ? (
+          {catalogLoading ? (
+            <div className="lux-card py-24 text-center" style={{ borderStyle: "dashed" }}>
+              <p className="lux-eyebrow" style={{ color: "var(--fg-muted)" }}>
+                Loading
+              </p>
+              <p className="mt-4 text-lg font-medium" style={{ color: "var(--fg)" }}>
+                Fetching published conferences…
+              </p>
+            </div>
+          ) : filtered.length > 0 ? (
             <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-6">
               {filtered.map((conference) => (
                 <ConferenceCard key={conference.id} conference={conference} />
@@ -665,20 +695,20 @@ export default function MarketplacePage() {
                 className="lux-eyebrow"
                 style={{ color: "var(--fg-muted)" }}
               >
-                {allConferences.length === 0 ? "No live conferences yet" : "Nothing matches"}
+                {allConferences.length === 0 ? "No published conferences yet" : "Nothing matches"}
               </p>
               <p
                 className="mt-4 text-2xl font-semibold"
                 style={{ color: "var(--fg)", letterSpacing: "-0.02em" }}
               >
-                {allConferences.length === 0 ? "No conferences live yet" : "No conferences found"}
+                {allConferences.length === 0 ? "Nothing listed yet" : "No conferences found"}
               </p>
               <p
                 className="mt-3 max-w-md mx-auto"
                 style={{ color: "var(--fg-muted)" }}
               >
                 {allConferences.length === 0
-                  ? "No conferences live yet — check back soon."
+                  ? "Organizers will appear here once they publish an event."
                   : "Try adjusting your filters or search term to broaden the horizon."}
               </p>
               {allConferences.length > 0 && (

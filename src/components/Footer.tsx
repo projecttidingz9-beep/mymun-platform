@@ -11,14 +11,12 @@ const NAV_LINKS = [
 const LEGAL_LINKS = [
   { label: "Privacy Policy", href: "/legal/privacy" },
   { label: "Terms & Conditions", href: "/legal/terms" },
+  { label: "Refund Policy", href: "/legal/refund" },
+  { label: "Cookie Policy", href: "/legal/cookies" },
 ];
 
-const SOCIAL_LINKS = [
-  { label: "X", href: "https://x.com", icon: "𝕏" },
-  { label: "LinkedIn", href: "https://linkedin.com", icon: "in" },
-  { label: "Instagram", href: "https://instagram.com", icon: "◎" },
-  { label: "YouTube", href: "https://youtube.com", icon: "▶" },
-];
+/** Add real profile URLs before showing icons — generic network homepages are misleading. */
+const SOCIAL_LINKS: { label: string; href: string; icon: string }[] = [];
 
 export default function Footer() {
   return (
@@ -41,20 +39,22 @@ export default function Footer() {
             <p className="text-sm leading-relaxed max-w-md footer-copy">
               A modern Model UN platform helping delegates and organizers discover, prepare, and perform at the highest level.
             </p>
-            <div className="flex items-center gap-2">
-              {SOCIAL_LINKS.map((social) => (
-                <a
-                  key={social.label}
-                  href={social.href}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  aria-label={social.label}
-                  className="w-9 h-9 rounded-xl flex items-center justify-center text-sm font-semibold footer-social"
-                >
-                  {social.icon}
-                </a>
-              ))}
-            </div>
+            {SOCIAL_LINKS.length > 0 && (
+              <div className="flex items-center gap-2">
+                {SOCIAL_LINKS.map((social) => (
+                  <a
+                    key={social.label}
+                    href={social.href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label={social.label}
+                    className="w-9 h-9 rounded-xl flex items-center justify-center text-sm font-semibold footer-social"
+                  >
+                    {social.icon}
+                  </a>
+                ))}
+              </div>
+            )}
           </div>
 
           <div>

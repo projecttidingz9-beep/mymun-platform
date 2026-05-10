@@ -1,21 +1,35 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/server/prisma";
 import { verifyPassword } from "@/lib/server/password";
+import { consumeRateLimitBucket } from "@/lib/server/rate-limit-db";
+import { getClientIp } from "@/lib/server/request-ip";
 import { signSessionToken } from "@/lib/server/session-token";
 import { prismaUserRoleToSession } from "@/lib/server/user-role";
+import { loginBodySchema } from "@/lib/server/validators/auth";
 
 const MAX_ATTEMPTS = 5;
 const LOCK_MS = 15 * 60 * 1000;
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
-    const email = String(body.email || "").trim().toLowerCase();
-    const password = String(body.password || "");
-
-    if (!email || !email.includes("@") || !password) {
-      return NextResponse.json({ error: "Email and password are required." }, { status: 400 });
+    const ip = getClientIp(request);
+    const loginBurstOk = await consumeRateLimitBucket({
+      key: `auth:login:${ip}`,
+      windowMs: 60 * 1000,
+      limit: 30,
+    });
+    if (!loginBurstOk) {
+      return NextResponse.json({ error: "Too many login attempts. Wait a minute." }, { status: 429 });
     }
+
+    const raw = await request.json();
+    const parsed = loginBodySchema.safeParse(raw);
+    if (!parsed.success) {
+      const msg = parsed.error.issues[0]?.message ?? "Invalid input.";
+      return NextResponse.json({ error: msg }, { status: 400 });
+    }
+    const email = parsed.data.email.toLowerCase();
+    const password = parsed.data.password;
 
     const user = await prisma.user.findUnique({
       where: { email },

@@ -752,16 +752,6 @@ const normalizeUser = (raw: unknown): User | null => {
   };
 };
 
-const normalizeEmail = (value: string | undefined | null) => (value || "").trim().toLowerCase();
-
-const getOrganizerConferencesStorageKey = (identity: { id?: string | null; email?: string | null }) => {
-  const id = (identity.id || "").trim();
-  const email = normalizeEmail(identity.email);
-  if (id) return `tidingz_organizer_conferences:${id}`;
-  if (email) return `tidingz_organizer_conferences:${email}`;
-  return "tidingz_organizer_conferences:anonymous";
-};
-
 const stampOwnershipIfMissing = (
   conference: OrganizerConference,
   identity: { id?: string | null; email?: string | null }
@@ -785,7 +775,7 @@ interface AuthContextType {
   addRegistration: (reg: Registration) => void;
   addOrganizerConference: (
     payload: Omit<OrganizerConference, "id" | "status" | "applicants" | "announcements">
-  ) => void;
+  ) => Promise<void>;
   removeOrganizerConference: (conferenceId: string) => void;
   updateOrganizerConferenceStatus: (conferenceId: string, status: OrganizerConference["status"]) => void;
   updateOrganizerConferenceConfig: (
@@ -920,7 +910,7 @@ const AuthContext = createContext<AuthContextType>({
   login: () => {},
   logout: () => {},
   addRegistration: () => {},
-  addOrganizerConference: () => {},
+  addOrganizerConference: async () => {},
   removeOrganizerConference: () => {},
   updateOrganizerConferenceStatus: () => {},
   updateOrganizerConferenceConfig: () => {},
@@ -953,240 +943,141 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     queueMicrotask(() => setAuthReady(true));
   }, []);
 
-  const [user, setUser] = useState<User | null>(() => {
-    if (typeof window === "undefined") return null;
-    const storedUser = localStorage.getItem("tidingz_user");
-    if (!storedUser) return null;
-    try {
-      const parsed = JSON.parse(storedUser);
-      const normalized = normalizeUser(parsed);
-      if (!normalized) {
-        localStorage.removeItem("tidingz_user");
-        return null;
-      }
-      localStorage.setItem("tidingz_user", JSON.stringify(normalized));
-      return normalized;
-    } catch {
-      localStorage.removeItem("tidingz_user");
-      return null;
-    }
-  });
-  const [organizerConferences, setOrganizerConferences] = useState<OrganizerConference[]>(() => {
-    if (typeof window === "undefined") return [];
-    let storedUser: User | null = null;
-    try {
-      storedUser = normalizeUser(JSON.parse(localStorage.getItem("tidingz_user") || "null"));
-    } catch {
-      storedUser = null;
-    }
-    const storageKey = getOrganizerConferencesStorageKey({
-      id: storedUser?.id,
-      email: storedUser?.email,
-    });
-    const storedOrganizerConferences =
-      localStorage.getItem(storageKey) || localStorage.getItem("tidingz_organizer_conferences");
-    if (!storedOrganizerConferences) return [];
-    try {
-      const parsed = JSON.parse(storedOrganizerConferences);
-      if (!Array.isArray(parsed)) return [];
-      const normalized = parsed
-        .map((entry) => normalizeOrganizerConference(entry))
-        .filter((entry): entry is OrganizerConference => !!entry);
-      const withOwner = normalized.map((conference) =>
-        stampOwnershipIfMissing(conference, { id: storedUser?.id, email: storedUser?.email })
-      );
-      localStorage.setItem(storageKey, JSON.stringify(withOwner));
-      return withOwner.map(recomputeCommitteeAllotments);
-    } catch {
-      localStorage.removeItem(storageKey);
-      return [];
-    }
-  });
-  const [notifications, setNotifications] = useState<UserNotification[]>(() => {
-    if (typeof window === "undefined") return [];
-    const stored = localStorage.getItem("tidingz_notifications");
-    if (!stored) return [];
-    try {
-      const parsed = JSON.parse(stored);
-      return Array.isArray(parsed) ? (parsed as UserNotification[]) : [];
-    } catch {
-      return [];
-    }
-  });
-  const scheduleOrganizerConferenceState = (next: OrganizerConference[]) => {
-    window.setTimeout(() => setOrganizerConferences(next), 0);
-  };
+  const [user, setUser] = useState<User | null>(null);
 
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (!isOrganizerUser(user)) {
-      scheduleOrganizerConferenceState([]);
-      return;
-    }
-    const storageKey = getOrganizerConferencesStorageKey({
-      id: user?.id,
-      email: user?.email,
-    });
-    let storedOrganizerConferences = localStorage.getItem(storageKey);
-    if (!storedOrganizerConferences) {
-      const legacy = localStorage.getItem("tidingz_organizer_conferences");
-      if (legacy) {
-        storedOrganizerConferences = legacy;
-      }
-    }
-    if (!storedOrganizerConferences) {
-      scheduleOrganizerConferenceState([]);
-      return;
-    }
-    try {
-      const parsed = JSON.parse(storedOrganizerConferences);
-      if (!Array.isArray(parsed)) {
-        scheduleOrganizerConferenceState([]);
-        return;
-      }
-      const normalized = parsed
-        .map((entry) => normalizeOrganizerConference(entry))
-        .filter((entry): entry is OrganizerConference => !!entry)
-        .map((conference) =>
-          stampOwnershipIfMissing(conference, { id: user?.id, email: user?.email })
-        )
-        .map(recomputeCommitteeAllotments)
-        .filter((conference) =>
-          hasOrganizerConferenceAccess({ id: user?.id, email: user?.email }, conference)
-        );
-      localStorage.setItem(storageKey, JSON.stringify(normalized));
-      scheduleOrganizerConferenceState(normalized);
-    } catch {
-      scheduleOrganizerConferenceState([]);
-    }
-  }, [user, user?.id, user?.email, user?.role]);
+  const [organizerConferences, setOrganizerConferences] = useState<OrganizerConference[]>([]);
 
-  const login: AuthContextType["login"] = (email, name, role = "delegate") => {
-    const normalizedEmail = email.trim().toLowerCase();
-    const normalizedName =
-      name || email.split("@")[0].replace(/\./g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-    const loggedInUser = normalizeUser({
-      id: normalizedEmail,
-      email: normalizedEmail,
-      name: normalizedName,
-      role,
-      avatar: normalizedName[0]?.toUpperCase() || "U",
-      school: "",
-      country: "",
-      profileVisibility: "public",
-      munParticipations: [],
-      munAwards: [],
-      registeredConferences: [],
-      notifications: [],
-    });
-    if (!loggedInUser) return;
-    setUser(loggedInUser);
-    localStorage.setItem("tidingz_user", JSON.stringify(loggedInUser));
-    const storageKey = getOrganizerConferencesStorageKey({
-      id: loggedInUser.id,
-      email: loggedInUser.email,
-    });
-    let storedOrganizerConferences = localStorage.getItem(storageKey);
-    if (!storedOrganizerConferences) {
-      const legacy = localStorage.getItem("tidingz_organizer_conferences");
-      if (legacy) storedOrganizerConferences = legacy;
-    }
-    if (!storedOrganizerConferences) {
-      setOrganizerConferences([]);
-      return;
-    }
-    try {
-      const parsed = JSON.parse(storedOrganizerConferences);
-      if (!Array.isArray(parsed)) {
+  const [notifications, setNotifications] = useState<UserNotification[]>([]);
+
+  const refetchMyEvents = React.useCallback(
+    async (identity?: { id?: string | null; email?: string | null }) => {
+      const evRes = await fetch("/api/organizers/my-events", { credentials: "include" });
+      if (!evRes.ok) {
         setOrganizerConferences([]);
         return;
       }
-      const normalized = parsed
+      const evJson = (await evRes.json().catch(() => ({}))) as { conferences?: unknown[] };
+      const list = Array.isArray(evJson.conferences) ? evJson.conferences : [];
+      const id = identity?.id ?? user?.id;
+      const email = identity?.email ?? user?.email;
+      const normalized = list
         .map((entry) => normalizeOrganizerConference(entry))
         .filter((entry): entry is OrganizerConference => !!entry)
-        .map((conference) =>
-          stampOwnershipIfMissing(conference, { id: loggedInUser.id, email: loggedInUser.email })
-        )
-        .map(recomputeCommitteeAllotments);
-      localStorage.setItem(storageKey, JSON.stringify(normalized));
+        .map((conference) => stampOwnershipIfMissing(conference, { id, email }))
+        .map(recomputeCommitteeAllotments)
+        .filter((conference) =>
+          hasOrganizerConferenceAccess({ id, email }, conference)
+        );
       setOrganizerConferences(normalized);
-    } catch {
-      setOrganizerConferences([]);
+    },
+    [user?.id, user?.email]
+  );
+
+  const refreshUserAndNotifications = React.useCallback(async (): Promise<User | null> => {
+    const meRes = await fetch("/api/user/me", { credentials: "include" });
+    if (!meRes.ok) return null;
+    const meJson = (await meRes.json().catch(() => ({}))) as { user?: unknown };
+    const u = normalizeUser(meJson.user);
+    if (u) setUser(u);
+
+    const nRes = await fetch("/api/notifications/me", { credentials: "include" });
+    if (nRes.ok) {
+      const nJson = (await nRes.json().catch(() => ({}))) as { notifications?: UserNotification[] };
+      setNotifications(Array.isArray(nJson.notifications) ? nJson.notifications : []);
     }
-  };
+    return u;
+  }, []);
 
-  const logout = () => {
-    setUser(null);
-    setOrganizerConferences([]);
-    localStorage.removeItem("tidingz_user");
-  };
+  const refreshAuthState = React.useCallback(async () => {
+    try {
+      const sessionRes = await fetch("/api/auth/session", { credentials: "include" });
+      if (!sessionRes.ok) {
+        setUser(null);
+        setOrganizerConferences([]);
+        setNotifications([]);
+        return;
+      }
 
-  const addRegistration = (reg: Registration) => {
-    if (!user) return;
-    const updated = {
-      ...user,
-      registeredConferences: [...user.registeredConferences, reg],
-    };
-    setUser(updated);
-    localStorage.setItem("tidingz_user", JSON.stringify(updated));
+      await sessionRes.json().catch(() => ({}));
 
-    const current = organizerConferences;
-    const next = current.map((conference) => {
-      if (conference.id !== reg.conferenceId) return conference;
-      const committeePreferences = reg.committeePreferences && reg.committeePreferences.length > 0
-        ? reg.committeePreferences
-        : reg.committeeName
-          ? [reg.committeeName]
-          : [];
-      const applicant: OrganizerApplicant = {
-        id: `org-ap-${Date.now()}`,
-        name: String(reg.formAnswers.fullName ?? updated.name),
-        school: String(reg.formAnswers.school ?? updated.school),
-        countryPreference: String(reg.country ?? ""),
-        committeePreference: committeePreferences[0] ?? "",
-        committeePreferences,
-        portfolioPreferencesByCommittee: reg.portfolioPreferencesByCommittee ?? {},
-        categoryId: reg.categoryId,
-        categoryName: reg.categoryName,
-        assignmentStatus: "Pending",
-        status: "Pending",
-        paid: reg.paid,
-        amount: reg.amount,
-        responses: reg.formAnswers,
-        phone:
-          typeof reg.formAnswers.phone === "string" ? reg.formAnswers.phone : undefined,
-        registrationId: reg.id,
-        registeredAt: reg.registeredAt,
-        userId: updated.id,
-        userEmail: updated.email,
-      };
-      return {
-        ...conference,
-        applicants: [applicant, ...conference.applicants],
-      };
+      const u = await refreshUserAndNotifications();
+
+      if (u && isOrganizerUser(u)) {
+        await refetchMyEvents({ id: u.id, email: u.email });
+      } else {
+        setOrganizerConferences([]);
+      }
+    } catch {
+      setUser(null);
+      setOrganizerConferences([]);
+      setNotifications([]);
+    }
+  }, [refreshUserAndNotifications, refetchMyEvents]);
+
+  useEffect(() => {
+    if (!authReady || typeof window === "undefined") return;
+    queueMicrotask(() => {
+      void refreshAuthState();
     });
-    persistOrganizerConferences(next);
-  };
+  }, [authReady, refreshAuthState]);
 
-  const persistOrganizerConferences = (next: OrganizerConference[]) => {
+  useEffect(() => {
+    if (!user || !isOrganizerUser(user)) {
+      queueMicrotask(() => setOrganizerConferences([]));
+    }
+  }, [user]);
+
+  const syncConferenceToServer = React.useCallback(
+    async (conference: OrganizerConference) => {
+      try {
+        await fetch(`/api/organizers/conferences/${conference.id}/sync`, {
+          method: "PUT",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ conference }),
+        });
+        await refetchMyEvents();
+      } catch {
+        // ignore network errors; dashboard may retry
+      }
+    },
+    [refetchMyEvents]
+  );
+
+  const persistOrganizerConferences = (
+    next: OrganizerConference[],
+    syncConferenceId?: string | null
+  ) => {
     const normalized = next.map(recomputeCommitteeAllotments);
-    const storageKey = getOrganizerConferencesStorageKey({
-      id: user?.id,
-      email: user?.email,
-    });
-    localStorage.setItem(storageKey, JSON.stringify(normalized));
     if (!isOrganizerUser(user)) {
       setOrganizerConferences([]);
       return;
     }
-    setOrganizerConferences(
-      normalized.filter((conference) =>
-        hasOrganizerConferenceAccess(
-          { id: user?.id, email: user?.email },
-          conference
-        )
-      )
+    const filtered = normalized.filter((conference) =>
+      hasOrganizerConferenceAccess({ id: user?.id, email: user?.email }, conference)
     );
+    setOrganizerConferences(filtered);
+    if (!syncConferenceId) return;
+    const target = filtered.find((conference) => conference.id === syncConferenceId);
+    if (target) void syncConferenceToServer(target);
+  };
+
+  const login: AuthContextType["login"] = () => {
+    void refreshAuthState();
+  };
+
+  const logout = () => {
+    void fetch("/api/auth/session", { method: "DELETE", credentials: "include" });
+    setUser(null);
+    setOrganizerConferences([]);
+    setNotifications([]);
+  };
+
+  const addRegistration = (_reg: Registration) => {
+    void refreshUserAndNotifications();
+    if (isOrganizerUser(user)) {
+      void refetchMyEvents();
+    }
   };
 
   const triggerStatusEmail = ({
@@ -1239,59 +1130,69 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const persistNotifications = (next: UserNotification[]) => {
     setNotifications(next);
-    localStorage.setItem("tidingz_notifications", JSON.stringify(next));
   };
 
   const addNotification = (notification: UserNotification) => {
-    persistNotifications([notification, ...notifications]);
+    if (!notification.registrationId) {
+      persistNotifications([notification, ...notifications]);
+      return;
+    }
+    void fetch("/api/organizers/notifications", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        registrationId: notification.registrationId,
+        title: notification.title,
+        message: notification.message,
+        type: notification.type,
+      }),
+    }).then(() => {
+      void refreshUserAndNotifications();
+    });
   };
 
   const updateUserRegistrationAssignment = (
-    registrationId: string | undefined,
-    patch: Partial<Registration>
+    _registrationId: string | undefined,
+    _patch: Partial<Registration>
   ) => {
-    if (!registrationId) return;
-    const storedUser = localStorage.getItem("tidingz_user");
-    if (!storedUser) return;
-    try {
-      const parsed = JSON.parse(storedUser) as User;
-      const updatedUser = {
-        ...parsed,
-        registeredConferences: (parsed.registeredConferences || []).map((registration) =>
-          registration.id === registrationId ? { ...registration, ...patch } : registration
-        ),
-      };
-      localStorage.setItem("tidingz_user", JSON.stringify(updatedUser));
-      if (user && user.email === updatedUser.email) {
-        setUser(updatedUser);
-      }
-    } catch {
-      // no-op on malformed storage
-    }
+    void refreshUserAndNotifications();
   };
 
-  const addOrganizerConference: AuthContextType["addOrganizerConference"] = (payload) => {
-    const current = organizerConferences;
-    const next: OrganizerConference[] = [
-      {
-        ...payload,
-        id: `org-${Date.now()}`,
-        ownerUserId: user?.id,
-        ownerEmail: user?.email,
-        status: "Draft",
-        applicants: [],
-        announcements: [],
-        statusEmailTemplates: normalizeStatusEmailTemplates(payload.statusEmailTemplates, payload.title),
-      },
-      ...current,
-    ];
-    persistOrganizerConferences(next);
+  const addOrganizerConference: AuthContextType["addOrganizerConference"] = async (payload) => {
+    const res = await fetch("/api/organizers/events", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title: payload.title,
+        city: payload.city,
+        country: payload.country,
+        organizerName: payload.organizerName,
+        contactDetail: payload.contactDetail,
+        venue: payload.venue,
+        level: payload.level,
+        capacity: payload.capacity,
+        startDate: payload.startDate,
+        endDate: payload.endDate,
+        registrationDeadline: payload.registrationDeadline,
+        description: payload.description,
+        socialLinks: payload.socialLinks,
+        registrationCategories: payload.registrationCategories,
+      }),
+    });
+    if (!res.ok) return;
+    await refetchMyEvents({ id: user?.id, email: user?.email });
   };
 
   const removeOrganizerConference: AuthContextType["removeOrganizerConference"] = (conferenceId) => {
-    const current = organizerConferences;
-    const next = current.filter((conference) => conference.id !== conferenceId);
-    persistOrganizerConferences(next);
+    void (async () => {
+      await fetch(`/api/organizers/conferences/${conferenceId}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      await refetchMyEvents({ id: user?.id, email: user?.email });
+    })();
   };
 
   const updateOrganizerConferenceStatus: AuthContextType["updateOrganizerConferenceStatus"] = (conferenceId, status) => {
@@ -1299,7 +1200,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const next = current.map((conference) =>
       conference.id === conferenceId ? { ...conference, status } : conference
     );
-    persistOrganizerConferences(next);
+    persistOrganizerConferences(next, conferenceId);
   };
 
   const updateOrganizerConferenceConfig: AuthContextType["updateOrganizerConferenceConfig"] = (
@@ -1319,7 +1220,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
         : conference
     );
-    persistOrganizerConferences(next);
+    persistOrganizerConferences(next, conferenceId);
   };
 
   const updateOrganizerCommitteeConfig: AuthContextType["updateOrganizerCommitteeConfig"] = (
@@ -1337,7 +1238,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         ),
       };
     });
-    persistOrganizerConferences(next);
+    persistOrganizerConferences(next, conferenceId);
   };
 
   const addOrganizerCommittee: AuthContextType["addOrganizerCommittee"] = (conferenceId, committee) => {
@@ -1360,7 +1261,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         committees: [...conference.committees, nextCommittee],
       };
     });
-    persistOrganizerConferences(next);
+    persistOrganizerConferences(next, conferenceId);
   };
 
   const removeOrganizerCommittee: AuthContextType["removeOrganizerCommittee"] = (conferenceId, committeeId) => {
@@ -1372,7 +1273,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         committees: conference.committees.filter((committee) => committee.id !== committeeId),
       };
     });
-    persistOrganizerConferences(next);
+    persistOrganizerConferences(next, conferenceId);
   };
 
   const updateRegistrationCategoryConfig: AuthContextType["updateRegistrationCategoryConfig"] = (
@@ -1390,7 +1291,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         ),
       };
     });
-    persistOrganizerConferences(next);
+    persistOrganizerConferences(next, conferenceId);
   };
 
   const addConferenceReview: AuthContextType["addConferenceReview"] = (conferenceId, payload) => {
@@ -1410,7 +1311,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         reviews: [review, ...(conference.reviews || [])],
       };
     });
-    persistOrganizerConferences(next);
+    persistOrganizerConferences(next, conferenceId);
   };
 
   const moderateConferenceReview: AuthContextType["moderateConferenceReview"] = (
@@ -1428,7 +1329,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         ),
       };
     });
-    persistOrganizerConferences(next);
+    persistOrganizerConferences(next, conferenceId);
   };
 
   const removeConferenceReview: AuthContextType["removeConferenceReview"] = (conferenceId, reviewId, userId) => {
@@ -1440,7 +1341,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         reviews: (conference.reviews || []).filter((review) => !(review.id === reviewId && review.userId === userId)),
       };
     });
-    persistOrganizerConferences(next);
+    persistOrganizerConferences(next, conferenceId);
   };
 
   const addConferenceAward: AuthContextType["addConferenceAward"] = (conferenceId, award) => {
@@ -1466,41 +1367,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         (targetUserId && candidate.id === targetUserId) ||
         (targetUserEmail && candidate.email?.toLowerCase() === targetUserEmail);
 
-      const appendAward = (existingRaw: unknown) => {
-        const existing = normalizeUser(existingRaw);
-        if (!existing || !matchesTarget(existing)) return null;
-        const nextAward = createDelegateAwardEntry(conferenceTitle);
-        const nextAwards = [...(existing.munAwards || []), nextAward];
-        const nextSummary =
-          `${existing.munAwardsSummary || ""}${existing.munAwardsSummary ? "\n" : ""}` +
-          `${nextAward.title} - ${conferenceTitle}`;
-        return normalizeUser({
-          ...existing,
+      if (!user || !matchesTarget(user)) return;
+
+      const nextAward = createDelegateAwardEntry(conferenceTitle);
+      const nextAwards = [...(user.munAwards || []), nextAward];
+      const nextSummary =
+        `${user.munAwardsSummary || ""}${user.munAwardsSummary ? "\n" : ""}` +
+        `${nextAward.title} - ${conferenceTitle}`;
+
+      void fetch("/api/user/me", {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
           munAwards: nextAwards,
           munAwardsSummary: nextSummary,
-        });
-      };
-
-      if (user) {
-        const nextCurrent = appendAward(user);
-        if (nextCurrent) {
-          setUser(nextCurrent);
-          localStorage.setItem("tidingz_user", JSON.stringify(nextCurrent));
-          return;
-        }
-      }
-
-      const stored = localStorage.getItem("tidingz_user");
-      if (!stored) return;
-      try {
-        const parsed = JSON.parse(stored);
-        const nextStored = appendAward(parsed);
-        if (nextStored) {
-          localStorage.setItem("tidingz_user", JSON.stringify(nextStored));
-        }
-      } catch {
-        // ignore malformed storage
-      }
+        }),
+      }).then(() => {
+        void refreshUserAndNotifications();
+      });
     };
 
     const current = organizerConferences;
@@ -1519,7 +1404,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         ],
       };
     });
-    persistOrganizerConferences(next);
+    persistOrganizerConferences(next, conferenceId);
   };
 
   const removeConferenceAward: AuthContextType["removeConferenceAward"] = (conferenceId, awardId) => {
@@ -1531,11 +1416,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         awards: (conference.awards || []).filter((award) => award.id !== awardId),
       };
     });
-    persistOrganizerConferences(next);
+    persistOrganizerConferences(next, conferenceId);
   };
 
   const updateApplicantStatus: AuthContextType["updateApplicantStatus"] = (conferenceId, applicantId, status) => {
     const current = organizerConferences;
+    const priorApplicant = current
+      .find((c) => c.id === conferenceId)
+      ?.applicants.find((a) => a.id === applicantId);
     const next = current.map((conference) => {
       if (conference.id !== conferenceId) return conference;
       return {
@@ -1548,6 +1436,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     persistOrganizerConferences(next);
     const targetConference = next.find((conference) => conference.id === conferenceId);
     const targetApplicant = targetConference?.applicants.find((applicant) => applicant.id === applicantId);
+    void (async () => {
+      const registrationId = priorApplicant?.registrationId || targetApplicant?.registrationId;
+      if (registrationId) {
+        await fetch(`/api/organizers/registrations/${registrationId}`, {
+          method: "PATCH",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ organizerStatus: status }),
+        });
+      }
+      await refetchMyEvents({ id: user?.id, email: user?.email });
+    })();
     if (targetConference && targetApplicant) {
       triggerStatusEmail({ conference: targetConference, applicant: targetApplicant, status });
     }
@@ -1555,16 +1455,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const toggleApplicantPayment: AuthContextType["toggleApplicantPayment"] = (conferenceId, applicantId) => {
     const current = organizerConferences;
+    const priorApplicant = current
+      .find((c) => c.id === conferenceId)
+      ?.applicants.find((a) => a.id === applicantId);
+    const nextPaid = !(priorApplicant?.paid ?? false);
     const next = current.map((conference) => {
       if (conference.id !== conferenceId) return conference;
       return {
         ...conference,
         applicants: conference.applicants.map((applicant) =>
-          applicant.id === applicantId ? { ...applicant, paid: !applicant.paid } : applicant
+          applicant.id === applicantId ? { ...applicant, paid: nextPaid } : applicant
         ),
       };
     });
     persistOrganizerConferences(next);
+    void (async () => {
+      const registrationId = priorApplicant?.registrationId;
+      if (registrationId) {
+        await fetch(`/api/organizers/registrations/${registrationId}`, {
+          method: "PATCH",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ paid: nextPaid }),
+        });
+      }
+      await refetchMyEvents({ id: user?.id, email: user?.email });
+    })();
   };
 
   const addAnnouncement: AuthContextType["addAnnouncement"] = (conferenceId, title, message) => {
@@ -1583,7 +1499,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         announcements: [announcement, ...conference.announcements],
       };
     });
-    persistOrganizerConferences(next);
+    persistOrganizerConferences(next, conferenceId);
   };
 
   const assignApplicant: AuthContextType["assignApplicant"] = ({
@@ -1675,41 +1591,59 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       };
     });
 
-    persistOrganizerConferences(next);
-    updateUserRegistrationAssignment(applicant.registrationId, {
-      status: "Confirmed",
-      organizerStatus: "Allotted",
-      assignedCommitteeId: committee.id,
-      assignedCommitteeName: committee.name,
-      assignedPortfolioId: portfolioId,
-      assignedPortfolioName: portfolioName,
-      assignedAt: new Date().toISOString(),
-      overrideUsed: allowOverride,
-    });
+    persistOrganizerConferences(next, conferenceId);
 
-    addNotification({
-      id: `ntf-${Date.now()}`,
-      conferenceId,
-      userId: applicant.userId,
-      userEmail: applicant.userEmail,
-      title: "Committee Allocation Confirmed",
-      message: `You have been allotted to ${committee.name}${portfolioName ? ` (${portfolioName})` : ""}.`,
-      type: "assignment",
-      createdAt: new Date().toISOString(),
-      read: false,
-    });
+    void (async () => {
+      if (applicant.registrationId) {
+        await fetch(`/api/organizers/registrations/${applicant.registrationId}`, {
+          method: "PATCH",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            organizerStatus: "Allotted",
+            committeeName: committee.name,
+            portfolioName: portfolioName ?? null,
+            allottedAt: new Date().toISOString(),
+          }),
+        });
+      }
 
-    const updatedConference = next.find((entry) => entry.id === conferenceId);
-    const updatedApplicant = updatedConference?.applicants.find((entry) => entry.id === applicantId);
-    if (updatedConference && updatedApplicant) {
-      triggerStatusEmail({
-        conference: updatedConference,
-        applicant: updatedApplicant,
-        status: "Allotted",
+      updateUserRegistrationAssignment(applicant.registrationId, {
+        status: "Confirmed",
+        organizerStatus: "Allotted",
+        assignedCommitteeId: committee.id,
         assignedCommitteeName: committee.name,
+        assignedPortfolioId: portfolioId,
         assignedPortfolioName: portfolioName,
+        assignedAt: new Date().toISOString(),
+        overrideUsed: allowOverride,
       });
-    }
+
+      addNotification({
+        id: `ntf-${Date.now()}`,
+        conferenceId,
+        registrationId: applicant.registrationId,
+        userId: applicant.userId,
+        userEmail: applicant.userEmail,
+        title: "Committee Allocation Confirmed",
+        message: `You have been allotted to ${committee.name}${portfolioName ? ` (${portfolioName})` : ""}.`,
+        type: "assignment",
+        createdAt: new Date().toISOString(),
+        read: false,
+      });
+
+      const updatedConference = next.find((entry) => entry.id === conferenceId);
+      const updatedApplicant = updatedConference?.applicants.find((entry) => entry.id === applicantId);
+      if (updatedConference && updatedApplicant) {
+        triggerStatusEmail({
+          conference: updatedConference,
+          applicant: updatedApplicant,
+          status: "Allotted",
+          assignedCommitteeName: committee.name,
+          assignedPortfolioName: portfolioName,
+        });
+      }
+    })();
 
     return { ok: true, message: "Applicant allotted successfully." };
   };
@@ -1756,7 +1690,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }),
       };
     });
-    persistOrganizerConferences(next);
+    persistOrganizerConferences(next, conferenceId);
+    void (async () => {
+      if (applicant.registrationId) {
+        await fetch(`/api/organizers/registrations/${applicant.registrationId}`, {
+          method: "PATCH",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            organizerStatus: "Pending",
+            committeeName: null,
+            portfolioName: null,
+          }),
+        });
+      }
+    })();
     updateUserRegistrationAssignment(applicant.registrationId, {
       organizerStatus: "Pending",
       assignedCommitteeId: undefined,
@@ -1798,7 +1746,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }),
       };
     });
-    persistOrganizerConferences(next);
+    persistOrganizerConferences(next, conferenceId);
+    void (async () => {
+      if (applicant.registrationId) {
+        await fetch(`/api/organizers/registrations/${applicant.registrationId}`, {
+          method: "PATCH",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ organizerStatus: "Waitlisted" }),
+        });
+      }
+    })();
     updateUserRegistrationAssignment(applicant.registrationId, {
       status: "Waitlisted",
       organizerStatus: "Waitlisted",
@@ -1806,6 +1764,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     addNotification({
       id: `ntf-${Date.now()}`,
       conferenceId,
+      registrationId: applicant.registrationId,
       userId: applicant.userId,
       userEmail: applicant.userEmail,
       title: "Application Waitlisted",
@@ -1848,7 +1807,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         ),
       };
     });
-    persistOrganizerConferences(next);
+    persistOrganizerConferences(next, conferenceId);
+    void (async () => {
+      if (applicant.registrationId) {
+        await fetch(`/api/organizers/registrations/${applicant.registrationId}`, {
+          method: "PATCH",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ organizerStatus: "Invited" }),
+        });
+      }
+    })();
     updateUserRegistrationAssignment(applicant.registrationId, {
       organizerStatus: "Invited",
       status: "Pending",
@@ -1856,6 +1825,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     addNotification({
       id: `ntf-${Date.now()}`,
       conferenceId,
+      registrationId: applicant.registrationId,
       userId: applicant.userId,
       userEmail: applicant.userEmail,
       title: "Application Invited",
@@ -1887,7 +1857,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         ),
       };
     });
-    persistOrganizerConferences(next);
+    persistOrganizerConferences(next, conferenceId);
   };
 
   const markNotificationRead: AuthContextType["markNotificationRead"] = (notificationId) => {
@@ -1895,19 +1865,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       notification.id === notificationId ? { ...notification, read: true } : notification
     );
     persistNotifications(next);
+    void fetch("/api/notifications/me", {
+      method: "PATCH",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: notificationId, read: true }),
+    });
   };
 
   const updateDelegateProfile: AuthContextType["updateDelegateProfile"] = (patch) => {
     if (!user) return;
-    const normalized = normalizeUser({
-      ...user,
-      ...patch,
-      munParticipations: patch.munParticipations ?? user.munParticipations ?? [],
-      munAwards: patch.munAwards ?? user.munAwards ?? [],
-    });
-    if (!normalized) return;
-    setUser(normalized);
-    localStorage.setItem("tidingz_user", JSON.stringify(normalized));
+    void (async () => {
+      const res = await fetch("/api/user/me", {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(patch),
+      });
+      if (!res.ok) return;
+      const j = (await res.json().catch(() => ({}))) as { user?: unknown };
+      const normalized = normalizeUser(j.user);
+      if (normalized) setUser(normalized);
+    })();
   };
 
   return (
