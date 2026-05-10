@@ -1,5 +1,5 @@
 import Link from "next/link";
-import BrandLogo from "@/components/BrandLogo";
+import FooterBrandLogo from "@/components/FooterBrandLogo";
 
 const NAV_LINKS = [
   { label: "Home", href: "/" },
@@ -25,7 +25,7 @@ export default function Footer() {
         <div className="grid gap-10 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)_minmax(0,1fr)]">
           <div className="space-y-5">
             <Link href="/" className="inline-flex flex-col items-start gap-2">
-              <BrandLogo variant="vertical" className="h-auto w-44 max-w-full object-contain object-left" />
+              <FooterBrandLogo />
             </Link>
             <p className="text-sm leading-relaxed max-w-md footer-copy">
               A modern Model UN platform helping delegates and organizers discover, prepare, and perform at the highest level.
