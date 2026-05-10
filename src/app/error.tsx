@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import Image from "next/image";
 import Link from "next/link";
 
 export default function RootError({
@@ -16,6 +17,13 @@ export default function RootError({
 
   return (
     <div className="min-h-[70vh] flex flex-col items-center justify-center px-6 text-center">
+      <Image
+        src="/tidingz-logo.jpg"
+        alt="Tidingz"
+        width={72}
+        height={72}
+        className="rounded-2xl object-contain mb-6"
+      />
       <p className="text-xs font-semibold tracking-[0.2em] uppercase mb-3" style={{ color: "var(--fg-muted)" }}>
         Something went wrong
       </p>

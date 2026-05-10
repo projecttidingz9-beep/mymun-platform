@@ -33,7 +33,7 @@ export const metadata: Metadata = {
     locale: "en_US",
     images: [
       {
-        url: "/tidingz-logo.png",
+        url: "/tidingz-logo.jpg",
         width: 512,
         height: 512,
         alt: "Tidingz",
@@ -44,7 +44,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Tidingz — The Future of Model United Nations",
     description: "The world's premier platform for MUN delegates and conference organizers.",
-    images: ["/tidingz-logo.png"],
+    images: ["/tidingz-logo.jpg"],
   },
 };
 

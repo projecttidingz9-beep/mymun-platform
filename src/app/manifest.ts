@@ -12,9 +12,16 @@ export default function manifest(): MetadataRoute.Manifest {
     theme_color: "#1a1a2e",
     icons: [
       {
-        src: "/icon",
-        sizes: "32x32",
-        type: "image/png",
+        src: "/icon.jpg",
+        sizes: "512x512",
+        type: "image/jpeg",
+        purpose: "any",
+      },
+      {
+        src: "/tidingz-logo.jpg",
+        sizes: "512x512",
+        type: "image/jpeg",
+        purpose: "maskable",
       },
     ],
   };

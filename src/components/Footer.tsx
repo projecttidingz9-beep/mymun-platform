@@ -27,7 +27,7 @@ export default function Footer() {
             <Link href="/" className="inline-flex items-center gap-3">
               <div className="w-11 h-11 rounded-2xl overflow-hidden border footer-logo-wrap">
                 <Image
-                  src="/tidingz-logo.png"
+                  src="/tidingz-logo.jpg"
                   alt="Tidingz logo"
                   width={44}
                   height={44}

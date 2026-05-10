@@ -156,7 +156,7 @@ export default function Navbar({ openAuthModal }: NavbarProps) {
           <Link href="/" className="flex items-center gap-3 group min-w-0">
             <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl overflow-hidden shadow-lg transition-transform group-hover:scale-105 flex-shrink-0 border border-[var(--border)]">
               <Image
-                src="/tidingz-logo.png"
+                src="/tidingz-logo.jpg"
                 alt="Tidingz logo"
                 width={48}
                 height={48}

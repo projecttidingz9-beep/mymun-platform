@@ -50,13 +50,13 @@ export async function generateMetadata({
         url,
         siteName: "Tidingz",
         type: "website",
-        images: event.coverImageUrl ? [{ url: event.coverImageUrl }] : undefined,
+        images: event.coverImageUrl ? [{ url: event.coverImageUrl }] : [{ url: `${site}/tidingz-logo.jpg`, alt: "Tidingz" }],
       },
       twitter: {
         card: "summary_large_image",
         title,
         description: desc.slice(0, 200),
-        images: event.coverImageUrl ? [event.coverImageUrl] : undefined,
+        images: event.coverImageUrl ? [event.coverImageUrl] : [`${site}/tidingz-logo.jpg`],
       },
     };
   } catch {

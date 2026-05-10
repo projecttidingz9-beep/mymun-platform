@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
+import { useState } from "react";
 
 /**
  * Shown when a user completes Supabase OAuth but has no Tidingz row yet and did not pre-select a role (e.g. Sign In tab).
@@ -37,7 +38,17 @@ export default function CompleteOAuthRolePage() {
   return (
     <div className="min-h-screen flex items-center justify-center px-6 py-16" style={{ background: "var(--bg)", color: "var(--fg)" }}>
       <div className="w-full max-w-md space-y-6 rounded-3xl border p-8" style={{ borderColor: "var(--border)", background: "var(--bg-subtle)" }}>
-        <h1 className="text-xl font-bold">Choose account type</h1>
+        <div className="flex justify-center">
+          <Image
+            src="/tidingz-logo.jpg"
+            alt="Tidingz"
+            width={72}
+            height={72}
+            className="rounded-2xl object-contain"
+            priority
+          />
+        </div>
+        <h1 className="text-xl font-bold text-center">Choose account type</h1>
         <p className="text-sm" style={{ color: "var(--fg-muted)" }}>
           You signed in with Google for the first time. Pick how you&apos;ll use Tidingz.
         </p>
