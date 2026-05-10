@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import AuthModal from "./AuthModal";
 import BrandLogo from "./BrandLogo";
+import { shouldForceDarkBrandLogo } from "@/lib/brand-logo-theme";
 
 function MenuIcon({ children }: { children: React.ReactNode }) {
   return (
@@ -156,7 +157,7 @@ export default function Navbar({ openAuthModal }: NavbarProps) {
           <Link href="/" className="flex items-center group min-w-0 shrink-0">
             <BrandLogo
               variant="horizontal"
-              themeOverride={pathname === "/" ? "dark" : undefined}
+              themeOverride={shouldForceDarkBrandLogo(pathname) ? "dark" : undefined}
               className="h-9 w-auto sm:h-10 max-w-[min(100%,240px)] object-contain object-left transition-transform group-hover:scale-[1.02]"
               priority
             />
