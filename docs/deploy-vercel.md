@@ -59,8 +59,7 @@ Use `DIRECT_URL` in CI/local per [`prisma.config.ts`](../prisma.config.ts).
 
 ## 5. Runtime notes
 
-- **`middleware.ts`** adds HSTS (production) and COOP.
-- **`next.config.ts`** enables Next/Image optimization (suited to Vercel). Remote image hosts must stay in `remotePatterns`.
+- **`next.config.ts`** sets response headers (including HSTS in production, COOP, and security headers) and Next/Image `remotePatterns`.
 - Prisma uses a **singleton** `pg` pool in [`src/lib/server/prisma.ts`](../src/lib/server/prisma.ts) to limit connections per serverless instance.
 
 ## 6. Post-deploy smoke test
