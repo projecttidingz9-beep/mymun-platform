@@ -30,7 +30,7 @@ export default function CookieConsent() {
 
   return (
     <div
-      className="fixed bottom-0 inset-x-0 z-[100] p-4 flex flex-col sm:flex-row gap-3 items-center justify-between border-t"
+      className="fixed bottom-0 inset-x-0 z-[100] px-4 pt-4 pb-[max(1rem,env(safe-area-inset-bottom,0px))] flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between border-t"
       style={{
         background: "var(--bg)",
         borderColor: "var(--border)",
@@ -39,14 +39,18 @@ export default function CookieConsent() {
       role="dialog"
       aria-label="Cookie consent"
     >
-      <p className="text-xs max-w-3xl" style={{ color: "var(--fg-muted)" }}>
+      <p className="text-xs sm:text-sm max-w-3xl leading-relaxed" style={{ color: "var(--fg-muted)" }}>
         We use essential cookies for sign-in and optional analytics when enabled. By continuing you agree to our{" "}
         <a href="/legal/cookies" className="underline">
           Cookie Policy
         </a>
         .
       </p>
-      <button type="button" className="btn btn-primary text-xs px-5 py-2 shrink-0" onClick={accept}>
+      <button
+        type="button"
+        className="btn btn-primary text-sm px-6 py-3 min-h-[44px] min-w-[120px] shrink-0 w-full sm:w-auto"
+        onClick={accept}
+      >
         Accept
       </button>
     </div>

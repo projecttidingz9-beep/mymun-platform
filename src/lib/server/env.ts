@@ -16,6 +16,9 @@ function applyBuildTimeEnvPlaceholders() {
   if (!process.env.DIRECT_URL?.trim()) {
     process.env.DIRECT_URL = process.env.DATABASE_URL;
   }
+  if (!process.env.ADMIN_EMAIL?.trim()) {
+    process.env.ADMIN_EMAIL = "admin@example.com";
+  }
 }
 
 applyBuildTimeEnvPlaceholders();
@@ -33,6 +36,8 @@ const envSchema = z.object({
   DIRECT_URL: optionalNonEmpty,
   AUTH_SESSION_SECRET: z.string().min(1),
   PASS_QR_SECRET: z.string().min(1),
+  /** Platform super-admin — must match session email for `/admin` and `/api/admin/*`. */
+  ADMIN_EMAIL: z.string().email(),
   GOOGLE_CLIENT_ID: optionalNonEmpty,
   NEXT_PUBLIC_GOOGLE_CLIENT_ID: optionalNonEmpty,
   RESEND_API_KEY: optionalNonEmpty,
@@ -92,6 +97,7 @@ export const env = {
   directDatabaseUrl: () => getParsedEnv().directDatabaseUrl,
   authSessionSecret: () => getParsedEnv().AUTH_SESSION_SECRET,
   passQrSecret: () => getParsedEnv().PASS_QR_SECRET,
+  adminEmail: () => getParsedEnv().ADMIN_EMAIL.trim().toLowerCase(),
   googleClientId: () => getParsedEnv().GOOGLE_CLIENT_ID,
   nextPublicGoogleClientId: () => getParsedEnv().NEXT_PUBLIC_GOOGLE_CLIENT_ID,
   resendApiKey: () => getParsedEnv().RESEND_API_KEY,

@@ -225,7 +225,7 @@ export default function CheckoutPage() {
     return (
       <>
         <Navbar />
-        <div className="app-shell min-h-[45vh] flex flex-col items-center justify-center px-6">
+        <div className="app-shell min-h-[min(45vh,100dvh)] flex flex-col items-center justify-center px-4 sm:px-6">
           <p className="text-sm" style={{ color: "var(--fg-muted)" }}>
             Redirecting organizers to the conference page…
           </p>

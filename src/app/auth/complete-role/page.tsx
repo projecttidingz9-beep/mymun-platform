@@ -36,7 +36,10 @@ export default function CompleteOAuthRolePage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-6 py-16" style={{ background: "var(--bg)", color: "var(--fg)" }}>
+    <div
+      className="min-h-[100dvh] flex items-center justify-center px-4 sm:px-6 py-16 pb-[max(2rem,env(safe-area-inset-bottom,0px))]"
+      style={{ background: "var(--bg)", color: "var(--fg)" }}
+    >
       <div className="w-full max-w-md space-y-6 rounded-3xl border p-8" style={{ borderColor: "var(--border)", background: "var(--bg-subtle)" }}>
         <div className="flex justify-center">
           <BrandLogo variant="vertical" className="h-auto w-44 max-w-full object-contain" priority />

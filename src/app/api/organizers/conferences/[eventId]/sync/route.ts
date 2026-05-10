@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { OrganizerConference } from "@/lib/types";
-import { getRequestActor, requireEventOrganizerAccess, requireOrganizer } from "@/lib/server/auth";
+import {
+  getRequestActor,
+  isSuperAdmin,
+  requireEventOrganizerAccess,
+  requireOrganizer,
+} from "@/lib/server/auth";
 import { persistOrganizerConferenceSync } from "@/lib/server/persist-organizer-conference-sync";
 import { mapManagedEventToOrganizerConference } from "@/lib/server/map-managed-event-to-organizer-conference";
 
@@ -29,7 +34,9 @@ export async function PUT(
   }
 
   try {
-    await persistOrganizerConferenceSync(eventId, body.conference);
+    await persistOrganizerConferenceSync(eventId, body.conference, {
+      skipReviewGate: isSuperAdmin(actor),
+    });
     const conference = await mapManagedEventToOrganizerConference(eventId);
     return NextResponse.json({ conference });
   } catch (error) {

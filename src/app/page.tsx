@@ -172,7 +172,7 @@ export default function HomePage() {
 
         <main className="flex-1">
         {/* ───── Hero ───── */}
-        <section className="relative lux-section min-h-[100vh] flex items-center overflow-hidden">
+        <section className="relative lux-section min-h-[100dvh] flex items-center overflow-hidden">
           <div className="absolute inset-0 lux-grain pointer-events-none" />
           <div
             aria-hidden
@@ -183,7 +183,7 @@ export default function HomePage() {
             }}
           />
 
-          <div className="relative z-10 max-w-7xl mx-auto px-6 w-full pt-28 pb-20">
+          <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 w-full pt-[calc(7rem+env(safe-area-inset-top,0px))] pb-16 sm:pb-20">
             <motion.div
               initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
@@ -245,13 +245,13 @@ export default function HomePage() {
                 delay: 0.5,
                 ease: [0.2, 0.7, 0.2, 1],
               }}
-              className="mt-12 flex flex-col sm:flex-row gap-4"
+              className="mt-12 flex flex-col sm:flex-row gap-3 sm:gap-4 w-full sm:w-auto"
             >
               {!isLoggedIn ? (
                 <button
                   type="button"
                   onClick={openAuthModal}
-                  className="lux-button-primary text-base"
+                  className="lux-button-primary text-base w-full sm:w-auto inline-flex justify-center items-center min-h-[48px] touch-manipulation"
                   style={{ padding: "16px 34px" }}
                 >
                   Begin your journey
@@ -259,7 +259,7 @@ export default function HomePage() {
               ) : (
                 <Link
                   href={isOrganizerUser ? "/organizers/dashboard" : "/marketplace"}
-                  className="lux-button-primary text-base"
+                  className="lux-button-primary text-base w-full sm:w-auto inline-flex justify-center items-center min-h-[48px] touch-manipulation"
                   style={{ padding: "16px 34px" }}
                 >
                   {isOrganizerUser ? "Go to organizer dashboard" : "Continue to marketplace"}
@@ -267,7 +267,7 @@ export default function HomePage() {
               )}
               <Link
                 href="/marketplace"
-                className="lux-button-ghost text-base"
+                className="lux-button-ghost text-base w-full sm:w-auto inline-flex justify-center items-center min-h-[48px] touch-manipulation"
                 style={{
                   padding: "16px 30px",
                   color: "var(--fg-immersive)",
@@ -295,7 +295,7 @@ export default function HomePage() {
         {/* ───── Philosophy ───── */}
         <section
           id="philosophy"
-          className="relative lux-section py-40 px-6"
+          className="relative lux-section py-24 sm:py-32 lg:py-40 px-4 sm:px-6"
           style={VEIL_SOFT}
         >
           <div className="max-w-5xl mx-auto">
@@ -320,7 +320,7 @@ export default function HomePage() {
         </section>
 
         {/* ───── Pillars ───── */}
-        <section className="relative lux-section py-32 px-6" style={VEIL}>
+        <section className="relative lux-section py-20 sm:py-28 lg:py-32 px-4 sm:px-6" style={VEIL}>
           <div className="max-w-7xl mx-auto">
             <Reveal>
               <p className="lux-eyebrow" style={{ color: "rgba(243,237,224,0.55)" }}>
@@ -349,7 +349,7 @@ export default function HomePage() {
                     ease: [0.2, 0.7, 0.2, 1],
                   }}
                   whileHover={{ y: -4 }}
-                  className="p-10 md:p-12 transition-colors"
+                  className="px-4 py-10 sm:p-10 md:p-12 transition-colors"
                   style={{ background: "rgba(11,13,18,0.94)" }}
                 >
                   <p
@@ -378,7 +378,7 @@ export default function HomePage() {
 
         {/* ───── Marquee ───── */}
         <section
-          className="relative lux-section py-16 overflow-hidden"
+          className="relative lux-section py-12 sm:py-16 px-4 sm:px-6 overflow-hidden"
           style={{
             ...VEIL_SOFT,
             borderTop: "1px solid rgba(243,237,224,0.08)",
@@ -414,7 +414,7 @@ export default function HomePage() {
         </section>
 
         {/* ───── Featured conferences ───── */}
-        <section className="relative lux-section py-40 px-6" style={VEIL}>
+        <section className="relative lux-section py-24 sm:py-32 lg:py-40 px-4 sm:px-6" style={VEIL}>
           <div className="max-w-7xl mx-auto">
             <div className="flex items-end justify-between flex-wrap gap-6 mb-16">
               <div>
@@ -461,7 +461,7 @@ export default function HomePage() {
 
         {/* ───── CTA ───── */}
         <section
-          className="relative lux-section py-40 px-6"
+          className="relative lux-section py-24 sm:py-32 lg:py-40 px-4 sm:px-6"
           style={VEIL_SOFT}
         >
           <div className="max-w-4xl mx-auto text-center">
@@ -522,7 +522,7 @@ export default function HomePage() {
         </section>
 
         {/* ───── Proof ───── */}
-        <section className="relative lux-section py-36 px-6" style={VEIL}>
+        <section className="relative lux-section py-22 sm:py-28 lg:py-36 px-4 sm:px-6" style={VEIL}>
           <div className="max-w-5xl mx-auto">
             <Reveal>
               <p className="lux-eyebrow" style={{ color: "rgba(243,237,224,0.55)" }}>
@@ -594,7 +594,7 @@ export default function HomePage() {
         </section>
 
         {/* ───── Contact ───── */}
-        <section id="contact" className="relative lux-section py-40 px-6" style={VEIL_SOFT}>
+        <section id="contact" className="relative lux-section py-24 sm:py-32 lg:py-40 px-4 sm:px-6" style={VEIL_SOFT}>
           <div className="max-w-4xl mx-auto text-center">
             <Reveal>
               <p className="lux-eyebrow" style={{ color: "rgba(243,237,224,0.55)" }}>
@@ -618,10 +618,10 @@ export default function HomePage() {
               </p>
             </Reveal>
             <Reveal delay={0.22}>
-              <div className="mt-12 flex flex-col sm:flex-row items-center justify-center gap-4">
+              <div className="mt-12 flex flex-col sm:flex-row items-stretch sm:items-center justify-center gap-3 sm:gap-4 w-full max-w-md sm:max-w-none mx-auto">
                 <a
                   href="mailto:hello@tidingz.com"
-                  className="lux-button-ghost text-base"
+                  className="lux-button-ghost text-base inline-flex justify-center items-center min-h-[48px] w-full sm:w-auto touch-manipulation"
                   style={{ padding: "14px 30px" }}
                 >
                   Email us →
@@ -630,7 +630,7 @@ export default function HomePage() {
                   href="https://x.com"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="lux-button-ghost text-base"
+                  className="lux-button-ghost text-base inline-flex justify-center items-center min-h-[48px] w-full sm:w-auto touch-manipulation"
                   style={{ padding: "14px 30px" }}
                 >
                   Follow on 𝕏
@@ -662,13 +662,13 @@ export default function HomePage() {
                   </p>
                 </div>
                 <div className="flex flex-col gap-2 w-full sm:w-auto">
-                  <div className="flex gap-2 w-full sm:w-auto">
+                  <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
                     <input
                       type="email"
                       placeholder="your@email.com"
                       value={newsletterEmail}
                       onChange={(e) => setNewsletterEmail(e.target.value)}
-                      className="flex-1 sm:w-60 text-sm px-4 py-3 rounded-xl outline-none"
+                      className="flex-1 min-w-0 sm:w-60 text-sm px-4 py-3 rounded-xl outline-none"
                       style={{
                         background: "rgba(255,255,255,0.07)",
                         border: "1.5px solid rgba(243,237,224,0.18)",
@@ -677,7 +677,7 @@ export default function HomePage() {
                     />
                     <button
                       type="button"
-                      className="lux-button-primary text-sm"
+                      className="lux-button-primary text-sm w-full sm:w-auto min-h-[48px] sm:min-h-0 touch-manipulation"
                       style={{ padding: "12px 22px", whiteSpace: "nowrap" }}
                       disabled={newsletterBusy}
                       onClick={subscribeNewsletter}
@@ -697,7 +697,7 @@ export default function HomePage() {
         </section>
 
         {/* ───── Testimonials ───── */}
-        <section className="relative lux-section py-36 px-6" style={VEIL}>
+        <section className="relative lux-section py-22 sm:py-28 lg:py-36 px-4 sm:px-6" style={VEIL}>
           <div className="max-w-6xl mx-auto">
             <Reveal>
               <p className="lux-eyebrow" style={{ color: "rgba(243,237,224,0.55)" }}>
@@ -787,7 +787,7 @@ export default function HomePage() {
         </section>
 
         {/* ───── FAQ ───── */}
-        <section className="relative lux-section py-36 px-6" style={VEIL_SOFT}>
+        <section className="relative lux-section py-22 sm:py-28 lg:py-36 px-4 sm:px-6" style={VEIL_SOFT}>
           <div className="max-w-3xl mx-auto">
             <Reveal>
               <p className="lux-eyebrow" style={{ color: "rgba(243,237,224,0.55)" }}>

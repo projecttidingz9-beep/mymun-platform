@@ -20,6 +20,7 @@ Critical:
 | `DIRECT_URL` | Session pooler `:5432` (IPv4-friendly) or direct DB — used by Prisma CLI / migrations locally and in CI. |
 | `AUTH_SESSION_SECRET` | Long random string; rotate invalidates sessions unless you migrate tokens. |
 | `PASS_QR_SECRET` | Separate secret for QR signing. |
+| `ADMIN_EMAIL` | Super-admin email; must match the `User` row you set to `ADMIN` for `/admin` and `/api/admin/*`. |
 | `NEXT_PUBLIC_APP_URL` | **HTTPS** production URL, e.g. `https://your-domain.com`. |
 
 Optional: `RESEND_*`, **`NEXT_PUBLIC_SUPABASE_URL`** + **`NEXT_PUBLIC_SUPABASE_ANON_KEY`** (Supabase Auth — Google OAuth via redirect to `/auth/callback`; configure providers and redirect URLs in the Supabase dashboard), legacy Google GIS (`GOOGLE_CLIENT_ID` / `NEXT_PUBLIC_GOOGLE_CLIENT_ID` only if Supabase Auth is not configured), `SENTRY_DSN` (server/edge) and `NEXT_PUBLIC_SENTRY_DSN`. Set `SENTRY_AUTH_TOKEN` in CI or Vercel when you want **source maps uploaded** during build (`next.config` disables upload when this is unset).

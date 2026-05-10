@@ -2,7 +2,7 @@ import BrandLogo from "@/components/BrandLogo";
 
 export default function RootLoading() {
   return (
-    <div className="min-h-[60vh] flex flex-col items-center justify-center gap-4 px-6">
+    <div className="min-h-[min(60vh,100dvh)] flex flex-col items-center justify-center gap-4 px-4 sm:px-6">
       <BrandLogo
         variant="vertical"
         className="h-auto w-48 max-w-full object-contain drop-shadow-md"

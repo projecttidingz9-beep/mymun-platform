@@ -23,6 +23,7 @@ Copy [`.env.example`](./.env.example) → `.env.local`. For **Vercel**, see [`do
 - **`DATABASE_URL`** / **`DIRECT_URL`** — Postgres (e.g. Supabase).
 - **`AUTH_SESSION_SECRET`** — JWT signing for `mymun_session`.
 - **`PASS_QR_SECRET`** — Delegate pass QR signing.
+- **`ADMIN_EMAIL`** — Super-admin email (must match the logged-in user’s email for `/admin` and `/api/admin/*`; pair with `User.role = ADMIN` in the database).
 - **`NEXT_PUBLIC_APP_URL`** — Canonical URL for metadata, emails, sitemap.
 
 Optional: Google OAuth (`NEXT_PUBLIC_GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_ID`), Resend (`RESEND_*`), Sentry (`SENTRY_DSN` — wire in `src/instrumentation.ts`).

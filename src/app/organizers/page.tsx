@@ -60,7 +60,7 @@ export default function OrganizersPage() {
       <Navbar openAuthModal={() => setAuthOpen(true)} />
       <AuthModal isOpen={authOpen} onClose={() => setAuthOpen(false)} />
 
-      <section className="relative lux-section pt-36 pb-24 px-6 overflow-hidden">
+      <section className="relative lux-section pt-[calc(9rem+env(safe-area-inset-top,0px))] pb-16 sm:pb-24 px-4 sm:px-6 overflow-hidden">
         <div className="max-w-5xl mx-auto text-center">
           <span className="lux-pill">
             <span className="lux-pill-dot" />
@@ -75,11 +75,11 @@ export default function OrganizersPage() {
             Create conference drafts, configure registrations, publish when ready, and
             manage your event lifecycle end-to-end.
           </p>
-          <div className="mt-12 flex flex-col sm:flex-row gap-4 justify-center">
+          <div className="mt-12 flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center items-stretch sm:items-center max-w-lg sm:max-w-none mx-auto">
             <button
               type="button"
               onClick={() => router.push("/organizers/create")}
-              className="lux-button-primary text-base"
+              className="lux-button-primary text-base w-full sm:w-auto inline-flex justify-center items-center min-h-[48px] touch-manipulation"
               style={{ padding: "16px 32px" }}
             >
               Create your conference
@@ -87,7 +87,7 @@ export default function OrganizersPage() {
             <button
               type="button"
               onClick={openDashboard}
-              className="lux-button-ghost text-base"
+              className="lux-button-ghost text-base w-full sm:w-auto inline-flex justify-center items-center min-h-[48px] touch-manipulation"
               style={{
                 padding: "16px 28px",
                 color: "var(--fg-immersive)",
@@ -101,7 +101,7 @@ export default function OrganizersPage() {
         </div>
       </section>
 
-      <section className="relative lux-section py-24 px-6">
+      <section className="relative lux-section py-16 sm:py-24 px-4 sm:px-6">
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-16">
             <Reveal>
@@ -118,7 +118,7 @@ export default function OrganizersPage() {
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
             {FEATURES_FOR_ORGANIZERS.map((feature, i) => (
               <Reveal key={feature.title} delay={i * 0.04}>
-                <div className="lux-card p-7 h-full">
+                <div className="lux-card p-6 sm:p-7 h-full">
                   <p className="text-xs font-semibold" style={{ color: "var(--accent-warm)", letterSpacing: "0.24em", textTransform: "uppercase" }}>
                     {String(i + 1).padStart(2, "0")}
                   </p>

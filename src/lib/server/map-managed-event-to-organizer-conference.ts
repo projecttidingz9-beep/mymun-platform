@@ -17,6 +17,7 @@ import { getOrganizerStoredBlob } from "./organizer-config-store";
 
 function mapEventStatus(status: EventStatus): OrganizerConference["status"] {
   if (status === "DRAFT") return "Draft";
+  if (status === "REVIEW") return "Review";
   if (status === "PUBLISHED") return "Published";
   return "Review";
 }

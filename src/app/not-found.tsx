@@ -3,7 +3,7 @@ import BrandLogo from "@/components/BrandLogo";
 
 export default function NotFound() {
   return (
-    <div className="min-h-[70vh] flex flex-col items-center justify-center px-6 text-center">
+    <div className="min-h-[min(70vh,100dvh)] flex flex-col items-center justify-center px-4 sm:px-6 text-center">
       <BrandLogo variant="vertical" className="h-auto w-44 max-w-full object-contain mb-6" />
       <p className="text-sm font-semibold tracking-[0.25em] uppercase mb-2" style={{ color: "var(--fg-muted)" }}>
         404

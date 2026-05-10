@@ -255,11 +255,11 @@ export default function AuthModal({ isOpen, onClose, defaultTab = "signin" }: Au
     <div
       ref={overlayRef}
       onClick={(e) => { if (e.target === overlayRef.current) closeModal(); }}
-      className="fixed inset-0 z-[999] flex items-center justify-center p-4"
+      className="fixed inset-0 z-[999] flex items-center justify-center overflow-y-auto overscroll-contain px-4 py-[max(1rem,env(safe-area-inset-top,0px))] pb-[max(1rem,env(safe-area-inset-bottom,0px))]"
       style={{ background: "rgba(0,0,0,0.58)", backdropFilter: "blur(10px)" }}
     >
       <div
-        className="w-full max-w-md rounded-3xl overflow-hidden animate-soft-scale"
+        className="w-full max-w-md max-h-[min(92dvh,calc(100dvh-2rem))] overflow-y-auto overscroll-contain rounded-3xl animate-soft-scale my-auto touch-manipulation"
         style={{
           background: "linear-gradient(180deg, color-mix(in srgb, var(--bg) 86%, #0f1218 14%), var(--bg))",
           border: "1.5px solid color-mix(in srgb, var(--border) 70%, #d3b07f 30%)",

@@ -106,6 +106,15 @@ export default function Navbar({ openAuthModal }: NavbarProps) {
     };
   }, [userMenuOpen]);
 
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [mobileOpen]);
+
   const toggleDark = () => {
     const nextDark = !document.documentElement.classList.contains("dark");
     document.documentElement.classList.toggle("dark", nextDark);
@@ -147,12 +156,12 @@ export default function Navbar({ openAuthModal }: NavbarProps) {
   return (
     <>
       <nav
-        className={`fixed top-0 w-full z-50 transition-all duration-300 ${
+        className={`fixed top-0 w-full z-50 pt-[env(safe-area-inset-top,0px)] transition-all duration-300 ${
           scrolled ? "glass shadow-md shadow-black/5" : "bg-transparent"
         }`}
         style={{ borderBottom: scrolled ? "1px solid var(--glass-border)" : "none" }}
       >
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 h-[76px] flex items-center justify-between">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 h-[76px] min-h-[76px] flex items-center justify-between gap-2 min-w-0">
           {/* Logo */}
           <Link href="/" className="flex items-center group min-w-0 shrink-0">
             <BrandLogo
@@ -192,12 +201,12 @@ export default function Navbar({ openAuthModal }: NavbarProps) {
           </div>
 
           {/* Right actions */}
-          <div className="flex items-center justify-end gap-2 min-w-[196px]">
+          <div className="flex items-center justify-end gap-1.5 sm:gap-2 min-w-0 shrink md:min-w-[196px]">
             {/* Dark mode toggle */}
             {!hideThemeToggle ? (
               <button
                 onClick={toggleDark}
-                className="w-9 h-9 rounded-xl flex items-center justify-center transition-all"
+                className="w-11 h-11 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center transition-all touch-manipulation"
                 style={{
                   background: "color-mix(in srgb, var(--bg) 86%, transparent 14%)",
                   border: "1.5px solid var(--border)",
@@ -216,14 +225,15 @@ export default function Navbar({ openAuthModal }: NavbarProps) {
                 )}
               </button>
             ) : (
-              <div aria-hidden className="w-9 h-9" />
+              <div aria-hidden className="w-11 h-11 sm:w-9 sm:h-9 shrink-0" />
             )}
 
             {showLoggedInUi ? (
               <div className="relative" ref={userMenuRef}>
                 <button
+                  type="button"
                   onClick={() => setUserMenuOpen((p) => !p)}
-                  className="flex items-center gap-2 px-3 py-2 rounded-xl transition-all"
+                  className="flex items-center gap-2 px-3 py-2 rounded-xl transition-all min-h-[44px] sm:min-h-0 touch-manipulation"
                   style={{ background: "color-mix(in srgb, var(--bg) 84%, transparent 16%)", border: "1.5px solid var(--border)" }}
                 >
                   <div
@@ -336,15 +346,17 @@ export default function Navbar({ openAuthModal }: NavbarProps) {
             ) : (
               <>
                 <button
+                  type="button"
                   onClick={handleAuthClick}
-                  className="hidden sm:block px-4 py-2 rounded-xl text-sm font-medium transition-all hover:-translate-y-0.5"
+                  className="hidden sm:inline-flex px-4 py-2 rounded-xl text-sm font-medium transition-all hover:-translate-y-0.5 min-h-[44px] items-center justify-center"
                   style={{ color: "var(--fg-muted)", border: "1px solid transparent" }}
                 >
                   Sign In
                 </button>
                 <button
+                  type="button"
                   onClick={handleAuthClick}
-                  className="lux-button-primary text-sm hover:-translate-y-0.5"
+                  className="lux-button-primary text-sm hover:-translate-y-0.5 min-h-[44px] sm:min-h-0 px-4 sm:px-5 touch-manipulation inline-flex items-center justify-center"
                   style={{ padding: "10px 20px" }}
                 >
                   Get Started
@@ -354,7 +366,10 @@ export default function Navbar({ openAuthModal }: NavbarProps) {
 
             {/* Mobile hamburger */}
             <button
-              className="md:hidden w-9 h-9 rounded-xl flex items-center justify-center"
+              type="button"
+              aria-expanded={mobileOpen}
+              aria-label={mobileOpen ? "Close menu" : "Open menu"}
+              className="md:hidden w-11 h-11 shrink-0 rounded-xl flex items-center justify-center touch-manipulation"
               style={{ background: "color-mix(in srgb, var(--bg) 86%, transparent 14%)", border: "1.5px solid var(--border)" }}
               onClick={() => setMobileOpen((p) => !p)}
             >
@@ -388,19 +403,19 @@ export default function Navbar({ openAuthModal }: NavbarProps) {
         {/* Mobile drawer */}
         {mobileOpen && (
           <div
-            className="md:hidden px-6 pb-6 animate-slide-down"
+            className="md:hidden px-4 sm:px-6 pb-[max(1.5rem,env(safe-area-inset-bottom,0px))] animate-slide-down max-h-[min(70vh,calc(100dvh-5rem))] overflow-y-auto overscroll-contain"
             style={{
               background: "var(--bg)",
               borderTop: "1px solid var(--border)",
             }}
           >
-            <div className="pt-4 flex flex-col gap-1">
+            <div className="pt-4 flex flex-col gap-2">
               {visibleNavLinks.map((l) => (
                 <Link
                   key={l.href}
                   href={l.href}
                   onClick={() => setMobileOpen(false)}
-                  className="px-4 py-3 rounded-xl text-sm font-medium"
+                  className="min-h-[48px] px-4 py-3 rounded-xl text-sm font-medium flex items-center touch-manipulation"
                   style={{ color: "var(--fg)", background: "var(--bg-subtle)" }}
                 >
                   {l.label}
@@ -408,8 +423,9 @@ export default function Navbar({ openAuthModal }: NavbarProps) {
               ))}
               {!isLoggedIn && (
                 <button
+                  type="button"
                   onClick={() => { setMobileOpen(false); handleAuthClick(); }}
-                  className="btn btn-primary mt-3"
+                  className="btn btn-primary mt-2 min-h-[48px] touch-manipulation"
                 >
                   Sign In / Get Started
                 </button>

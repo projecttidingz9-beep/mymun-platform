@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { SessionRole, verifySessionToken } from "./session-token";
+import { env } from "./env";
 import { prisma } from "./prisma";
 import { getOrganizerPreviewConfig } from "./organizer-config-store";
 
@@ -26,6 +27,12 @@ export function requireOrganizer(actor: RequestActor | null) {
 }
 
 const normalizeEmail = (value: string | undefined | null) => (value || "").trim().toLowerCase();
+
+/** Super-admin: `ADMIN` role in DB and email matches `ADMIN_EMAIL` (env). */
+export function isSuperAdmin(actor: RequestActor | null): boolean {
+  if (!actor || actor.role !== "admin") return false;
+  return normalizeEmail(actor.email) === env.adminEmail();
+}
 
 /**
  * Verifies the JWT and enforces `User.sessionVersion` (revoked sessions) and account lock.

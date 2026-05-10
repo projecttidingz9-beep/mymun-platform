@@ -3,8 +3,22 @@ import type { EventStatus } from "@/generated/prisma/enums";
 import { prisma } from "./prisma";
 import { mergeOrganizerStoredBlob } from "./organizer-config-store";
 
-function mapConferenceStatusToEvent(status: OrganizerConference["status"]): EventStatus {
-  if (status === "Published") return "PUBLISHED";
+export type PersistConferenceSyncOptions = {
+  /**
+   * Super-admin only: `"Published"` maps to `PUBLISHED`.
+   * Otherwise organizer `"Published"` submits for platform review (`REVIEW`).
+   */
+  skipReviewGate?: boolean;
+};
+
+function mapConferenceStatusToEvent(
+  status: OrganizerConference["status"],
+  options?: PersistConferenceSyncOptions
+): EventStatus {
+  if (status === "Published") {
+    if (options?.skipReviewGate) return "PUBLISHED";
+    return "REVIEW";
+  }
   return "DRAFT";
 }
 
@@ -36,7 +50,11 @@ function conferenceToBlobPayload(conference: OrganizerConference): Record<string
   } as Record<string, unknown>;
 }
 
-export async function persistOrganizerConferenceSync(eventId: string, conference: OrganizerConference) {
+export async function persistOrganizerConferenceSync(
+  eventId: string,
+  conference: OrganizerConference,
+  options?: PersistConferenceSyncOptions
+) {
   const blobPayload = conferenceToBlobPayload(conference);
 
   await prisma.$transaction(async (tx) => {
@@ -46,7 +64,7 @@ export async function persistOrganizerConferenceSync(eventId: string, conference
         title: conference.title,
         startDate: new Date(conference.startDate),
         endDate: new Date(conference.endDate),
-        status: mapConferenceStatusToEvent(conference.status),
+        status: mapConferenceStatusToEvent(conference.status, options),
         coverImageUrl: conference.bannerImageUrl ?? null,
       },
     });

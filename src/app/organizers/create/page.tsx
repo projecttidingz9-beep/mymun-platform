@@ -90,10 +90,10 @@ export default function CreateOrganizerConferencePage() {
   };
 
   return (
-    <div className="min-h-screen" style={{ background: "var(--bg)" }}>
+    <div className="min-h-[100dvh]" style={{ background: "var(--bg)" }}>
       <Navbar openAuthModal={() => setAuthOpen(true)} />
       <AuthModal isOpen={authOpen} onClose={() => setAuthOpen(false)} />
-      <main className="pt-28 pb-16 px-4 sm:px-6">
+      <main className="pt-[calc(7rem+env(safe-area-inset-top,0px))] pb-16 px-4 sm:px-6">
         <div className="max-w-4xl mx-auto">
           {!hydrated ? (
             <div className="app-card space-y-4">

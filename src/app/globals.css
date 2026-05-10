@@ -92,6 +92,14 @@ body {
   transition: background 0.3s ease, color 0.3s ease;
 }
 
+/* Notched phones + home indicator (pair with viewport viewportFit: cover) */
+.safe-area-top {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+.safe-area-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
 /* Custom Scrollbar */
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
@@ -564,9 +572,11 @@ button:focus-visible,
 a:focus-visible,
 input:focus-visible,
 select:focus-visible,
-textarea:focus-visible {
+textarea:focus-visible,
+[role="tab"]:focus-visible,
+[tabindex]:not([tabindex="-1"]):focus-visible {
   outline: none;
-  box-shadow: 0 0 0 4px var(--focus-ring);
+  box-shadow: 0 0 0 3px var(--focus-ring);
   border-radius: 12px;
 }
 
@@ -1093,14 +1103,20 @@ html.dark .conference-detail-page .conference-surface {
    ───────────────────────────────────────────────────────────── */
 
 .app-shell {
-  min-height: 100vh;
-  padding: 96px 24px 64px;
+  min-height: 100dvh;
+  padding-top: calc(5.5rem + env(safe-area-inset-top, 0px));
+  padding-left: 1rem;
+  padding-right: 1rem;
+  padding-bottom: max(4rem, env(safe-area-inset-bottom, 0px));
   background: var(--bg-subtle);
 }
 
 @media (min-width: 768px) {
   .app-shell {
-    padding: 104px 32px 72px;
+    padding-top: calc(6rem + env(safe-area-inset-top, 0px));
+    padding-left: 2rem;
+    padding-right: 2rem;
+    padding-bottom: max(4.5rem, env(safe-area-inset-bottom, 0px));
   }
 }
 
@@ -1689,6 +1705,7 @@ html.dark .organizer-dashboard .card {
   display: inline-flex;
   align-items: center;
   gap: 10px;
+  min-height: 44px;
   padding: 10px 14px;
   border-radius: 12px;
   border: 1px solid var(--border);
@@ -1698,6 +1715,7 @@ html.dark .organizer-dashboard .card {
   font-weight: 700;
   color: var(--fg);
   cursor: pointer;
+  touch-action: manipulation;
 }
 
 @media (min-width: 1024px) {
@@ -1740,6 +1758,8 @@ html.dark .organizer-dashboard .card {
   box-shadow: var(--card-shadow);
   overflow-x: auto;
   scrollbar-width: thin;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
 }
 
 .app-tab {

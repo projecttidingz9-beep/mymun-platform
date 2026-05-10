@@ -16,7 +16,7 @@ export default function RootError({
   }, [error]);
 
   return (
-    <div className="min-h-[70vh] flex flex-col items-center justify-center px-6 text-center">
+    <div className="min-h-[min(70vh,100dvh)] flex flex-col items-center justify-center px-4 sm:px-6 text-center">
       <BrandLogo variant="vertical" className="h-auto w-44 max-w-full object-contain mb-6" />
       <p className="text-xs font-semibold tracking-[0.2em] uppercase mb-3" style={{ color: "var(--fg-muted)" }}>
         Something went wrong

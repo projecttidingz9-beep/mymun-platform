@@ -13,6 +13,7 @@ jobs:
       DIRECT_URL: postgresql://user:pass@localhost:5432/mymun
       AUTH_SESSION_SECRET: test-session-secret
       PASS_QR_SECRET: test-pass-secret
+      ADMIN_EMAIL: admin@example.com
       NEXT_PUBLIC_SUPABASE_URL: https://ci-placeholder.supabase.co
       NEXT_PUBLIC_SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiJ9.ci-placeholder-signature
     steps:

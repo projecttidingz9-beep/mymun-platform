@@ -467,7 +467,7 @@ export default function ConferenceDetailPage() {
       <Navbar openAuthModal={() => setAuthOpen(true)} />
       <AuthModal isOpen={authOpen} onClose={() => setAuthOpen(false)} />
 
-      <div className="conference-banner-shell pt-24">
+      <div className="conference-banner-shell pt-[calc(6rem+env(safe-area-inset-top,0px))]">
         <div className="max-w-7xl 2xl:max-w-[1320px] mx-auto px-4 sm:px-6 2xl:px-8 pt-4">
           <div className="conference-banner-frame relative aspect-[18/6] min-h-[170px] md:min-h-[260px]">
             {heroBannerImage ? (
@@ -530,7 +530,7 @@ export default function ConferenceDetailPage() {
           </div>
 
           <div className="grid lg:grid-cols-[minmax(0,1fr)_360px] 2xl:grid-cols-[minmax(0,1fr)_390px] gap-8 lg:gap-10 2xl:gap-12 items-stretch">
-            <div className="flex-1 min-h-[420px] flex flex-col">
+            <div className="order-2 lg:order-none flex-1 min-h-[420px] flex flex-col min-w-0">
               <h2 className="text-3xl font-semibold" style={{ color: "var(--fg)" }}>{displayTitle}</h2>
               <div className="mt-6 flex items-center gap-4">
                 <div
@@ -586,8 +586,8 @@ export default function ConferenceDetailPage() {
               <div className="hidden lg:block flex-1 min-h-[26px]" />
             </div>
 
-            {/* Registration Card */}
-            <div className="conference-hero-card w-full max-w-[420px] 2xl:max-w-[390px] mx-auto lg:mx-0 lux-card p-7 flex-shrink-0 lg:sticky lg:top-24 2xl:top-28 self-start lg:min-h-[420px] lg:flex lg:flex-col">
+            {/* Registration Card — first on mobile for faster primary action */}
+            <div className="order-1 lg:order-none conference-hero-card w-full max-w-[420px] 2xl:max-w-[390px] mx-auto lg:mx-0 lux-card p-6 sm:p-7 flex-shrink-0 lg:sticky lg:top-[calc(6rem+env(safe-area-inset-top,0px))] 2xl:top-28 self-start lg:min-h-[420px] lg:flex lg:flex-col">
               <p
                 className="text-[10px] font-semibold"
                 style={{
@@ -728,7 +728,7 @@ export default function ConferenceDetailPage() {
           borderBottom: "1px solid var(--border)",
         }}
       >
-        <div className="max-w-7xl 2xl:max-w-[1320px] mx-auto px-6 2xl:px-8">
+        <div className="max-w-7xl 2xl:max-w-[1320px] mx-auto px-4 sm:px-6 2xl:px-8">
           <div className="flex gap-1 py-2 overflow-x-auto">
             {tabs.map((t) => (
               <button
@@ -761,7 +761,7 @@ export default function ConferenceDetailPage() {
       </div>
 
       {/* Content */}
-      <div className="max-w-7xl 2xl:max-w-[1320px] mx-auto px-6 2xl:px-8 py-12 relative z-10 isolate">
+      <div className="max-w-7xl 2xl:max-w-[1320px] mx-auto px-4 sm:px-6 2xl:px-8 py-12 relative z-10 isolate">
         {tab === "overview" && (
           <div className="grid lg:grid-cols-3 gap-10">
             <div className="lg:col-span-2 space-y-8">

@@ -42,6 +42,7 @@ enum EventPartnershipStatus {
 
 enum EventStatus {
   DRAFT
+  REVIEW
   PUBLISHED
   ARCHIVED
   CANCELLED

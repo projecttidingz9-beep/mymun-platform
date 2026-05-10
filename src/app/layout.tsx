@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/lib/auth-context";
@@ -48,6 +48,16 @@ export const metadata: Metadata = {
   },
 };
 
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#f3f1ec" },
+    { media: "(prefers-color-scheme: dark)", color: "#0f1218" },
+  ],
+};
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -55,7 +65,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={inter.variable} suppressHydrationWarning>
-      <body className="min-h-screen flex flex-col antialiased">
+      <body className="min-h-screen min-h-[100dvh] flex flex-col antialiased overflow-x-clip">
         <OrganizationJsonLd />
         <a href="#main-content" className="skip-link">
           Skip to main content

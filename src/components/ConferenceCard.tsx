@@ -57,7 +57,7 @@ export default function ConferenceCard({ conference: c }: ConferenceCardProps) {
           : "badge-blue";
 
   return (
-    <Link href={`/conference/${c.id}`} className="block group card rounded-[1.5rem] overflow-hidden cursor-pointer">
+    <Link href={`/conference/${c.id}`} className="block group card rounded-[1.5rem] overflow-hidden cursor-pointer min-w-0">
       {/* Card Header / Color Banner */}
       <div className={`relative h-36 ${hasBanner ? "" : `bg-gradient-to-br ${c.color}`} flex items-end p-5 overflow-hidden`}>
         {hasBanner && bannerImageUrl && (
@@ -137,9 +137,9 @@ export default function ConferenceCard({ conference: c }: ConferenceCardProps) {
       {/* Card Body */}
       <div className="p-5 space-y-4">
         <div>
-          <div className="flex items-start justify-between gap-3 mb-1.5">
+          <div className="flex items-start justify-between gap-3 mb-1.5 min-w-0">
             <h3
-              className="font-bold text-base leading-snug transition-colors group-hover:text-blue-600 line-clamp-2"
+              className="font-bold text-base leading-snug transition-colors group-hover:text-blue-600 line-clamp-2 min-w-0 flex-1"
               style={{ color: "var(--fg)" }}
             >
               {c.title}

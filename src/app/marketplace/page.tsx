@@ -230,6 +230,15 @@ export default function MarketplacePage() {
     };
   }, [filtersOpenFor]);
 
+  useEffect(() => {
+    if (filtersOpenFor !== "mobile") return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [filtersOpenFor]);
+
   const renderFilterPanelContent = () => (
     <div className="p-5 space-y-4">
       <div className="flex items-center justify-between">
@@ -484,10 +493,10 @@ export default function MarketplacePage() {
         style={{ background: "color-mix(in srgb, var(--fg) 26%, transparent 74%)" }}
         aria-label="Close filters overlay"
       />
-      <div className="relative h-full px-4 pt-24 pb-6">
+      <div className="relative h-full px-4 pt-[calc(5.5rem+env(safe-area-inset-top,0px))] pb-[max(1.5rem,env(safe-area-inset-bottom,0px))] flex flex-col">
         <div
           ref={mobileFilterWrapRef}
-          className="lux-card animate-slide-down max-h-[75vh] overflow-y-auto overscroll-contain"
+          className="lux-card animate-slide-down flex flex-col flex-1 min-h-0 max-h-[min(85vh,calc(100dvh-6rem))] overflow-hidden touch-manipulation"
           style={{
             background: "color-mix(in srgb, var(--bg) 94%, transparent 6%)",
             border: "1px solid var(--border)",
@@ -495,20 +504,44 @@ export default function MarketplacePage() {
             WebkitBackdropFilter: "blur(10px) saturate(112%)",
           }}
         >
-          {renderFilterPanelContent()}
+          <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
+            {renderFilterPanelContent()}
+          </div>
+          <div
+            className="flex-shrink-0 flex gap-2 p-4 border-t"
+            style={{ borderColor: "var(--border)", background: "var(--bg)" }}
+          >
+            <button
+              type="button"
+              className="btn btn-primary flex-1 min-h-[48px] touch-manipulation"
+              onClick={() => setFiltersOpenFor(null)}
+            >
+              Apply
+            </button>
+            <button
+              type="button"
+              className="btn btn-ghost flex-1 min-h-[48px] touch-manipulation"
+              onClick={() => {
+                clearAll();
+                setFiltersOpenFor(null);
+              }}
+            >
+              Clear all
+            </button>
+          </div>
         </div>
       </div>
     </div>
   );
 
   return (
-    <div className="marketplace-page min-h-screen" style={{ background: "var(--bg)", color: "var(--fg)" }}>
+    <div className="marketplace-page min-h-[100dvh]" style={{ background: "var(--bg)", color: "var(--fg)" }}>
 
       <Navbar openAuthModal={() => setAuthOpen(true)} />
       <AuthModal isOpen={authOpen} onClose={() => setAuthOpen(false)} />
 
       {/* Page Header */}
-      <section className="relative lux-section pt-36 pb-10 px-6">
+      <section className="relative lux-section pt-[calc(9rem+env(safe-area-inset-top,0px))] pb-8 sm:pb-10 px-4 sm:px-6">
         <div className="max-w-7xl mx-auto">
           <span className="lux-pill">
             <span className="lux-pill-dot" />
@@ -585,7 +618,7 @@ export default function MarketplacePage() {
               <button
                 type="button"
                 onClick={() => setFiltersOpenFor((prev) => (prev === "mobile" ? null : "mobile"))}
-                className="lux-button-ghost text-sm w-full justify-center gap-2"
+                className="lux-button-ghost text-sm w-full justify-center gap-2 min-h-[48px] touch-manipulation inline-flex items-center"
                 style={{ padding: "12px 18px", color: "var(--fg)", borderColor: "var(--border)", background: "var(--bg-subtle)" }}
               >
                 <span>Filters</span>
@@ -598,7 +631,7 @@ export default function MarketplacePage() {
         </div>
       </section>
 
-      <section className="relative lux-section max-w-7xl mx-auto px-6 py-12">
+      <section className="relative lux-section max-w-7xl mx-auto px-4 sm:px-6 py-10 sm:py-12">
         <div className="space-y-6">
           {activeFilters.length > 0 && (
             <div className="flex flex-wrap items-center gap-2">

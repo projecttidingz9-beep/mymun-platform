@@ -21,8 +21,8 @@ const SOCIAL_LINKS: { label: string; href: string; icon: string }[] = [];
 export default function Footer() {
   return (
     <footer className="relative z-10 w-full mt-auto footer-shell">
-      <div className="max-w-7xl mx-auto px-6 py-14">
-        <div className="grid gap-10 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)_minmax(0,1fr)]">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-10 sm:py-14">
+        <div className="grid gap-8 sm:gap-10 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)_minmax(0,1fr)]">
           <div className="space-y-5">
             <Link href="/" className="inline-flex flex-col items-start gap-2">
               <FooterBrandLogo />
@@ -50,10 +50,10 @@ export default function Footer() {
 
           <div>
             <h4 className="text-xs font-bold tracking-[0.2em] uppercase mb-4 footer-section-title">Navigation</h4>
-            <ul className="space-y-3">
+            <ul className="space-y-1 sm:space-y-3">
               {NAV_LINKS.map((link) => (
                 <li key={link.label}>
-                  <Link href={link.href} className="text-sm footer-link">
+                  <Link href={link.href} className="text-sm footer-link inline-flex items-center min-h-[44px] sm:min-h-0 py-2 sm:py-0">
                     {link.label}
                   </Link>
                 </li>
@@ -63,10 +63,10 @@ export default function Footer() {
 
           <div>
             <h4 className="text-xs font-bold tracking-[0.2em] uppercase mb-4 footer-section-title">Legal</h4>
-            <ul className="space-y-3">
+            <ul className="space-y-1 sm:space-y-3">
               {LEGAL_LINKS.map((link) => (
                 <li key={link.label}>
-                  <Link href={link.href} className="text-sm footer-link">
+                  <Link href={link.href} className="text-sm footer-link inline-flex items-center min-h-[44px] sm:min-h-0 py-2 sm:py-0">
                     {link.label}
                   </Link>
                 </li>
