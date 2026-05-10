@@ -1,5 +1,5 @@
 import Link from "next/link";
-import Image from "next/image";
+import BrandLogo from "@/components/BrandLogo";
 
 const NAV_LINKS = [
   { label: "Home", href: "/" },
@@ -24,17 +24,8 @@ export default function Footer() {
       <div className="max-w-7xl mx-auto px-6 py-14">
         <div className="grid gap-10 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)_minmax(0,1fr)]">
           <div className="space-y-5">
-            <Link href="/" className="inline-flex items-center gap-3">
-              <div className="w-11 h-11 rounded-2xl overflow-hidden border footer-logo-wrap">
-                <Image
-                  src="/tidingz-logo.jpg"
-                  alt="Tidingz logo"
-                  width={44}
-                  height={44}
-                  className="w-full h-full object-cover"
-                />
-              </div>
-              <span className="text-lg font-bold tracking-tight footer-title">Tidingz</span>
+            <Link href="/" className="inline-flex flex-col items-start gap-2">
+              <BrandLogo variant="vertical" className="h-auto w-44 max-w-full object-contain object-left" />
             </Link>
             <p className="text-sm leading-relaxed max-w-md footer-copy">
               A modern Model UN platform helping delegates and organizers discover, prepare, and perform at the highest level.

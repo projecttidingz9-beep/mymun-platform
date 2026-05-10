@@ -12,15 +12,15 @@ export default function manifest(): MetadataRoute.Manifest {
     theme_color: "#1a1a2e",
     icons: [
       {
-        src: "/icon.jpg",
+        src: "/brand/logo-icon-light.png",
         sizes: "512x512",
-        type: "image/jpeg",
+        type: "image/png",
         purpose: "any",
       },
       {
-        src: "/tidingz-logo.jpg",
+        src: "/brand/logo-icon-light.png",
         sizes: "512x512",
-        type: "image/jpeg",
+        type: "image/png",
         purpose: "maskable",
       },
     ],

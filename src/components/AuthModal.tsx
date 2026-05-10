@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import Image from "next/image";
 import { useAuth } from "@/lib/auth-context";
+import BrandLogo from "@/components/BrandLogo";
 import { createSupabaseBrowserClient, isSupabaseOAuthConfigured } from "@/lib/supabase/client";
 
 interface AuthModalProps {
@@ -276,11 +276,9 @@ export default function AuthModal({ isOpen, onClose, defaultTab = "signin" }: Au
         >
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-2.5">
-              <Image
-                src="/tidingz-logo.jpg"
-                alt="Tidingz logo"
-                width={32}
-                height={32}
+              <BrandLogo
+                variant="icon"
+                themeOverride="dark"
                 className="w-8 h-8 rounded-xl object-cover border border-[#f4e2c6]/30"
               />
               <span className="text-[#f8f4ec] font-bold tracking-wide uppercase text-sm">Tidingz</span>

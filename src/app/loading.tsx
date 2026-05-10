@@ -1,14 +1,11 @@
-import Image from "next/image";
+import BrandLogo from "@/components/BrandLogo";
 
 export default function RootLoading() {
   return (
     <div className="min-h-[60vh] flex flex-col items-center justify-center gap-4 px-6">
-      <Image
-        src="/tidingz-logo.jpg"
-        alt="Tidingz"
-        width={88}
-        height={88}
-        className="rounded-2xl object-contain drop-shadow-md"
+      <BrandLogo
+        variant="vertical"
+        className="h-auto w-48 max-w-full object-contain drop-shadow-md"
         priority
       />
       <div className="skeleton h-10 w-48 rounded-lg" />

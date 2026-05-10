@@ -2,10 +2,10 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import AuthModal from "./AuthModal";
+import BrandLogo from "./BrandLogo";
 
 function MenuIcon({ children }: { children: React.ReactNode }) {
   return (
@@ -153,20 +153,12 @@ export default function Navbar({ openAuthModal }: NavbarProps) {
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 h-[76px] flex items-center justify-between">
           {/* Logo */}
-          <Link href="/" className="flex items-center gap-3 group min-w-0">
-            <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl overflow-hidden shadow-lg transition-transform group-hover:scale-105 flex-shrink-0 border border-[var(--border)]">
-              <Image
-                src="/tidingz-logo.jpg"
-                alt="Tidingz logo"
-                width={48}
-                height={48}
-                className="w-full h-full object-cover"
-                priority
-              />
-            </div>
-            <span className="text-xl sm:text-2xl font-bold tracking-tight leading-none" style={{ color: "var(--fg)" }}>
-              Tidingz
-            </span>
+          <Link href="/" className="flex items-center group min-w-0 shrink-0">
+            <BrandLogo
+              variant="horizontal"
+              className="h-9 w-auto sm:h-10 max-w-[min(100%,240px)] object-contain object-left transition-transform group-hover:scale-[1.02]"
+              priority
+            />
           </Link>
 
           {/* Mid-width inline nav (priority links) */}

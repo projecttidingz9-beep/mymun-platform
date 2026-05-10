@@ -8,8 +8,8 @@ export default function OrganizationJsonLd() {
     "@type": "Organization",
     name: "Tidingz",
     url: base,
-    logo: `${base}/tidingz-logo.jpg`,
-    image: `${base}/tidingz-logo.jpg`,
+    logo: `${base}/brand/logo-horizontal-light.png`,
+    image: `${base}/brand/logo-horizontal-light.png`,
     description:
       "Model UN platform for delegates and organizers — marketplace, registration, and conference management.",
   };

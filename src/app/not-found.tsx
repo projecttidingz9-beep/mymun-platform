@@ -1,16 +1,10 @@
-import Image from "next/image";
 import Link from "next/link";
+import BrandLogo from "@/components/BrandLogo";
 
 export default function NotFound() {
   return (
     <div className="min-h-[70vh] flex flex-col items-center justify-center px-6 text-center">
-      <Image
-        src="/tidingz-logo.jpg"
-        alt="Tidingz"
-        width={72}
-        height={72}
-        className="rounded-2xl object-contain mb-6"
-      />
+      <BrandLogo variant="vertical" className="h-auto w-44 max-w-full object-contain mb-6" />
       <p className="text-sm font-semibold tracking-[0.25em] uppercase mb-2" style={{ color: "var(--fg-muted)" }}>
         404
       </p>
