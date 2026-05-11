@@ -107,6 +107,9 @@ export default function DashboardPage() {
   const [changePasswordConfirm, setChangePasswordConfirm] = useState("");
   const [changePasswordLoading, setChangePasswordLoading] = useState(false);
   const [forgotPasswordLoading, setForgotPasswordLoading] = useState(false);
+  const [forgotPasswordNotice, setForgotPasswordNotice] = useState("");
+  const [forgotPasswordError, setForgotPasswordError] = useState("");
+  const [forgotPasswordDevUrl, setForgotPasswordDevUrl] = useState("");
   const [deletePassword, setDeletePassword] = useState("");
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<DelegateTabId>("conferences");
@@ -502,6 +505,9 @@ export default function DashboardPage() {
 
   const onForgotPasswordFromSecurity = async () => {
     if (!user.email) return;
+    setForgotPasswordNotice("");
+    setForgotPasswordError("");
+    setForgotPasswordDevUrl("");
     setForgotPasswordLoading(true);
     try {
       const response = await fetch("/api/auth/forgot-password", {
@@ -509,12 +515,23 @@ export default function DashboardPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: user.email }),
       });
-      const payload = (await response.json().catch(() => ({}))) as { error?: string };
+      const payload = (await response.json().catch(() => ({}))) as {
+        error?: string;
+        message?: string;
+        devResetUrl?: string;
+      };
       if (!response.ok) {
-        alert(payload.error || "Could not send reset link.");
+        setForgotPasswordError(payload.error ?? payload.message ?? "Could not send reset link.");
         return;
       }
-      alert(`Password reset link sent to ${user.email}.`);
+      if (typeof payload.devResetUrl === "string" && payload.devResetUrl.length > 0) {
+        setForgotPasswordNotice(
+          "Email is not configured in this environment. Use the one-time reset link below (development only)."
+        );
+        setForgotPasswordDevUrl(payload.devResetUrl);
+        return;
+      }
+      setForgotPasswordNotice(`Password reset link sent to ${user.email}. Check your inbox.`);
     } finally {
       setForgotPasswordLoading(false);
     }
@@ -1232,6 +1249,30 @@ export default function DashboardPage() {
                   >
                     {forgotPasswordLoading ? "Sending reset link..." : "Forgot password? Send reset email"}
                   </button>
+                  {forgotPasswordError && (
+                    <p className="text-xs rounded-lg px-3 py-2" style={{ background: "rgba(220,38,38,0.12)", color: "#b91c1c" }}>
+                      {forgotPasswordError}
+                    </p>
+                  )}
+                  {forgotPasswordNotice && !forgotPasswordError && (
+                    <p className="text-xs rounded-lg px-3 py-2" style={{ background: "rgba(22,163,74,0.12)", color: "#15803d" }}>
+                      {forgotPasswordNotice}
+                    </p>
+                  )}
+                  {forgotPasswordDevUrl && (
+                    <div className="space-y-2">
+                      <input readOnly className="input-base text-xs w-full" value={forgotPasswordDevUrl} aria-label="Development reset link" />
+                      <button
+                        type="button"
+                        className="btn btn-secondary text-xs w-full"
+                        onClick={() => {
+                          void navigator.clipboard.writeText(forgotPasswordDevUrl);
+                        }}
+                      >
+                        Copy link
+                      </button>
+                    </div>
+                  )}
                 </div>
                 <div className="mt-5 pt-4" style={{ borderTop: "1px solid var(--border)" }}>
                   <p className="text-xs font-semibold mb-2" style={{ color: "var(--danger)" }}>Delete Account</p>

@@ -5,6 +5,15 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 
+/** Mirrors server `validateNewPassword` in `@/lib/server/password`. */
+function describeNewPasswordError(password: string): string | null {
+  if (password.length < 8) return "Password must be at least 8 characters.";
+  if (!/[A-Za-z]/.test(password) || !/\d/.test(password)) {
+    return "Password must include at least one letter and one number.";
+  }
+  return null;
+}
+
 function ResetPasswordForm() {
   const params = useSearchParams();
   const router = useRouter();
@@ -64,6 +73,11 @@ function ResetPasswordForm() {
       setFormError("Passwords do not match.");
       return;
     }
+    const policyErr = describeNewPasswordError(password);
+    if (policyErr) {
+      setFormError(policyErr);
+      return;
+    }
     setLoading(true);
     try {
       const response = await fetch("/api/auth/reset-password", {
@@ -83,12 +97,26 @@ function ResetPasswordForm() {
     }
   };
 
+  const passwordPolicyError = password ? describeNewPasswordError(password) : null;
+  const passwordsMatch = password === confirmPassword;
+  const canSubmit =
+    tokenValid &&
+    !tokenCheckLoading &&
+    !loading &&
+    Boolean(password) &&
+    Boolean(confirmPassword) &&
+    passwordsMatch &&
+    !passwordPolicyError;
+
   return (
     <div className="max-w-md mx-auto card p-7 rounded-2xl animate-soft-scale" style={{ background: "color-mix(in srgb, var(--bg) 88%, transparent 12%)" }}>
       <p className="lux-eyebrow mb-3">Account Recovery</p>
       <h1 className="text-xl font-bold mb-2 uppercase" style={{ color: "var(--fg)", letterSpacing: "0.04em" }}>Reset Password</h1>
-      <p className="text-sm mb-5" style={{ color: "var(--fg-muted)" }}>
+      <p className="text-sm mb-2" style={{ color: "var(--fg-muted)" }}>
         Set a new password for your account.
+      </p>
+      <p className="text-[11px] mb-5 leading-relaxed" style={{ color: "var(--fg-muted)" }}>
+        Use at least 8 characters with at least one letter and one number (same rules as sign up).
       </p>
       <div
         className="rounded-xl px-4 py-3 text-xs mb-4"
@@ -122,15 +150,33 @@ function ResetPasswordForm() {
           value={password}
           onChange={(event) => setPassword(event.target.value)}
           placeholder="New password"
+          autoComplete="new-password"
         />
+        {passwordPolicyError && (
+          <p className="text-[11px]" style={{ color: "#b45309" }}>
+            {passwordPolicyError}
+          </p>
+        )}
         <input
           type="password"
           className="input-base"
           value={confirmPassword}
           onChange={(event) => setConfirmPassword(event.target.value)}
           placeholder="Confirm new password"
+          autoComplete="new-password"
         />
-        <button onClick={onSubmit} className="lux-button-primary w-full py-3.5" disabled={loading || !tokenValid || tokenCheckLoading}>
+        {confirmPassword.length > 0 && !passwordsMatch && (
+          <p className="text-[11px]" style={{ color: "#b45309" }}>
+            Passwords do not match.
+          </p>
+        )}
+        <button
+          type="button"
+          onClick={onSubmit}
+          className="lux-button-primary w-full py-3.5"
+          disabled={!canSubmit}
+          style={{ opacity: canSubmit ? 1 : 0.55 }}
+        >
           {loading ? "Updating..." : "Reset Password"}
         </button>
       </div>

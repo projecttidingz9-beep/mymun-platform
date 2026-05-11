@@ -50,6 +50,7 @@ export default function AuthModal({ isOpen, onClose, defaultTab = "signin" }: Au
   const [forgotMode, setForgotMode] = useState(false);
   const [forgotEmail, setForgotEmail] = useState("");
   const [forgotNotice, setForgotNotice] = useState("");
+  const [forgotDevUrl, setForgotDevUrl] = useState("");
   const [googleLoading, setGoogleLoading] = useState(false);
   const [googleRole, setGoogleRole] = useState<"delegate" | "organizer">("delegate");
   const [googlePendingCredential, setGooglePendingCredential] = useState("");
@@ -72,6 +73,7 @@ export default function AuthModal({ isOpen, onClose, defaultTab = "signin" }: Au
     setForgotMode(false);
     setForgotEmail("");
     setForgotNotice("");
+    setForgotDevUrl("");
     setGoogleLoading(false);
     setGoogleRole("delegate");
     setGooglePendingCredential("");
@@ -185,6 +187,7 @@ export default function AuthModal({ isOpen, onClose, defaultTab = "signin" }: Au
   const handleForgotPassword = async () => {
     setError("");
     setForgotNotice("");
+    setForgotDevUrl("");
     const targetEmail = forgotEmail.trim().toLowerCase();
     if (!targetEmail || !targetEmail.includes("@")) {
       setError("Enter a valid account email.");
@@ -197,9 +200,22 @@ export default function AuthModal({ isOpen, onClose, defaultTab = "signin" }: Au
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: targetEmail }),
       });
-      const payload = (await response.json().catch(() => ({}))) as { error?: string };
+      const payload = (await response.json().catch(() => ({}))) as {
+        error?: string;
+        message?: string;
+        devResetUrl?: string;
+        code?: string;
+      };
       if (!response.ok) {
-        setError(payload.error || "Could not start password reset.");
+        const apiMsg = payload.error ?? payload.message;
+        setError(apiMsg || "Could not start password reset.");
+        return;
+      }
+      if (typeof payload.devResetUrl === "string" && payload.devResetUrl.length > 0) {
+        setForgotNotice(
+          "Email is not configured in this environment. Use the one-time reset link below (development only)."
+        );
+        setForgotDevUrl(payload.devResetUrl);
         return;
       }
       setForgotNotice("Password reset link sent. Please check your email.");
@@ -305,13 +321,13 @@ export default function AuthModal({ isOpen, onClose, defaultTab = "signin" }: Au
           <div className="tab-bar mb-6">
             <button
               className={`tab flex-1 ${tab === "signin" ? "active" : ""}`}
-              onClick={() => { setTab("signin"); setError(""); setForgotMode(false); setForgotNotice(""); }}
+              onClick={() => { setTab("signin"); setError(""); setForgotMode(false); setForgotNotice(""); setForgotDevUrl(""); }}
             >
               Sign In
             </button>
             <button
               className={`tab flex-1 ${tab === "register" ? "active" : ""}`}
-              onClick={() => { setTab("register"); setError(""); setForgotMode(false); setForgotNotice(""); }}
+              onClick={() => { setTab("register"); setError(""); setForgotMode(false); setForgotNotice(""); setForgotDevUrl(""); }}
             >
               Register
             </button>
@@ -461,6 +477,7 @@ export default function AuthModal({ isOpen, onClose, defaultTab = "signin" }: Au
                     setForgotMode(true);
                     setForgotEmail(email);
                     setForgotNotice("");
+                    setForgotDevUrl("");
                     setError("");
                   }}
                   className="text-xs mt-2"
@@ -499,6 +516,7 @@ export default function AuthModal({ isOpen, onClose, defaultTab = "signin" }: Au
                   onClick={() => {
                     setForgotMode(false);
                     setForgotNotice("");
+                    setForgotDevUrl("");
                     setError("");
                   }}
                   className="btn btn-ghost text-xs"
@@ -519,6 +537,20 @@ export default function AuthModal({ isOpen, onClose, defaultTab = "signin" }: Au
               }
             >
               <span>{error ? "!" : "✓"}</span> {error || forgotNotice}
+            </div>
+          )}
+          {forgotDevUrl && (
+            <div className="space-y-2 rounded-xl p-3" style={{ background: "var(--bg-subtle)", border: "1px solid var(--border)" }}>
+              <input readOnly className="input-base text-xs w-full" value={forgotDevUrl} aria-label="Development reset link" />
+              <button
+                type="button"
+                className="btn btn-secondary text-xs w-full"
+                onClick={() => {
+                  void navigator.clipboard.writeText(forgotDevUrl);
+                }}
+              >
+                Copy link
+              </button>
             </div>
           )}
 
@@ -546,6 +578,7 @@ export default function AuthModal({ isOpen, onClose, defaultTab = "signin" }: Au
                 setTab(tab === "signin" ? "register" : "signin");
                 setForgotMode(false);
                 setForgotNotice("");
+                setForgotDevUrl("");
                 setError("");
               }}
               className="font-semibold"
