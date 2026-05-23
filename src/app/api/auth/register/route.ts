@@ -6,6 +6,7 @@ import { getClientIp } from "@/lib/server/request-ip";
 import { signSessionToken } from "@/lib/server/session-token";
 import { prismaUserRoleToSession } from "@/lib/server/user-role";
 import { registerBodySchema } from "@/lib/server/validators/auth";
+import { logger } from "@/lib/server/logger";
 
 export async function POST(request: NextRequest) {
   try {
@@ -71,7 +72,13 @@ export async function POST(request: NextRequest) {
       maxAge: 60 * 60 * 24 * 7,
     });
     return response;
-  } catch {
-    return NextResponse.json({ error: "Could not register account." }, { status: 400 });
+  } catch (err) {
+    logger.error("auth_register_failed", {
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return NextResponse.json(
+      { error: "Could not register account. Please try again.", code: "AUTH_REGISTER_FAILED" },
+      { status: 500 }
+    );
   }
 }

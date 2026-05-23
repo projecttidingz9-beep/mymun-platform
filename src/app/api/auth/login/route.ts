@@ -6,6 +6,7 @@ import { getClientIp } from "@/lib/server/request-ip";
 import { signSessionToken } from "@/lib/server/session-token";
 import { prismaUserRoleToSession } from "@/lib/server/user-role";
 import { loginBodySchema } from "@/lib/server/validators/auth";
+import { logger } from "@/lib/server/logger";
 
 const MAX_ATTEMPTS = 5;
 const LOCK_MS = 15 * 60 * 1000;
@@ -119,7 +120,13 @@ export async function POST(request: NextRequest) {
       maxAge: 60 * 60 * 24 * 7,
     });
     return response;
-  } catch {
-    return NextResponse.json({ error: "Could not sign in." }, { status: 400 });
+  } catch (err) {
+    logger.error("auth_login_failed", {
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return NextResponse.json(
+      { error: "Could not sign in. Please try again.", code: "AUTH_LOGIN_FAILED" },
+      { status: 500 }
+    );
   }
 }

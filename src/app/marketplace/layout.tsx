@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 
-const base = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") || "http://localhost:3000";
+import { getSiteUrl } from "@/lib/site-url";
+
+const base = getSiteUrl();
 
 export const metadata: Metadata = {
   title: "Conference marketplace",

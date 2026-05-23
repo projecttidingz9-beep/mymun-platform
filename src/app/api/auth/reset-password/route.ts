@@ -5,6 +5,7 @@ import { consumeRateLimitBucket } from "@/lib/server/rate-limit-db";
 import { getClientIp } from "@/lib/server/request-ip";
 import { hashResetToken } from "@/lib/server/reset-token";
 import { resetPasswordBodySchema } from "@/lib/server/validators/auth";
+import { logger } from "@/lib/server/logger";
 
 export async function POST(request: NextRequest) {
   try {
@@ -56,7 +57,13 @@ export async function POST(request: NextRequest) {
       }),
     ]);
     return NextResponse.json({ ok: true });
-  } catch {
-    return NextResponse.json({ error: "Could not reset password." }, { status: 400 });
+  } catch (err) {
+    logger.error("reset_password_failed", {
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return NextResponse.json(
+      { error: "Could not reset password. Please try again.", code: "RESET_PASSWORD_FAILED" },
+      { status: 500 }
+    );
   }
 }

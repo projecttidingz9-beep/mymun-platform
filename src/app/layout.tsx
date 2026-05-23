@@ -6,8 +6,9 @@ import OrganizationJsonLd from "@/components/OrganizationJsonLd";
 import ThemeController from "@/components/ThemeController";
 import CookieConsent from "@/components/CookieConsent";
 import { ToastProvider } from "@/components/Toast";
+import { getSiteUrl } from "@/lib/site-url";
 
-const siteUrl = (process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000").replace(/\/$/, "");
+const siteUrl = getSiteUrl();
 
 const inter = Inter({
   subsets: ["latin"],

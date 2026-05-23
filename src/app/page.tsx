@@ -67,15 +67,41 @@ const VEIL_SOFT: React.CSSProperties = {
   WebkitBackdropFilter: "blur(10px) saturate(120%)",
 };
 
+const OAUTH_ERROR_MESSAGES: Record<string, string> = {
+  supabase_config: "Google sign-in is not configured. Use email and password, or add Supabase keys in your environment.",
+  oauth: "Google sign-in was cancelled or failed.",
+  oauth_exchange: "Could not complete Google sign-in. Try again.",
+  oauth_user: "Could not read your Google account. Try again.",
+  oauth_bridge: "Could not finish sign-in after Google. Try again or use email and password.",
+};
+
 export default function HomePage() {
   const { isLoggedIn, user } = useAuth();
   const [authOpen, setAuthOpen] = useState(false);
+  const [oauthNotice, setOauthNotice] = useState<string | null>(null);
   const [newsletterEmail, setNewsletterEmail] = useState("");
   const [newsletterBusy, setNewsletterBusy] = useState(false);
   const [newsletterNote, setNewsletterNote] = useState<string | null>(null);
   const [sceneReady, setSceneReady] = useState(false);
   const [sceneEnabled, setSceneEnabled] = useState(false);
   const openAuthModal = () => setAuthOpen(true);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const error = params.get("error");
+    if (!error) return;
+    const detail = params.get("detail");
+    let message =
+      OAUTH_ERROR_MESSAGES[error] ?? "Sign-in failed. Please try again or use email and password.";
+    if (error === "oauth_bridge" && detail) {
+      message = `${message} (${detail})`;
+    }
+    setOauthNotice(message);
+    const url = new URL(window.location.href);
+    url.searchParams.delete("error");
+    url.searchParams.delete("detail");
+    window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+  }, []);
 
   const subscribeNewsletter = async () => {
     setNewsletterNote(null);
@@ -169,6 +195,32 @@ export default function HomePage() {
 
         <Navbar openAuthModal={openAuthModal} />
         <AuthModal isOpen={authOpen} onClose={() => setAuthOpen(false)} />
+
+        {oauthNotice ? (
+          <div
+            className="mx-auto max-w-3xl px-4 pt-4"
+            role="alert"
+          >
+            <div
+              className="flex items-start justify-between gap-3 rounded-xl px-4 py-3 text-sm"
+              style={{
+                background: "rgba(157, 46, 46, 0.12)",
+                color: "#f4c4c4",
+                border: "1px solid rgba(157, 46, 46, 0.28)",
+              }}
+            >
+              <span>{oauthNotice}</span>
+              <button
+                type="button"
+                className="shrink-0 text-white/70 hover:text-white"
+                onClick={() => setOauthNotice(null)}
+                aria-label="Dismiss"
+              >
+                ×
+              </button>
+            </div>
+          </div>
+        ) : null}
 
         <main className="flex-1">
         {/* ───── Hero ───── */}

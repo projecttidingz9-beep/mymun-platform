@@ -1,8 +1,10 @@
 /**
  * Site-wide Organization JSON-LD for search engines.
  */
+import { getSiteUrl } from "@/lib/site-url";
+
 export default function OrganizationJsonLd() {
-  const base = (process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000").replace(/\/$/, "");
+  const base = getSiteUrl();
   const data = {
     "@context": "https://schema.org",
     "@type": "Organization",

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 import { POST } from "./route";
 
@@ -6,14 +6,16 @@ vi.mock("@/lib/server/prisma", () => ({
   prisma: {
     user: {
       findUnique: vi.fn(),
+      update: vi.fn(),
+    },
+    auditLog: {
       create: vi.fn(),
     },
   },
 }));
 
 vi.mock("@/lib/server/password", () => ({
-  hashPassword: vi.fn(() => Promise.resolve("hashed")),
-  validateNewPassword: vi.fn(() => null),
+  verifyPassword: vi.fn(() => Promise.resolve(true)),
 }));
 
 vi.mock("@/lib/server/session-token", () => ({
@@ -30,29 +32,10 @@ vi.mock("@/lib/server/logger", () => ({
   },
 }));
 
-describe("POST /api/auth/register", () => {
+describe("POST /api/auth/login", () => {
   beforeEach(async () => {
     const { prisma } = await import("@/lib/server/prisma");
     vi.mocked(prisma.user.findUnique).mockReset();
-    vi.mocked(prisma.user.create).mockReset();
-  });
-
-  it("returns 409 when email already exists", async () => {
-    const { prisma } = await import("@/lib/server/prisma");
-    vi.mocked(prisma.user.findUnique).mockResolvedValue({ id: "existing" } as never);
-
-    const req = new NextRequest("http://localhost/api/auth/register", {
-      method: "POST",
-      body: JSON.stringify({
-        email: "Taken@Example.com",
-        password: "ValidPass123!",
-        name: "Someone",
-      }),
-    });
-
-    const res = await POST(req);
-    expect(res.status).toBe(409);
-    expect(vi.mocked(prisma.user.create)).not.toHaveBeenCalled();
   });
 
   it("returns 500 with code when an unexpected error occurs", async () => {
@@ -60,23 +43,21 @@ describe("POST /api/auth/register", () => {
     const { logger } = await import("@/lib/server/logger");
     vi.mocked(prisma.user.findUnique).mockRejectedValueOnce(new Error("db down"));
 
-    const req = new NextRequest("http://localhost/api/auth/register", {
+    const req = new NextRequest("http://localhost/api/auth/login", {
       method: "POST",
       body: JSON.stringify({
-        email: "new@example.com",
+        email: "user@example.com",
         password: "ValidPass123!",
-        name: "New User",
       }),
     });
 
     const res = await POST(req);
     expect(res.status).toBe(500);
-
     const body = (await res.json()) as { error?: string; code?: string };
-    expect(body.error).toMatch(/could not register account/i);
-    expect(body.code).toBe("AUTH_REGISTER_FAILED");
+    expect(body.error).toMatch(/could not sign in/i);
+    expect(body.code).toBe("AUTH_LOGIN_FAILED");
     expect(vi.mocked(logger.error)).toHaveBeenCalledWith(
-      "auth_register_failed",
+      "auth_login_failed",
       expect.objectContaining({ error: "db down" })
     );
   });

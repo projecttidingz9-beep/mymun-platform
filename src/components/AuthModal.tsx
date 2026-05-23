@@ -134,7 +134,11 @@ export default function AuthModal({ isOpen, onClose, defaultTab = "signin" }: Au
         body: JSON.stringify(tab === "register" ? { role: registerRole } : {}),
       });
       const supabase = createSupabaseBrowserClient();
-      const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent("/dashboard")}`;
+      const publicOrigin =
+        process.env.NODE_ENV === "production"
+          ? (process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "").trim() || window.location.origin)
+          : window.location.origin;
+      const redirectTo = `${publicOrigin}/auth/callback?next=${encodeURIComponent("/dashboard")}`;
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: { redirectTo },
@@ -155,33 +159,42 @@ export default function AuthModal({ isOpen, onClose, defaultTab = "signin" }: Au
 
     if (!email || !password) { setError("Please fill all required fields."); return; }
     if (password.length < 8) { setError("Password must be at least 8 characters."); return; }
+    if (!/[A-Za-z]/.test(password) || !/\d/.test(password)) {
+      setError("Password must include at least one letter and one number.");
+      return;
+    }
     if (tab === "register" && !name) { setError("Please enter your full name."); return; }
     if (!email.includes("@")) { setError("Please enter a valid email address."); return; }
 
     setLoading(true);
     const endpoint = tab === "register" ? "/api/auth/register" : "/api/auth/login";
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify({
-        email,
-        password,
-        ...(tab === "register" ? { name, role: registerRole } : {}),
-      }),
-    });
-    const payload = (await response.json().catch(() => ({}))) as {
-      error?: string;
-      name?: string;
-      role?: "delegate" | "organizer" | "admin";
-    };
-    if (!response.ok) {
-      setError(payload.error || "Authentication failed.");
+    try {
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          email,
+          password,
+          ...(tab === "register" ? { name, role: registerRole } : {}),
+        }),
+      });
+      const payload = (await response.json().catch(() => ({}))) as {
+        error?: string;
+        name?: string;
+        role?: "delegate" | "organizer" | "admin";
+      };
+      if (!response.ok) {
+        setError(payload.error || "Authentication failed.");
+        return;
+      }
+      login(email, payload.name || (tab === "register" ? name : undefined), payload.role || "delegate");
+      closeModal();
+    } catch {
+      setError("Could not reach authentication server. Please try again.");
+    } finally {
       setLoading(false);
-      return;
     }
-    login(email, payload.name || (tab === "register" ? name : undefined), payload.role || "delegate");
-    closeModal();
   };
 
   const handleForgotPassword = async () => {

@@ -90,7 +90,7 @@ function ResetPasswordForm() {
         setFormError(payload.error || "Could not reset password.");
         return;
       }
-      setSuccessMessage("Password reset successful. Redirecting you to sign in…");
+      setSuccessMessage("Password reset successful. Please sign in with your new password. Redirecting...");
       setTimeout(() => router.push("/"), 1200);
     } finally {
       setLoading(false);

@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import { prisma } from "@/lib/server/prisma";
+import { getSiteUrl } from "@/lib/site-url";
 
-const site =
-  process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") || "http://localhost:3000";
+const site = getSiteUrl();
 
 export async function generateMetadata({
   params,

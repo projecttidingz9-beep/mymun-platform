@@ -82,8 +82,11 @@ The workflow runs `npx prisma migrate deploy` then `npm run build`. Add a Vercel
 
 - [ ] `NEXT_PUBLIC_APP_URL` = `https://<your-domain>` (no trailing slash).
 - [ ] If using Supabase OAuth: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, and redirect URLs `https://<your-domain>/auth/callback` (+ localhost for dev) in the Supabase dashboard.
-- [ ] `DATABASE_URL` and `DIRECT_URL` set in Vercel **and** local `.env`.
+- [ ] `DATABASE_URL` and `DIRECT_URL` set in Vercel **and** local `.env` / `.env.local`.
 - [ ] `AUTH_SESSION_SECRET` / `PASS_QR_SECRET` are long random strings (not committed).
+- [ ] `ADMIN_EMAIL` is set (same value as in local; must match the account you use for `/admin`).
+- [ ] **Do not** set `DATABASE_SSL_REJECT_UNAUTHORIZED` in Vercel **Production** (omit it so Postgres TLS is verified). Use that flag **only** in local `.env.local` if you hit corporate SSL inspection errors.
+- [ ] Mirror other keys from [`.env.example`](../.env.example) (`RESEND_*`, `PAYMENTS_MODE`, optional Supabase OAuth, Sentry) so preview/prod match launch needs.
 - [ ] `postinstall` runs `prisma generate` (see `package.json`).
 - [ ] First production deploy: run `npx prisma migrate deploy` (or use the tag workflow) **before** traffic.
 
