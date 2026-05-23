@@ -1,9 +1,9 @@
 import { z } from "zod";
 
 /** Strip whitespace/CRLF and surrounding quotes (common when pasting into hosting dashboards). */
-function normalizeAdminEmailInput(val: unknown): unknown {
+export function normalizeEnvString(val: unknown): unknown {
   if (typeof val !== "string") return val;
-  let s = val.replace(/\r/g, "").trim();
+  let s = val.replace(/\r/g, "").replace(/\n/g, "").trim();
   while (
     (s.startsWith('"') && s.endsWith('"')) ||
     (s.startsWith("'") && s.endsWith("'"))
@@ -12,6 +12,26 @@ function normalizeAdminEmailInput(val: unknown): unknown {
   }
   return s;
 }
+
+function normalizeAdminEmailInput(val: unknown): unknown {
+  return normalizeEnvString(val);
+}
+
+const ENV_KEYS_TO_NORMALIZE = [
+  "DATABASE_URL",
+  "DIRECT_URL",
+  "AUTH_SESSION_SECRET",
+  "PASS_QR_SECRET",
+  "ADMIN_EMAIL",
+  "NEXT_PUBLIC_APP_URL",
+  "RESEND_API_KEY",
+  "RESEND_FROM_EMAIL",
+  "PAYMENTS_MODE",
+  "GOOGLE_CLIENT_ID",
+  "NEXT_PUBLIC_GOOGLE_CLIENT_ID",
+  "NEXT_PUBLIC_SUPABASE_URL",
+  "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+] as const;
 
 /** During `next build`, Prisma/API routes may load before real `.env` is applied — fill placeholders only then. */
 function applyBuildTimeEnvPlaceholders() {
@@ -36,9 +56,11 @@ function applyBuildTimeEnvPlaceholders() {
 
 applyBuildTimeEnvPlaceholders();
 
-if (typeof process.env.ADMIN_EMAIL === "string") {
-  const n = normalizeAdminEmailInput(process.env.ADMIN_EMAIL);
-  if (typeof n === "string") process.env.ADMIN_EMAIL = n;
+for (const key of ENV_KEYS_TO_NORMALIZE) {
+  if (typeof process.env[key] === "string") {
+    const n = normalizeEnvString(process.env[key]);
+    if (typeof n === "string") process.env[key] = n;
+  }
 }
 
 const optionalNonEmpty = z
@@ -49,11 +71,13 @@ const optionalNonEmpty = z
     return t ? t : undefined;
   });
 
+const requiredString = z.preprocess(normalizeEnvString, z.string().min(1));
+
 const envSchema = z.object({
-  DATABASE_URL: z.string().min(1),
+  DATABASE_URL: requiredString,
   DIRECT_URL: optionalNonEmpty,
-  AUTH_SESSION_SECRET: z.string().min(1),
-  PASS_QR_SECRET: z.string().min(1),
+  AUTH_SESSION_SECRET: requiredString,
+  PASS_QR_SECRET: requiredString,
   /** Platform super-admin — must match session email for `/admin` and `/api/admin/*`. */
   ADMIN_EMAIL: z.preprocess(normalizeAdminEmailInput, z.string().email()),
   GOOGLE_CLIENT_ID: optionalNonEmpty,
@@ -61,7 +85,10 @@ const envSchema = z.object({
   RESEND_API_KEY: optionalNonEmpty,
   RESEND_FROM_EMAIL: optionalNonEmpty,
   NEXT_PUBLIC_APP_URL: optionalNonEmpty,
-  PAYMENTS_MODE: z.enum(["free", "manual"]).optional(),
+  PAYMENTS_MODE: z.preprocess(
+    normalizeEnvString,
+    z.enum(["free", "manual"]).optional()
+  ),
   SENTRY_DSN: optionalNonEmpty,
   /** Same project DSN as `SENTRY_DSN` when you want browser error reporting (public). */
   NEXT_PUBLIC_SENTRY_DSN: optionalNonEmpty,

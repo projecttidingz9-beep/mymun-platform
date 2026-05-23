@@ -16,6 +16,16 @@ Production-oriented Model UN platform: marketplace, delegate flows, organizer da
 | `npm run prisma:migrate:deploy` | Prod/staging `migrate deploy` |
 | `npm run db:seed` | Seed demo data |
 
+## Develop on tidingz.com
+
+Primary testing happens on **https://tidingz.com** (Vercel production), not localhost — auth cookies and Google OAuth require the live domain.
+
+1. Edit code locally, then `node scripts/sync-vercel-env.mjs` if `.env.local` secrets changed.
+2. `vercel deploy --prod --yes` (or push to `master` for Git deploy).
+3. Verify `GET https://tidingz.com/api/health` returns `"ok":true` before testing register/login.
+
+Local `npm run dev` is optional for quick UI tweaks; use `DATABASE_SSL_REJECT_UNAUTHORIZED=false` in `.env.local` only.
+
 ## Environment
 
 Copy [`.env.example`](./.env.example) → `.env.local`. For **Vercel**, see [`docs/deploy-vercel.md`](docs/deploy-vercel.md). Critical vars:

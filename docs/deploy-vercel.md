@@ -65,9 +65,16 @@ Use `DIRECT_URL` in CI/local per [`prisma.config.ts`](../prisma.config.ts).
 
 ## 6. Post-deploy smoke test
 
-1. `GET /api/health` — DB latency JSON.
+1. `GET /api/health` — must return `"ok":true` with `dbLatencyMs` (if `ok:false`, check `DATABASE_URL` / `AUTH_SESSION_SECRET` on Vercel and redeploy).
 2. Sign up / login / marketplace load.
 3. Forgot-password only sends mail when `RESEND_*` set (no reset URLs in logs).
+
+Re-sync secrets from local after editing `.env.local`:
+
+```bash
+node scripts/sync-vercel-env.mjs
+vercel deploy --prod --yes
+```
 
 ## 7. GitHub tag release (migrations)
 

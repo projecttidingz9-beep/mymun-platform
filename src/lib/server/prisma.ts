@@ -18,18 +18,29 @@ function sslRejectUnauthorizedDisabled(): boolean {
  * pg v8+ treats `sslmode=require` as verify-full and ignores `rejectUnauthorized: false`.
  */
 function connectionStringForPool(): string {
-  const url = env.databaseUrl();
-  if (!sslRejectUnauthorizedDisabled()) return url;
-  if (/[?&]sslmode=/i.test(url)) {
-    return url.replace(/([?&])sslmode=[^&]*/i, "$1sslmode=no-verify");
+  let url = env.databaseUrl();
+  if (sslRejectUnauthorizedDisabled()) {
+    if (/[?&]sslmode=/i.test(url)) {
+      return url.replace(/([?&])sslmode=[^&]*/i, "$1sslmode=no-verify");
+    }
+    const sep = url.includes("?") ? "&" : "?";
+    return `${url}${sep}sslmode=no-verify`;
   }
-  const sep = url.includes("?") ? "&" : "?";
-  return `${url}${sep}sslmode=no-verify`;
+  if (/sslmode=require/i.test(url) && !/uselibpqcompat=/i.test(url)) {
+    const sep = url.includes("?") ? "&" : "?";
+    url = `${url}${sep}uselibpqcompat=true`;
+  }
+  return url;
 }
 
 /** When set to `false` or `0`, skip TLS certificate verification for Postgres (local dev only; e.g. corporate SSL inspection). */
-function pgSslOption(): { rejectUnauthorized: false } | undefined {
+function pgSslOption(
+  url: string
+): boolean | { rejectUnauthorized: boolean } | undefined {
   if (sslRejectUnauthorizedDisabled()) return { rejectUnauthorized: false };
+  if (/sslmode=require|sslmode=verify-full/i.test(url)) {
+    return { rejectUnauthorized: true };
+  }
   return undefined;
 }
 
@@ -43,7 +54,7 @@ const pool =
     max: Math.min(Number(process.env.DB_POOL_MAX ?? 10), 25),
     idleTimeoutMillis: 30_000,
     connectionTimeoutMillis: 10_000,
-    ssl: pgSslOption(),
+    ssl: pgSslOption(connectionString),
   });
 globalThis.__pg_pool__ = pool;
 
