@@ -7,6 +7,11 @@ import { useAuth } from "@/lib/auth-context";
 import AuthModal from "./AuthModal";
 import BrandLogo from "./BrandLogo";
 import { shouldForceDarkBrandLogo } from "@/lib/brand-logo-theme";
+import {
+  canAccessSuperDashboard,
+  SUPER_ADMIN_HREF,
+  SUPER_ADMIN_LABEL,
+} from "@/lib/admin-nav";
 
 function MenuIcon({ children }: { children: React.ReactNode }) {
   return (
@@ -28,7 +33,7 @@ const NAV_LINKS = [
   { label: "For Organizers", href: "/organizers" },
   { label: "Dashboard", href: "/dashboard" },
 ];
-const INLINE_PRIORITY_HREFS = ["/marketplace"];
+const INLINE_PRIORITY_HREFS = [SUPER_ADMIN_HREF, "/marketplace"];
 
 interface NavbarProps {
   openAuthModal?: () => void;
@@ -135,8 +140,12 @@ export default function Navbar({ openAuthModal }: NavbarProps) {
   const showDarkModeOnIcon = hydrated && darkMode;
   const hideThemeToggle = pathname === "/";
   const currentRole = user?.role || "delegate";
+  const showSuperDashboard = canAccessSuperDashboard(currentRole, user?.email);
+  const roleNavLinks = showSuperDashboard
+    ? [{ label: SUPER_ADMIN_LABEL, href: SUPER_ADMIN_HREF }, ...NAV_LINKS]
+    : NAV_LINKS;
   const visibleNavLinks = showLoggedInUi
-    ? NAV_LINKS.filter((link) => {
+    ? roleNavLinks.filter((link) => {
         if (link.href === "/marketplace") {
           return currentRole !== "organizer";
         }
@@ -148,7 +157,7 @@ export default function Navbar({ openAuthModal }: NavbarProps) {
         }
         return true;
       })
-    : NAV_LINKS;
+    : roleNavLinks;
   const inlinePrimaryLinks = visibleNavLinks.filter((link) =>
     INLINE_PRIORITY_HREFS.includes(link.href),
   );
@@ -265,6 +274,22 @@ export default function Navbar({ openAuthModal }: NavbarProps) {
                       <p className="text-xs break-all mt-1" style={{ color: "var(--fg-muted)" }}>{user?.email}</p>
                     </div>
                     <div className="py-1.5">
+                      {showSuperDashboard && (
+                        <Link
+                          href={SUPER_ADMIN_HREF}
+                          onClick={() => setUserMenuOpen(false)}
+                          className="flex items-center gap-3 px-5 py-3 text-sm font-medium transition-colors user-menu-link"
+                          style={{ color: "var(--fg)" }}
+                        >
+                          <MenuIcon>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <path d="M12 3v18M3 12h18" strokeLinecap="round" />
+                              <circle cx="12" cy="12" r="3" />
+                            </svg>
+                          </MenuIcon>
+                          {SUPER_ADMIN_LABEL}
+                        </Link>
+                      )}
                       {currentRole !== "organizer" && (
                         <>
                           <Link

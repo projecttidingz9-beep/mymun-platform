@@ -19,7 +19,8 @@ function mapEventStatus(status: EventStatus): OrganizerConference["status"] {
   if (status === "DRAFT") return "Draft";
   if (status === "REVIEW") return "Review";
   if (status === "PUBLISHED") return "Published";
-  return "Review";
+  if (status === "CANCELLED" || status === "ARCHIVED") return "Draft";
+  return "Draft";
 }
 
 function mapRegistrationStatus(s: RegistrationStatus): OrganizerApplicant["status"] {
@@ -435,6 +436,10 @@ export async function mapManagedEventToOrganizerConference(eventId: string): Pro
         ? (blob.statusEmailTemplates as OrganizerConference["statusEmailTemplates"])
         : undefined,
     status: mapEventStatus(event.status),
+    adminRejectionNote:
+      typeof blob.adminRejectionNote === "string" && blob.adminRejectionNote.trim()
+        ? blob.adminRejectionNote.trim()
+        : undefined,
     registrationCategories,
     committees,
     commonDocuments: Array.isArray(blob.commonDocuments) ? (blob.commonDocuments as OrganizerConference["commonDocuments"]) : undefined,

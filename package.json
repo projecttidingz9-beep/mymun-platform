@@ -18,6 +18,7 @@
     "db:reset:public": "prisma db execute --file prisma/scripts/reset-public-supabase.sql",
     "db:migrate:fresh": "npm run db:reset:public && npm run prisma:migrate:deploy",
     "db:seed": "npx tsx prisma/seed.ts",
+    "bootstrap:admin": "npx tsx scripts/bootstrap-super-admin.ts",
     "db:reset": "prisma migrate reset --force",
     "test": "vitest run",
     "test:watch": "vitest",

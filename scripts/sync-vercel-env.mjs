@@ -19,6 +19,7 @@ const KEYS = [
   "AUTH_SESSION_SECRET",
   "PASS_QR_SECRET",
   "ADMIN_EMAIL",
+  "NEXT_PUBLIC_ADMIN_EMAIL",
   "NEXT_PUBLIC_APP_URL",
   "RESEND_API_KEY",
   "RESEND_FROM_EMAIL",
@@ -99,6 +100,10 @@ if (
 
 if (!parsed.PAYMENTS_MODE) {
   parsed.PAYMENTS_MODE = "manual";
+}
+
+if (parsed.ADMIN_EMAIL && !parsed.NEXT_PUBLIC_ADMIN_EMAIL) {
+  parsed.NEXT_PUBLIC_ADMIN_EMAIL = parsed.ADMIN_EMAIL;
 }
 
 const targets = ["production", "preview"];

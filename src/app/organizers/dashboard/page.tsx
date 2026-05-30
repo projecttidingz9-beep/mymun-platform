@@ -19,6 +19,7 @@ import {
   OrganizerStatusEmailTemplateKey,
 } from "@/lib/types";
 import { getActivePhase } from "@/lib/pricing";
+import { canAccessSuperDashboard, SUPER_ADMIN_HREF, SUPER_ADMIN_LABEL } from "@/lib/admin-nav";
 
 const STATUS_STYLES: Record<OrganizerConference["status"], string> = {
   Draft: "badge-gray",
@@ -1894,6 +1895,14 @@ export default function OrganizerDashboardPage() {
               <Link href="/organizers/payments" className="btn btn-ghost text-sm w-full sm:w-[320px] justify-center">
                 Manual payments
               </Link>
+              {canAccessSuperDashboard(user?.role, user?.email) && (
+                <Link
+                  href={SUPER_ADMIN_HREF}
+                  className="btn btn-ghost text-sm w-full sm:w-[320px] justify-center border border-[var(--border)]"
+                >
+                  {SUPER_ADMIN_LABEL}
+                </Link>
+              )}
             </div>
           </header>
 
@@ -2198,6 +2207,25 @@ export default function OrganizerDashboardPage() {
                       <p className="app-subtitle mt-2">{ORGANIZER_SECTION_META[activeSection].subtitle}</p>
                     </div>
                   </header>
+
+                  {activeSection === "preview" &&
+                    selectedConference.status === "Draft" &&
+                    selectedConference.adminRejectionNote?.trim() && (
+                    <div
+                      className="card p-4 rounded-2xl mb-4 border border-amber-500/35 bg-amber-500/10"
+                      role="status"
+                    >
+                      <p className="text-sm font-semibold" style={{ color: "var(--fg)" }}>
+                        Not approved for publication
+                      </p>
+                      <p className="text-sm mt-1" style={{ color: "var(--fg-muted)" }}>
+                        {selectedConference.adminRejectionNote}
+                      </p>
+                      <p className="text-xs mt-2" style={{ color: "var(--fg-muted)" }}>
+                        Update your conference details, then use Publish Conference again when ready.
+                      </p>
+                    </div>
+                  )}
 
                   {activeSection === "preview" && (
                   <div className="card p-6 rounded-2xl">

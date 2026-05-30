@@ -291,6 +291,8 @@ export interface OrganizerConference {
   bankingDetails?: OrganizerBankingDetails;
   statusEmailTemplates?: OrganizerStatusEmailTemplates;
   status: "Draft" | "Review" | "Published";
+  /** Set by platform super-admin when a publish request is rejected (returned to Draft). */
+  adminRejectionNote?: string;
   registrationCategories: RegistrationCategory[];
   committees: OrganizerCommittee[];
   commonDocuments?: OrganizerDocument[];

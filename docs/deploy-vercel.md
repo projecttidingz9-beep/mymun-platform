@@ -21,6 +21,7 @@ Critical:
 | `AUTH_SESSION_SECRET` | Long random string; rotate invalidates sessions unless you migrate tokens. |
 | `PASS_QR_SECRET` | Separate secret for QR signing. |
 | `ADMIN_EMAIL` | Super-admin email; must match the `User` row you set to `ADMIN` for `/admin` and `/api/admin/*`. |
+| `NEXT_PUBLIC_ADMIN_EMAIL` | Same value as `ADMIN_EMAIL` — Super Dashboard nav link visibility in the UI. |
 | `NEXT_PUBLIC_APP_URL` | **HTTPS** production URL, e.g. `https://your-domain.com`. |
 
 Optional: `RESEND_*`, **`NEXT_PUBLIC_SUPABASE_URL`** + **`NEXT_PUBLIC_SUPABASE_ANON_KEY`** (Supabase Auth — Google OAuth via redirect to `/auth/callback`; configure providers and redirect URLs in the Supabase dashboard), legacy Google GIS (`GOOGLE_CLIENT_ID` / `NEXT_PUBLIC_GOOGLE_CLIENT_ID` only if Supabase Auth is not configured), `SENTRY_DSN` (server/edge) and `NEXT_PUBLIC_SENTRY_DSN`. Set `SENTRY_AUTH_TOKEN` in CI or Vercel when you want **source maps uploaded** during build (`next.config` disables upload when this is unset).
@@ -97,10 +98,24 @@ The workflow runs `npx prisma migrate deploy` then `npm run build`. Add a Vercel
 - [ ] `postinstall` runs `prisma generate` (see `package.json`).
 - [ ] First production deploy: run `npx prisma migrate deploy` (or use the tag workflow) **before** traffic.
 
-## 9. Rollback
+## 9. Bootstrap super-admin (one-time)
+
+Super-admin access requires **`ADMIN_EMAIL`** on Vercel (must match the account email) and a **`User`** row with `role = ADMIN` and a password hash. Public registration cannot create `ADMIN` users.
+
+From the project root, with **production** `DATABASE_URL` / `DIRECT_URL` loaded (e.g. in `.env.local` — same DB as Vercel):
+
+```bash
+BOOTSTRAP_ADMIN_EMAIL=you@example.com BOOTSTRAP_ADMIN_PASSWORD='your-secure-password' npm run bootstrap:admin
+```
+
+Optional: `BOOTSTRAP_ADMIN_NAME`. Do **not** commit `BOOTSTRAP_ADMIN_PASSWORD` or store it in Vercel env. After upsert, set `ADMIN_EMAIL` to the same address, redeploy, sign in on production, then open `/admin`.
+
+**Moderation workflow:** Organizers publish → `REVIEW` in the database. Super-admin uses `/admin` (Review queue) to **Approve** (`PUBLISHED`, marketplace-visible) or **Reject** (returns to `DRAFT` with optional feedback). Configure `RESEND_*` to email organizers on decisions.
+
+## 10. Rollback
 
 Revert deployment in Vercel dashboard or redeploy previous Git tag. Schema rollback requires a **forward** migration — avoid destructive down migrations in prod.
 
-## 10. Email verification (v1)
+## 11. Email verification (v1)
 
 `/api/auth/verify-email` is intentionally **not implemented** for launch. Policy and follow-up work are documented in [`docs/email-verification.md`](./email-verification.md).
