@@ -45,10 +45,24 @@ export default function OrganizersPage() {
   );
   const showLoggedInCta = hydrated && isLoggedIn;
   const [authOpen, setAuthOpen] = useState(false);
+  const [authDefaultTab, setAuthDefaultTab] = useState<"signin" | "register">("signin");
+
+  const openAuthModal = (tab: "signin" | "register" = "signin") => {
+    setAuthDefaultTab(tab);
+    setAuthOpen(true);
+  };
+
+  const openCreateConference = () => {
+    if (!isLoggedIn) {
+      openAuthModal("register");
+      return;
+    }
+    router.push("/organizers/create");
+  };
 
   const openDashboard = () => {
     if (!isLoggedIn) {
-      setAuthOpen(true);
+      openAuthModal("signin");
       return;
     }
     router.push("/organizers/dashboard");
@@ -57,8 +71,13 @@ export default function OrganizersPage() {
   return (
     <div className="lux-shell lux-shell-immersive min-h-screen">
       <div aria-hidden className="lux-backdrop" />
-      <Navbar openAuthModal={() => setAuthOpen(true)} />
-      <AuthModal isOpen={authOpen} onClose={() => setAuthOpen(false)} />
+      <Navbar openAuthModal={() => openAuthModal("signin")} />
+      <AuthModal
+        key={authDefaultTab}
+        isOpen={authOpen}
+        onClose={() => setAuthOpen(false)}
+        defaultTab={authDefaultTab}
+      />
 
       <section className="relative lux-section pt-[calc(9rem+env(safe-area-inset-top,0px))] pb-16 sm:pb-24 px-4 sm:px-6 overflow-hidden">
         <div className="max-w-5xl mx-auto text-center">
@@ -78,7 +97,7 @@ export default function OrganizersPage() {
           <div className="mt-12 flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center items-stretch sm:items-center max-w-lg sm:max-w-none mx-auto">
             <button
               type="button"
-              onClick={() => router.push("/organizers/create")}
+              onClick={openCreateConference}
               className="lux-button-primary text-base w-full sm:w-auto inline-flex justify-center items-center min-h-[48px] touch-manipulation"
               style={{ padding: "16px 32px" }}
             >
