@@ -2237,7 +2237,7 @@ export default function OrganizerDashboardPage() {
                         <span className={`badge ${STATUS_STYLES[selectedConference.status]}`}>
                           {selectedConference.status}
                         </span>
-                        {selectedConference.status !== "Published" ? (
+                        {selectedConference.status === "Draft" ? (
                           <button
                             type="button"
                             className="btn btn-primary text-xs"
@@ -2245,6 +2245,8 @@ export default function OrganizerDashboardPage() {
                           >
                             Publish Conference
                           </button>
+                        ) : selectedConference.status === "Review" ? (
+                          <span className="badge badge-gold text-xs">Pending platform review</span>
                         ) : (
                           <button
                             type="button"

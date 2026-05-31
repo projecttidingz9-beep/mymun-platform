@@ -11,7 +11,7 @@ export type PersistConferenceSyncOptions = {
   skipReviewGate?: boolean;
 };
 
-function mapConferenceStatusToEvent(
+export function mapConferenceStatusToEvent(
   status: OrganizerConference["status"],
   options?: PersistConferenceSyncOptions
 ): EventStatus {
@@ -19,7 +19,38 @@ function mapConferenceStatusToEvent(
     if (options?.skipReviewGate) return "PUBLISHED";
     return "REVIEW";
   }
+  if (status === "Review") return "REVIEW";
   return "DRAFT";
+}
+
+const PROTECTED_EVENT_STATUSES: EventStatus[] = ["REVIEW", "PUBLISHED"];
+
+export function resolveEventStatusForSync(
+  currentDbStatus: EventStatus,
+  clientStatus: OrganizerConference["status"],
+  options?: PersistConferenceSyncOptions
+): EventStatus {
+  const mapped = mapConferenceStatusToEvent(clientStatus, options);
+
+  if (clientStatus === "Published" || clientStatus === "Draft") {
+    return mapped;
+  }
+
+  if (PROTECTED_EVENT_STATUSES.includes(currentDbStatus)) {
+    return currentDbStatus;
+  }
+
+  return mapped;
+}
+
+function normalizeBlobStatusForSync(
+  conference: OrganizerConference,
+  eventStatus: EventStatus
+): OrganizerConference["status"] {
+  if (conference.status === "Published" && eventStatus === "REVIEW") {
+    return "Review";
+  }
+  return conference.status;
 }
 
 function buildApplicantExtras(conference: OrganizerConference): Record<string, Record<string, unknown>> {
@@ -55,16 +86,26 @@ export async function persistOrganizerConferenceSync(
   conference: OrganizerConference,
   options?: PersistConferenceSyncOptions
 ) {
-  const blobPayload = conferenceToBlobPayload(conference);
+  let resolvedEventStatus: EventStatus = mapConferenceStatusToEvent(conference.status, options);
 
   await prisma.$transaction(async (tx) => {
+    const existing = await tx.event.findUnique({
+      where: { id: eventId },
+      select: { status: true },
+    });
+    if (!existing) {
+      throw new Error("Event not found.");
+    }
+
+    resolvedEventStatus = resolveEventStatusForSync(existing.status, conference.status, options);
+
     await tx.event.update({
       where: { id: eventId },
       data: {
         title: conference.title,
         startDate: new Date(conference.startDate),
         endDate: new Date(conference.endDate),
-        status: mapConferenceStatusToEvent(conference.status, options),
+        status: resolvedEventStatus,
         coverImageUrl: conference.bannerImageUrl ?? null,
       },
     });
@@ -156,5 +197,10 @@ export async function persistOrganizerConferenceSync(
     }
   });
 
+  const normalizedConference = {
+    ...conference,
+    status: normalizeBlobStatusForSync(conference, resolvedEventStatus),
+  };
+  const blobPayload = conferenceToBlobPayload(normalizedConference);
   await mergeOrganizerStoredBlob(eventId, blobPayload);
 }
