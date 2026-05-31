@@ -38,8 +38,16 @@ describe("resolveEventStatusForSync", () => {
     expect(resolveEventStatusForSync("DRAFT", "Published")).toBe("REVIEW");
   });
 
-  it("honors explicit draft intent after rejection", () => {
-    expect(resolveEventStatusForSync("REVIEW", "Draft")).toBe("DRAFT");
+  it("preserves REVIEW when stale client sends Draft", () => {
+    expect(resolveEventStatusForSync("REVIEW", "Draft")).toBe("REVIEW");
+  });
+
+  it("preserves PUBLISHED when stale client sends Draft", () => {
+    expect(resolveEventStatusForSync("PUBLISHED", "Draft")).toBe("PUBLISHED");
+  });
+
+  it("allows Draft when DB is already DRAFT", () => {
+    expect(resolveEventStatusForSync("DRAFT", "Draft")).toBe("DRAFT");
   });
 
   it("preserves REVIEW on config-only sync with client Review", () => {

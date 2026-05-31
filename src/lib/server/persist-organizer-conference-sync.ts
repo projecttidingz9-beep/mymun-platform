@@ -9,6 +9,8 @@ export type PersistConferenceSyncOptions = {
    * Otherwise organizer `"Published"` submits for platform review (`REVIEW`).
    */
   skipReviewGate?: boolean;
+  /** When false, leave Event.status unchanged (config-only sync). Default true. */
+  syncStatus?: boolean;
 };
 
 export function mapConferenceStatusToEvent(
@@ -32,8 +34,15 @@ export function resolveEventStatusForSync(
 ): EventStatus {
   const mapped = mapConferenceStatusToEvent(clientStatus, options);
 
-  if (clientStatus === "Published" || clientStatus === "Draft") {
+  if (clientStatus === "Published") {
     return mapped;
+  }
+
+  if (
+    clientStatus === "Draft" &&
+    PROTECTED_EVENT_STATUSES.includes(currentDbStatus)
+  ) {
+    return currentDbStatus;
   }
 
   if (PROTECTED_EVENT_STATUSES.includes(currentDbStatus)) {
@@ -97,7 +106,9 @@ export async function persistOrganizerConferenceSync(
       throw new Error("Event not found.");
     }
 
-    resolvedEventStatus = resolveEventStatusForSync(existing.status, conference.status, options);
+    resolvedEventStatus = options?.syncStatus === false
+      ? existing.status
+      : resolveEventStatusForSync(existing.status, conference.status, options);
 
     await tx.event.update({
       where: { id: eventId },
@@ -105,7 +116,7 @@ export async function persistOrganizerConferenceSync(
         title: conference.title,
         startDate: new Date(conference.startDate),
         endDate: new Date(conference.endDate),
-        status: resolvedEventStatus,
+        ...(options?.syncStatus === false ? {} : { status: resolvedEventStatus }),
         coverImageUrl: conference.bannerImageUrl ?? null,
       },
     });
@@ -202,5 +213,8 @@ export async function persistOrganizerConferenceSync(
     status: normalizeBlobStatusForSync(conference, resolvedEventStatus),
   };
   const blobPayload = conferenceToBlobPayload(normalizedConference);
+  if (options?.syncStatus === false) {
+    delete blobPayload.status;
+  }
   await mergeOrganizerStoredBlob(eventId, blobPayload);
 }

@@ -364,6 +364,8 @@ export default function OrganizerDashboardPage() {
     addConferenceAward,
     removeConferenceAward,
     updateOrganizerConferenceStatus,
+    lastOrganizerSyncError,
+    clearOrganizerSyncError,
   } = useAuth();
 
   const organizerConferences = useMemo(
@@ -1194,10 +1196,14 @@ export default function OrganizerDashboardPage() {
           updatedAt: undefined,
         }));
         if (JSON.stringify(nextSorted) !== JSON.stringify(currentSorted)) {
-          updateOrganizerConferenceConfig(selectedConference.id, {
-            partnerConferenceIds: nextSorted,
-            partnerLinks,
-          });
+          updateOrganizerConferenceConfig(
+            selectedConference.id,
+            {
+              partnerConferenceIds: nextSorted,
+              partnerLinks,
+            },
+            { syncStatus: false }
+          );
         }
       })
       .catch(() => setPartnerRelationships([]));
@@ -1226,10 +1232,14 @@ export default function OrganizerDashboardPage() {
       createdAt: undefined,
       updatedAt: undefined,
     }));
-    updateOrganizerConferenceConfig(selectedConference.id, {
-      partnerConferenceIds: acceptedPartnerIds,
-      partnerLinks,
-    });
+    updateOrganizerConferenceConfig(
+      selectedConference.id,
+      {
+        partnerConferenceIds: acceptedPartnerIds,
+        partnerLinks,
+      },
+      { syncStatus: false }
+    );
   };
 
   const sendPartnerInvite = async () => {
@@ -1905,6 +1915,22 @@ export default function OrganizerDashboardPage() {
               )}
             </div>
           </header>
+
+          {lastOrganizerSyncError && (
+            <div
+              className="alert alert-danger mb-4 flex items-start justify-between gap-3"
+              role="alert"
+            >
+              <span>{lastOrganizerSyncError}</span>
+              <button
+                type="button"
+                className="btn btn-ghost text-xs shrink-0"
+                onClick={clearOrganizerSyncError}
+              >
+                Dismiss
+              </button>
+            </div>
+          )}
 
           <button
             type="button"

@@ -764,12 +764,21 @@ const stampOwnershipIfMissing = (
   };
 };
 
+export type OrganizerConferenceSyncOptions = {
+  /** When false, server keeps existing Event.status. Default true. */
+  syncStatus?: boolean;
+  /** Override status sent to server (e.g. Published for publish while UI shows Review). */
+  serverStatus?: OrganizerConference["status"];
+};
+
 interface AuthContextType {
   user: User | null;
   isLoggedIn: boolean;
   /** True after client mount — avoids blank flashes before localStorage hydrates. */
   authReady: boolean;
   organizerConferences: OrganizerConference[];
+  lastOrganizerSyncError: string | null;
+  clearOrganizerSyncError: () => void;
   login: (email: string, name?: string, role?: "delegate" | "organizer" | "admin") => void;
   logout: () => void;
   addRegistration: (reg: Registration) => void;
@@ -818,7 +827,8 @@ interface AuthContextType {
         | "whatIsIncluded"
         | "conferenceSchedule"
       >
-    >
+    >,
+    options?: OrganizerConferenceSyncOptions
   ) => void;
   updateOrganizerCommitteeConfig: (
     conferenceId: string,
@@ -907,6 +917,8 @@ const AuthContext = createContext<AuthContextType>({
   isLoggedIn: false,
   authReady: false,
   organizerConferences: [],
+  lastOrganizerSyncError: null,
+  clearOrganizerSyncError: () => {},
   login: () => {},
   logout: () => {},
   addRegistration: () => {},
@@ -946,6 +958,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
 
   const [organizerConferences, setOrganizerConferences] = useState<OrganizerConference[]>([]);
+  const [lastOrganizerSyncError, setLastOrganizerSyncError] = useState<string | null>(null);
 
   const [notifications, setNotifications] = useState<UserNotification[]>([]);
 
@@ -1028,17 +1041,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [user]);
 
   const syncConferenceToServer = React.useCallback(
-    async (conference: OrganizerConference) => {
+    async (conference: OrganizerConference, options?: OrganizerConferenceSyncOptions) => {
       try {
-        await fetch(`/api/organizers/conferences/${conference.id}/sync`, {
+        const res = await fetch(`/api/organizers/conferences/${conference.id}/sync`, {
           method: "PUT",
           credentials: "include",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ conference }),
+          body: JSON.stringify({
+            conference,
+            syncStatus: options?.syncStatus !== false,
+          }),
         });
+        if (!res.ok) {
+          const payload = (await res.json().catch(() => ({}))) as { error?: string };
+          setLastOrganizerSyncError(payload.error || "Could not save conference changes.");
+          return;
+        }
+        setLastOrganizerSyncError(null);
         await refetchMyEvents();
       } catch {
-        // ignore network errors; dashboard may retry
+        setLastOrganizerSyncError("Could not reach server. Check your connection and try again.");
       }
     },
     [refetchMyEvents]
@@ -1046,7 +1068,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const persistOrganizerConferences = (
     next: OrganizerConference[],
-    syncConferenceId?: string | null
+    syncConferenceId?: string | null,
+    syncOptions?: OrganizerConferenceSyncOptions
   ) => {
     const normalized = next.map(recomputeCommitteeAllotments);
     if (!isOrganizerUser(user)) {
@@ -1059,8 +1082,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setOrganizerConferences(filtered);
     if (!syncConferenceId) return;
     const target = filtered.find((conference) => conference.id === syncConferenceId);
-    if (target) void syncConferenceToServer(target);
+    if (!target) return;
+    const conferenceForSync =
+      syncOptions?.serverStatus !== undefined
+        ? { ...target, status: syncOptions.serverStatus }
+        : target;
+    void syncConferenceToServer(conferenceForSync, syncOptions);
   };
+
+  const clearOrganizerSyncError = () => setLastOrganizerSyncError(null);
 
   const login: AuthContextType["login"] = () => {
     void refreshAuthState();
@@ -1197,15 +1227,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const updateOrganizerConferenceStatus: AuthContextType["updateOrganizerConferenceStatus"] = (conferenceId, status) => {
     const current = organizerConferences;
+    const displayStatus = status === "Published" ? "Review" : status;
     const next = current.map((conference) =>
-      conference.id === conferenceId ? { ...conference, status } : conference
+      conference.id === conferenceId ? { ...conference, status: displayStatus } : conference
     );
-    persistOrganizerConferences(next, conferenceId);
+    persistOrganizerConferences(next, conferenceId, {
+      serverStatus: status === "Published" ? "Published" : undefined,
+    });
   };
 
   const updateOrganizerConferenceConfig: AuthContextType["updateOrganizerConferenceConfig"] = (
     conferenceId,
-    patch
+    patch,
+    options
   ) => {
     const current = organizerConferences;
     const next = current.map((conference) =>
@@ -1220,7 +1254,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
         : conference
     );
-    persistOrganizerConferences(next, conferenceId);
+    persistOrganizerConferences(next, conferenceId, options);
   };
 
   const updateOrganizerCommitteeConfig: AuthContextType["updateOrganizerCommitteeConfig"] = (
@@ -1896,6 +1930,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isLoggedIn: !!user,
         authReady,
         organizerConferences,
+        lastOrganizerSyncError,
+        clearOrganizerSyncError,
         login,
         logout,
         addRegistration,

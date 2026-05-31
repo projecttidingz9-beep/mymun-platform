@@ -28,7 +28,10 @@ export async function PUT(
     return NextResponse.json({ error: "You do not have access to this conference." }, { status: 403 });
   }
 
-  const body = (await request.json().catch(() => ({}))) as { conference?: OrganizerConference };
+  const body = (await request.json().catch(() => ({}))) as {
+    conference?: OrganizerConference;
+    syncStatus?: boolean;
+  };
   if (!body.conference || typeof body.conference !== "object") {
     return NextResponse.json({ error: "conference payload required." }, { status: 400 });
   }
@@ -36,6 +39,7 @@ export async function PUT(
   try {
     await persistOrganizerConferenceSync(eventId, body.conference, {
       skipReviewGate: isSuperAdmin(actor),
+      syncStatus: body.syncStatus !== false,
     });
     const conference = await mapManagedEventToOrganizerConference(eventId);
     return NextResponse.json({ conference });
