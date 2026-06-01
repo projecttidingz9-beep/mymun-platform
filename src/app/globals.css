@@ -100,6 +100,11 @@ body {
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
+/* Lenis nested scroll (modals, drawers) */
+html.lenis.lenis-smooth [data-lenis-prevent] {
+  overscroll-behavior: contain;
+}
+
 /* Custom Scrollbar */
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }

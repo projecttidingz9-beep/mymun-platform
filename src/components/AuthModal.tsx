@@ -87,6 +87,15 @@ export default function AuthModal({ isOpen, onClose, defaultTab = "signin" }: Au
     return () => document.removeEventListener("keydown", handler);
   }, [onClose]);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [isOpen]);
+
   const completeGoogleSignIn = useCallback(async (credential: string, selectedRole?: "delegate" | "organizer") => {
     if (!credential) return;
     setError("");
@@ -284,17 +293,21 @@ export default function AuthModal({ isOpen, onClose, defaultTab = "signin" }: Au
     <div
       ref={overlayRef}
       onClick={(e) => { if (e.target === overlayRef.current) closeModal(); }}
-      className="fixed inset-0 z-[999] flex items-center justify-center overflow-y-auto overscroll-contain px-4 py-[max(1rem,env(safe-area-inset-top,0px))] pb-[max(1rem,env(safe-area-inset-bottom,0px))]"
+      className="fixed inset-0 z-[999] flex items-center justify-center overflow-hidden px-4 py-[max(1rem,env(safe-area-inset-top,0px))] pb-[max(1rem,env(safe-area-inset-bottom,0px))]"
       style={{ background: "rgba(0,0,0,0.58)", backdropFilter: "blur(10px)" }}
     >
       <div
-        className="w-full max-w-md max-h-[min(92dvh,calc(100dvh-2rem))] overflow-y-auto overscroll-contain rounded-3xl animate-soft-scale my-auto touch-manipulation"
+        className="w-full max-w-md max-h-[min(92dvh,calc(100dvh-2rem))] overflow-hidden rounded-3xl my-auto animate-soft-scale"
         style={{
           background: "linear-gradient(180deg, color-mix(in srgb, var(--bg) 86%, #0f1218 14%), var(--bg))",
           border: "1.5px solid color-mix(in srgb, var(--border) 70%, #d3b07f 30%)",
           boxShadow: "0 24px 80px rgba(0,0,0,0.32)",
         }}
       >
+        <div
+          data-lenis-prevent
+          className="max-h-[min(92dvh,calc(100dvh-2rem))] overflow-y-auto overscroll-contain touch-manipulation"
+        >
         {/* Header */}
         <div
           className="p-8 pb-6"
@@ -601,6 +614,7 @@ export default function AuthModal({ isOpen, onClose, defaultTab = "signin" }: Au
             </button>
           </p>
         </form>
+        </div>
       </div>
     </div>
   );
