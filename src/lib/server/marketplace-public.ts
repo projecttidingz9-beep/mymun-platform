@@ -1,6 +1,7 @@
 import type { Conference } from "@/lib/types";
 import type { CommitteeConfig, Event, OrganizerConferenceConfig, PricingPhaseConfig, User } from "@/generated/prisma/client";
 import { moneyNumber } from "@/lib/server/decimal-money";
+import { decodeOrganizerDescription } from "@/lib/server/organizer-description";
 
 const REGION_BY_COUNTRY: Record<string, Conference["region"]> = {
   india: "Asia",
@@ -93,6 +94,7 @@ export type EventWithListing = Event & {
 
 export function mapPublishedEventToConference(event: EventWithListing): Conference {
   const cfg = event.organizerConfig;
+  const description = decodeOrganizerDescription(cfg?.description);
   const committees = cfg?.committees ?? [];
   const phases = cfg?.pricingPhases ?? [];
   const { location, city, country } = parseVenue(cfg?.venue);
@@ -145,7 +147,7 @@ export function mapPublishedEventToConference(event: EventWithListing): Conferen
     })),
     capacity: capacity || Math.max(registered, 1),
     registered,
-    description: cfg?.description?.trim() || "Details will be posted by the organizer.",
+    description: description || "Details will be posted by the organizer.",
     organizer: event.owner?.name?.trim() || "Organizer",
     organizerEmail: event.owner?.email?.trim() || "",
     website: cfg?.websiteUrl?.trim() || "#",

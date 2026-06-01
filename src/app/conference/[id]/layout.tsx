@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { prisma } from "@/lib/server/prisma";
 import { getSiteUrl } from "@/lib/site-url";
+import { decodeOrganizerDescription } from "@/lib/server/organizer-description";
 
 const site = getSiteUrl();
 
@@ -34,7 +35,7 @@ export async function generateMetadata({
     }
 
     const desc =
-      event.organizerConfig?.description?.trim() ||
+      decodeOrganizerDescription(event.organizerConfig?.description) ||
       `${event.title} — ${event.organizerConfig?.venue || "MUN conference"} · ${event.startDate.toDateString()}`;
 
     const title = `${event.title} | Tidingz`;

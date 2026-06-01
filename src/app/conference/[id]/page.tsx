@@ -47,6 +47,20 @@ const DEFAULT_OVERVIEW_DOCUMENTS = [
   { title: "Background Guide", category: "background-guide", url: "#" },
 ];
 
+const PREVIEW_JSON_PREFIX = "__preview_json__:";
+
+function sanitizeConferenceDescription(value: string | undefined): string {
+  if (!value) return "";
+  const trimmed = value.trim();
+  if (!trimmed.startsWith(PREVIEW_JSON_PREFIX)) return trimmed;
+  try {
+    const parsed = JSON.parse(trimmed.slice(PREVIEW_JSON_PREFIX.length)) as Record<string, unknown>;
+    return typeof parsed.description === "string" ? parsed.description.trim() : "";
+  } catch {
+    return "";
+  }
+}
+
 export default function ConferenceDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -269,6 +283,9 @@ export default function ConferenceDetailPage() {
         .filter(Boolean)
         .join("\n\n")
     : c.description;
+  const safeDisplayDescription =
+    sanitizeConferenceDescription(displayDescription) ||
+    "Conference details will be updated soon.";
   const displayLocation = organizerConference
     ? mergedOrganizerConferences
         .map((entry) => entry.venue || `${entry.city}, ${entry.country}`)
@@ -769,7 +786,7 @@ export default function ConferenceDetailPage() {
                 <h2 className="text-2xl font-bold mb-4" style={{ color: "var(--fg)" }}>
                   About this Conference
                 </h2>
-                <p className="text-base leading-relaxed" style={{ color: "var(--fg-muted)" }}>{displayDescription}</p>
+                <p className="text-base leading-relaxed" style={{ color: "var(--fg-muted)" }}>{safeDisplayDescription}</p>
               </div>
               <div className="lux-card p-6 sm:p-7 space-y-6">
                 <h2 className="text-2xl font-bold" style={{ color: "var(--fg)" }}>Documents</h2>
