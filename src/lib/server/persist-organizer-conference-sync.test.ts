@@ -61,4 +61,12 @@ describe("resolveEventStatusForSync", () => {
   it("allows Review client status to set REVIEW from DRAFT", () => {
     expect(resolveEventStatusForSync("DRAFT", "Review")).toBe("REVIEW");
   });
+
+  it("preserves PUBLISHED when organiser edits with client Published", () => {
+    expect(resolveEventStatusForSync("PUBLISHED", "Published")).toBe("PUBLISHED");
+  });
+
+  it("still maps Draft publish intent to REVIEW from DRAFT", () => {
+    expect(resolveEventStatusForSync("DRAFT", "Published")).toBe("REVIEW");
+  });
 });

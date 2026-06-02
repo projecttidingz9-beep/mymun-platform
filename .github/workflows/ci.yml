@@ -8,6 +8,20 @@ on:
 jobs:
   validate:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: user
+          POSTGRES_PASSWORD: pass
+          POSTGRES_DB: mymun
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U user -d mymun"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     env:
       DATABASE_URL: postgresql://user:pass@localhost:5432/mymun
       DIRECT_URL: postgresql://user:pass@localhost:5432/mymun
@@ -16,6 +30,7 @@ jobs:
       ADMIN_EMAIL: admin@example.com
       NEXT_PUBLIC_SUPABASE_URL: https://ci-placeholder.supabase.co
       NEXT_PUBLIC_SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiJ9.ci-placeholder-signature
+      CI: "true"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -43,6 +58,12 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      - name: Migrate database
+        run: npm run prisma:migrate:deploy
+
+      - name: Seed database
+        run: npm run db:seed
 
       - name: Install Playwright
         run: npx playwright install --with-deps chromium

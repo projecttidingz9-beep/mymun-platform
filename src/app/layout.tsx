@@ -20,7 +20,7 @@ export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: "Tidingz — The Future of Model United Nations",
   description:
-    "Discover, organize, and participate in Model UN conferences worldwide. AI-powered resolution drafting, global marketplace, and seamless delegate management — all in one platform.",
+    "Discover, organize, and participate in Model UN conferences worldwide. Marketplace, registration, delegate passes, QR check-in, and organizer dashboards — all in one platform.",
   keywords: ["Model UN", "MUN", "conferences", "delegates", "resolution", "diplomacy"],
   alternates: {
     canonical: "/",

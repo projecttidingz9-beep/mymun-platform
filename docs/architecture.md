@@ -9,7 +9,7 @@
 
 ## Runtime boundaries
 
-- **`src/proxy.ts`**: Network boundary for cookie/Bearer checks on selected `/api/*` routes (session validity + role hints).
+- **`src/proxy.ts`**: Next.js 16 network boundary (`proxy` export) for cookie/Bearer checks on selected `/api/*` and `/admin/*` routes (JWT role hints). Route handlers still call `validateSessionToken` for DB-backed session version and locks.
 - **`src/lib/server/auth.ts`**: `validateSessionToken` ties JWT claims to `User.sessionVersion` (sign-out everywhere), lockout, and soft-delete.
 - **`src/lib/server/env.ts`**: Zod-validated environment variables; build-time placeholders when secrets are absent during `next build`.
 

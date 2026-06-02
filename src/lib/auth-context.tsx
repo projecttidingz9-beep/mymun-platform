@@ -938,11 +938,26 @@ const AuthContext = createContext<AuthContextType>({
   updateApplicantStatus: () => {},
   toggleApplicantPayment: () => {},
   addAnnouncement: () => {},
-  assignApplicant: () => ({ ok: false, message: "Not implemented" }),
-  moveApplicant: () => ({ ok: false, message: "Not implemented" }),
-  unassignApplicant: () => ({ ok: false, message: "Not implemented" }),
-  waitlistApplicant: () => ({ ok: false, message: "Not implemented" }),
-  inviteApplicant: () => ({ ok: false, message: "Not implemented" }),
+  assignApplicant: () => ({
+    ok: false,
+    message: "Use the Applications tab in your organizer dashboard to allot committees.",
+  }),
+  moveApplicant: () => ({
+    ok: false,
+    message: "Use the Applications tab in your organizer dashboard to move applicants.",
+  }),
+  unassignApplicant: () => ({
+    ok: false,
+    message: "Use the Applications tab in your organizer dashboard to unassign applicants.",
+  }),
+  waitlistApplicant: () => ({
+    ok: false,
+    message: "Use the Applications tab in your organizer dashboard to waitlist applicants.",
+  }),
+  inviteApplicant: () => ({
+    ok: false,
+    message: "Use the Applications tab in your organizer dashboard to invite applicants.",
+  }),
   overrideSeatLimit: () => {},
   notifications: [],
   markNotificationRead: () => {},

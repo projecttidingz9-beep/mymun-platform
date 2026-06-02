@@ -5,7 +5,7 @@ import { consumeRateLimitBucket } from "@/lib/server/rate-limit-db";
 import { getClientIp } from "@/lib/server/request-ip";
 import { newsletterBodySchema } from "@/lib/server/validators/newsletter";
 
-/** Double-opt-in placeholder: stores intent via email to ops inbox until marketing automation is wired. */
+/** Records signup via ops inbox; subscriber receives an acknowledgment only when Resend is configured. */
 export async function POST(request: NextRequest) {
   const raw = await request.json().catch(() => ({}));
   const parsed = newsletterBodySchema.safeParse(raw);
@@ -28,20 +28,37 @@ export async function POST(request: NextRequest) {
   const apiKey = env.resendApiKey();
   const from = env.resendFromEmail();
   if (!apiKey || !from) {
-    return NextResponse.json({ ok: true, note: "Newsletter request noted (email service offline)." });
+    if (env.isProduction()) {
+      return NextResponse.json(
+        { error: "Newsletter signup is temporarily unavailable. Try again later or email support@tidingz.com." },
+        { status: 503 }
+      );
+    }
+    return NextResponse.json({
+      ok: true,
+      message: "Thanks — we saved your interest locally (email service not configured in development).",
+    });
   }
 
   const resend = new Resend(apiKey);
   const support = process.env.NEXT_PUBLIC_SUPPORT_EMAIL?.trim() || "support@tidingz.com";
-  await resend.emails.send({
-    from,
-    to: support,
-    subject: `[Tidingz Newsletter signup] ${email}`,
-    text: `Newsletter signup:\n${email}\n\nReply with confirmation link when automation is ready.`,
-  });
+  await Promise.all([
+    resend.emails.send({
+      from,
+      to: support,
+      subject: `[Tidingz Newsletter signup] ${email}`,
+      text: `Newsletter signup:\n${email}`,
+    }),
+    resend.emails.send({
+      from,
+      to: email,
+      subject: "You're on the Tidingz conference alerts list",
+      text: `Thanks for subscribing to Tidingz conference alerts.\n\nWe'll email you about new conferences and application deadlines. You can reply to this message if you need help.\n\n— Tidingz`,
+    }),
+  ]);
 
   return NextResponse.json({
     ok: true,
-    message: "Check your inbox for a confirmation email — coming soon for production automation.",
+    message: "Thanks for subscribing. Check your inbox for a confirmation from us.",
   });
 }

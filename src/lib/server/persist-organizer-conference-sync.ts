@@ -35,6 +35,10 @@ export function resolveEventStatusForSync(
   const mapped = mapConferenceStatusToEvent(clientStatus, options);
 
   if (clientStatus === "Published") {
+    // Already live: config edits must not demote back to REVIEW for delegates.
+    if (currentDbStatus === "PUBLISHED") {
+      return "PUBLISHED";
+    }
     return mapped;
   }
 
@@ -129,10 +133,17 @@ export async function persistOrganizerConferenceSync(
       throw new Error("OrganizerConferenceConfig missing for event.");
     }
 
+    const venueFromParts = [conference.city, conference.country]
+      .map((part) => part?.trim())
+      .filter(Boolean)
+      .join(", ");
+    const resolvedVenue =
+      conference.venue?.trim() || venueFromParts || null;
+
     await tx.organizerConferenceConfig.update({
       where: { eventId },
       data: {
-        venue: conference.venue ?? null,
+        venue: resolvedVenue,
         logoImageUrl: conference.logoImageUrl ?? null,
         bannerImageUrl: conference.bannerImageUrl ?? null,
         websiteUrl: conference.socialLinks?.website ?? null,

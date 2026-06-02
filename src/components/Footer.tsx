@@ -15,8 +15,16 @@ const LEGAL_LINKS = [
   { label: "Cookie Policy", href: "/legal/cookies" },
 ];
 
-/** Add real profile URLs before showing icons — generic network homepages are misleading. */
-const SOCIAL_LINKS: { label: string; href: string; icon: string }[] = [];
+function socialLinksFromEnv(): { label: string; href: string; icon: string }[] {
+  const links: { label: string; href: string; icon: string }[] = [];
+  const x = process.env.NEXT_PUBLIC_SOCIAL_X_URL?.trim();
+  const linkedin = process.env.NEXT_PUBLIC_SOCIAL_LINKEDIN_URL?.trim();
+  if (x) links.push({ label: "X (Twitter)", href: x, icon: "𝕏" });
+  if (linkedin) links.push({ label: "LinkedIn", href: linkedin, icon: "in" });
+  return links;
+}
+
+const SOCIAL_LINKS = socialLinksFromEnv();
 
 export default function Footer() {
   return (

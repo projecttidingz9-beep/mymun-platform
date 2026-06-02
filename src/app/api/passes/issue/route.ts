@@ -4,6 +4,7 @@ import { hashToken, signPassToken } from "@/lib/server/pass-token";
 import { prisma } from "@/lib/server/prisma";
 import { upsertRegistrationFromClient } from "@/lib/server/registration-sync";
 import { getRequestActor, requireEventOrganizerAccess, requireOrganizer } from "@/lib/server/auth";
+import { requireVerifiedEmail } from "@/lib/server/require-verified-email";
 
 function resolveReleaseAt(startDate: Date, requestedReleaseAt?: string) {
   if (requestedReleaseAt) return new Date(requestedReleaseAt);
@@ -18,6 +19,9 @@ export async function POST(request: NextRequest) {
     if (!requireOrganizer(actor)) {
       return NextResponse.json({ error: "Organizer role required." }, { status: 403 });
     }
+    const verifyBlock = await requireVerifiedEmail(actor);
+    if (verifyBlock) return verifyBlock;
+
     const body = await request.json();
     let registration = await prisma.registration.findUnique({
       where: { id: String(body.registrationId) },

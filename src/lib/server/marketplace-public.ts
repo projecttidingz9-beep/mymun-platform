@@ -1,7 +1,8 @@
-import type { Conference } from "@/lib/types";
+import type { Conference, OrganizerDocument, PublicConferenceDetail } from "@/lib/types";
 import type { CommitteeConfig, Event, OrganizerConferenceConfig, PricingPhaseConfig, User } from "@/generated/prisma/client";
 import { moneyNumber } from "@/lib/server/decimal-money";
 import { decodeOrganizerDescription } from "@/lib/server/organizer-description";
+import { decodeOrganizerStoredBlobRecord } from "@/lib/server/organizer-blob-decode";
 
 const REGION_BY_COUNTRY: Record<string, Conference["region"]> = {
   india: "Asia",
@@ -92,12 +93,26 @@ export type EventWithListing = Event & {
   _count: { registrations: number };
 };
 
+function blobString(blob: Record<string, unknown> | null, key: string): string | undefined {
+  const value = blob?.[key];
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
 export function mapPublishedEventToConference(event: EventWithListing): Conference {
   const cfg = event.organizerConfig;
-  const description = decodeOrganizerDescription(cfg?.description);
+  const blob = decodeOrganizerStoredBlobRecord(cfg?.description);
+  const description =
+    blobString(blob, "description") ?? decodeOrganizerDescription(cfg?.description);
   const committees = cfg?.committees ?? [];
   const phases = cfg?.pricingPhases ?? [];
-  const { location, city, country } = parseVenue(cfg?.venue);
+  const parsedVenue = parseVenue(cfg?.venue);
+  const city = blobString(blob, "city") ?? parsedVenue.city;
+  const country = blobString(blob, "country") ?? parsedVenue.country;
+  const location =
+    blobString(blob, "venue") ??
+    (parsedVenue.location !== "Venue TBA"
+      ? parsedVenue.location
+      : [city, country].filter((part) => part && part !== "—").join(", ") || "Venue TBA");
   const region = inferRegion(country) || inferRegion(city);
 
   const committeePrices = committees
@@ -120,10 +135,22 @@ export function mapPublishedEventToConference(event: EventWithListing): Conferen
     .sort((a, b) => b.getTime() - a.getTime())[0];
 
   const slug = event.slug?.trim() || toSlug(event.title);
+  const blobLevel = blob?.level;
+  const level =
+    blobLevel === "High School" ||
+    blobLevel === "University" ||
+    blobLevel === "Open" ||
+    blobLevel === "Elite" ||
+    blobLevel === "Hybrid"
+      ? blobLevel
+      : "Open";
+  const blobTags = Array.isArray(blob?.tags)
+    ? (blob.tags as unknown[]).map((entry) => String(entry).trim()).filter(Boolean)
+    : [];
 
   return {
     id: event.id,
-    title: event.title,
+    title: blobString(blob, "title") ?? event.title,
     slug,
     location,
     city,
@@ -135,7 +162,7 @@ export function mapPublishedEventToConference(event: EventWithListing): Conferen
     registrationDeadline: latestPhaseEnd ? formatDate(latestPhaseEnd) : formatDate(event.endDate),
     price,
     currency,
-    level: "Open",
+    level,
     committees: committees.map((cm) => ({
       id: cm.id,
       name: cm.name,
@@ -148,17 +175,106 @@ export function mapPublishedEventToConference(event: EventWithListing): Conferen
     capacity: capacity || Math.max(registered, 1),
     registered,
     description: description || "Details will be posted by the organizer.",
-    organizer: event.owner?.name?.trim() || "Organizer",
+    organizer: blobString(blob, "organizerName") || event.owner?.name?.trim() || "Organizer",
     organizerEmail: event.owner?.email?.trim() || "",
-    website: cfg?.websiteUrl?.trim() || "#",
+    website:
+      (typeof blob?.socialLinks === "object" &&
+      blob.socialLinks !== null &&
+      !Array.isArray(blob.socialLinks) &&
+      typeof (blob.socialLinks as Record<string, unknown>).website === "string"
+        ? String((blob.socialLinks as Record<string, unknown>).website).trim()
+        : undefined) ||
+      cfg?.websiteUrl?.trim() ||
+      "#",
     featured: false,
     color: "from-slate-700 to-slate-900",
-    logoImageUrl: cfg?.logoImageUrl ?? undefined,
-    bannerImageUrl: event.coverImageUrl ?? cfg?.bannerImageUrl ?? undefined,
+    logoImageUrl: blobString(blob, "logoImageUrl") ?? cfg?.logoImageUrl ?? undefined,
+    bannerImageUrl:
+      blobString(blob, "bannerImageUrl") ?? event.coverImageUrl ?? cfg?.bannerImageUrl ?? undefined,
     tags:
-      committees.length > 0
-        ? committees.slice(0, 3).map((c) => c.name)
-        : ["Model UN", "Published"],
+      blobTags.length > 0
+        ? blobTags
+        : committees.length > 0
+          ? committees.slice(0, 3).map((c) => c.name)
+          : ["Model UN", "Published"],
     statusBadgeLabel: statusBadge(event.endDate, committees, phases),
+  };
+}
+
+export type PublicReviewRow = {
+  id: string;
+  userName: string;
+  rating: number;
+  comment: string;
+  featured?: boolean;
+  createdAt?: string;
+};
+
+function normalizeBlobDocuments(blob: Record<string, unknown> | null): OrganizerDocument[] | undefined {
+  if (!Array.isArray(blob?.commonDocuments)) return undefined;
+  const docs: OrganizerDocument[] = [];
+  for (const entry of blob.commonDocuments as unknown[]) {
+    if (!entry || typeof entry !== "object") continue;
+    const item = entry as Record<string, unknown>;
+    const url = typeof item.url === "string" ? item.url.trim() : "";
+    if (!url || url === "#") continue;
+    docs.push({
+      id: String(item.id || `doc-${docs.length}`),
+      title: String(item.title || "Document"),
+      category:
+        item.category === "background-guide" ||
+        item.category === "guidelines" ||
+        item.category === "rules" ||
+        item.category === "other"
+          ? item.category
+          : "other",
+      sourceType: item.sourceType === "upload" ? "upload" : "url",
+      url,
+      fileName: typeof item.fileName === "string" ? item.fileName : undefined,
+      mimeType: typeof item.mimeType === "string" ? item.mimeType : undefined,
+    });
+  }
+  return docs.length > 0 ? docs : undefined;
+}
+
+export function mapPublishedEventToPublicDetail(
+  event: EventWithListing,
+  options?: { approvedReviews?: PublicReviewRow[] }
+): PublicConferenceDetail {
+  const base = mapPublishedEventToConference(event);
+  const blob = decodeOrganizerStoredBlobRecord(event.organizerConfig?.description);
+  const socialRaw =
+    blob && typeof blob.socialLinks === "object" && blob.socialLinks !== null && !Array.isArray(blob.socialLinks)
+      ? (blob.socialLinks as Record<string, unknown>)
+      : null;
+
+  return {
+    ...base,
+    whatIsIncluded: Array.isArray(blob?.whatIsIncluded)
+      ? (blob.whatIsIncluded as unknown[]).map((entry) => String(entry).trim()).filter(Boolean)
+      : undefined,
+    conferenceSchedule: Array.isArray(blob?.conferenceSchedule)
+      ? (blob.conferenceSchedule as PublicConferenceDetail["conferenceSchedule"])
+      : undefined,
+    termsAndConditions: blobString(blob, "termsAndConditions"),
+    refundPolicy: blobString(blob, "refundPolicy"),
+    codeOfConduct: blobString(blob, "codeOfConduct"),
+    faqNotes: blobString(blob, "faqNotes"),
+    organizerName: blobString(blob, "organizerName"),
+    socialLinks: socialRaw
+      ? {
+          website: typeof socialRaw.website === "string" ? socialRaw.website : undefined,
+          instagram: typeof socialRaw.instagram === "string" ? socialRaw.instagram : undefined,
+          linkedin: typeof socialRaw.linkedin === "string" ? socialRaw.linkedin : undefined,
+          twitter: typeof socialRaw.twitter === "string" ? socialRaw.twitter : undefined,
+        }
+      : {
+          website: event.organizerConfig?.websiteUrl ?? undefined,
+          instagram: event.organizerConfig?.instagramUrl ?? undefined,
+          linkedin: event.organizerConfig?.linkedinUrl ?? undefined,
+          twitter: event.organizerConfig?.twitterUrl ?? undefined,
+        },
+    commonDocuments: normalizeBlobDocuments(blob),
+    reviews: options?.approvedReviews?.length ? options.approvedReviews : undefined,
   };
 }

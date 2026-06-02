@@ -28,7 +28,16 @@ export async function POST(request: NextRequest) {
   const apiKey = env.resendApiKey();
   const from = env.resendFromEmail();
   if (!apiKey || !from) {
-    return NextResponse.json({ ok: true, note: "Email not configured; message discarded." });
+    if (env.isProduction()) {
+      return NextResponse.json(
+        { error: "Contact form is temporarily unavailable. Email support@tidingz.com directly." },
+        { status: 503 }
+      );
+    }
+    return NextResponse.json(
+      { ok: true, note: "Email not configured in development; message not sent." },
+      { status: 202 }
+    );
   }
 
   const resend = new Resend(apiKey);

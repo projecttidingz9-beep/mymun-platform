@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Resend } from "resend";
+import { buildOrganizerStatusEmailHtml } from "@/lib/server/organizer-status-email-html";
 import { prisma } from "@/lib/server/prisma";
 import { env } from "@/lib/server/env";
 import {
@@ -23,14 +24,6 @@ const renderTemplate = (template: string, context: EmailRenderContext) =>
     const value = context[key];
     return value === undefined || value === null ? "" : String(value);
   });
-
-const toSimpleHtml = (text: string) => {
-  const escaped = text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-  return `<div style="font-family:Arial,sans-serif;white-space:pre-wrap;">${escaped}</div>`;
-};
 
 const HOURLY_EMAILS_PER_EVENT = 100;
 
@@ -96,6 +89,12 @@ export async function POST(request: NextRequest) {
 
     const subject = renderTemplate(subjectTemplate, context).trim();
     const text = renderTemplate(bodyTemplate, context).trim();
+    const delegateName =
+      String(context.applicantName || "").trim() ||
+      to.split("@")[0] ||
+      "Delegate";
+    const conferenceTitle = String(context.conferenceTitle || "Your conference").trim();
+    const statusLine = String(context.status || "Application update").trim();
 
     if (!subject || !text) {
       return NextResponse.json(
@@ -110,7 +109,12 @@ export async function POST(request: NextRequest) {
       to,
       subject,
       text,
-      html: toSimpleHtml(text),
+      html: buildOrganizerStatusEmailHtml({
+        delegateName,
+        conferenceTitle,
+        statusLine,
+        bodyText: text,
+      }),
     });
 
     const actorUserId = await resolveActorUserId(actor);

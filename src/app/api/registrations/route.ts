@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { prisma } from "@/lib/server/prisma";
 import { getRequestActor } from "@/lib/server/auth";
+import { requireVerifiedEmail } from "@/lib/server/require-verified-email";
 import { resolveServerRegistrationAmount } from "@/lib/server/resolve-registration-price";
 import {
   createRegistrationAndPayment,
@@ -16,6 +17,9 @@ export async function POST(request: NextRequest) {
   if (actor.role === "organizer") {
     return NextResponse.json({ error: "Organizers cannot register as delegates." }, { status: 403 });
   }
+
+  const verifyBlock = await requireVerifiedEmail(actor);
+  if (verifyBlock) return verifyBlock;
 
   try {
     const body = await request.json();

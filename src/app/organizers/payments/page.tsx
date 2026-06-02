@@ -101,7 +101,7 @@ export default function OrganizerPaymentsPage() {
         <h1 className="text-3xl font-semibold tracking-tight">Manual payment intents</h1>
         <p className="mt-2 max-w-2xl text-sm" style={{ color: "var(--fg-muted)" }}>
           Track manual / offline payment requests raised during checkout. Confirm payouts in your banking app,
-          then mark registrations paid from your ops workflow (API hooks coming soon).
+          then mark registrations paid from the Transactions section in your organizer dashboard.
         </p>
 
         <div className="mt-8 flex flex-col sm:flex-row gap-3 sm:items-center">

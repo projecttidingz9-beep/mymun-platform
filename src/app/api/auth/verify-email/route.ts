@@ -1,12 +1,20 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { verifyEmailWithToken } from "@/lib/server/email-verification";
+import { getSiteUrl } from "@/lib/site-url";
 
-/** Placeholder — wire Resend + verification tokens when outbound email is production-ready. */
-export async function GET() {
-  return NextResponse.json(
-    {
-      error: "Email verification is not enabled yet.",
-      hint: "Contact support if you need to confirm your account.",
-    },
-    { status: 501 }
-  );
+export async function GET(request: NextRequest) {
+  const token = request.nextUrl.searchParams.get("token")?.trim();
+  if (!token) {
+    return NextResponse.json({ error: "Verification token is required." }, { status: 400 });
+  }
+
+  const result = await verifyEmailWithToken(token);
+  if (!result.ok) {
+    const dashboard = `${getSiteUrl()}/dashboard`;
+    return NextResponse.redirect(
+      new URL(`/dashboard?verify=failed`, getSiteUrl())
+    );
+  }
+
+  return NextResponse.redirect(new URL("/dashboard?verified=1", getSiteUrl()));
 }

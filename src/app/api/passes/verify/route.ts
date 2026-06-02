@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getRequestActor } from "@/lib/server/auth";
 import { hashToken, verifyPassToken } from "@/lib/server/pass-token";
-import { isRateLimited } from "@/lib/server/rate-limit";
+import { consumeRateLimitBucket } from "@/lib/server/rate-limit-db";
 import { prisma } from "@/lib/server/prisma";
 
 export async function POST(request: NextRequest) {
@@ -10,8 +10,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized actor." }, { status: 401 });
   }
 
-  const rateKey = `${actor?.email || "unknown"}:verify`;
-  if (isRateLimited(rateKey, 120, 60_000)) {
+  const rateKey = `passes:verify:${actor.email}`;
+  const rateOk = await consumeRateLimitBucket({
+    key: rateKey,
+    windowMs: 60_000,
+    limit: 120,
+  });
+  if (!rateOk) {
     return NextResponse.json({ error: "Rate limit exceeded." }, { status: 429 });
   }
 

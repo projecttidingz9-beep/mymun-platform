@@ -7,6 +7,10 @@ import { signSessionToken } from "@/lib/server/session-token";
 import { prismaUserRoleToSession } from "@/lib/server/user-role";
 import { registerBodySchema } from "@/lib/server/validators/auth";
 import { logger } from "@/lib/server/logger";
+import {
+  createEmailVerificationToken,
+  sendVerificationEmail,
+} from "@/lib/server/email-verification";
 
 export async function POST(request: NextRequest) {
   try {
@@ -47,9 +51,15 @@ export async function POST(request: NextRequest) {
         name,
         role: role === "organizer" ? "ORGANIZER" : "DELEGATE",
         passwordHash,
+        emailVerified: false,
       },
       select: { id: true, email: true, name: true, role: true, sessionVersion: true },
     });
+
+    const rawVerify = await createEmailVerificationToken(user.id);
+    if (rawVerify) {
+      await sendVerificationEmail(user.email, rawVerify);
+    }
 
     const sessionRole = prismaUserRoleToSession(user.role);
     const token = await signSessionToken({
@@ -63,6 +73,7 @@ export async function POST(request: NextRequest) {
       ok: true,
       name: user.name,
       role: sessionRole,
+      emailVerificationRequired: true,
     });
     response.cookies.set("mymun_session", token, {
       httpOnly: true,

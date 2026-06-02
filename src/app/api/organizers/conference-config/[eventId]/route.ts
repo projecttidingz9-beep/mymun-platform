@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getRequestActor, requireEventOrganizerAccess, requireOrganizer, resolveActorUserId } from "@/lib/server/auth";
 import { getOrganizerPreviewConfig, mergeOrganizerStoredBlob } from "@/lib/server/organizer-config-store";
+import { prisma } from "@/lib/server/prisma";
 
 export async function GET(
   request: NextRequest,
@@ -109,6 +110,90 @@ export async function PATCH(
   };
 
   await mergeOrganizerStoredBlob(eventId, previewPatch);
+
+  const venueFromParts = [previewPatch.city, previewPatch.country]
+    .map((part) => (typeof part === "string" ? part.trim() : ""))
+    .filter(Boolean)
+    .join(", ");
+  const resolvedVenue =
+    (typeof previewPatch.venue === "string" ? previewPatch.venue.trim() : "") ||
+    venueFromParts ||
+    null;
+
+  const relationalPatch: {
+    title?: string;
+    startDate?: Date;
+    endDate?: Date;
+    coverImageUrl?: string | null;
+    venue?: string | null;
+    logoImageUrl?: string | null;
+    bannerImageUrl?: string | null;
+    websiteUrl?: string | null;
+    instagramUrl?: string | null;
+    linkedinUrl?: string | null;
+    twitterUrl?: string | null;
+    brandPrimaryColor?: string | null;
+    brandSecondaryColor?: string | null;
+  } = {};
+
+  if (typeof previewPatch.title === "string" && previewPatch.title.trim()) {
+    relationalPatch.title = previewPatch.title.trim();
+  }
+  if (typeof previewPatch.startDate === "string" && previewPatch.startDate) {
+    relationalPatch.startDate = new Date(previewPatch.startDate);
+  }
+  if (typeof previewPatch.endDate === "string" && previewPatch.endDate) {
+    relationalPatch.endDate = new Date(previewPatch.endDate);
+  }
+  if (typeof previewPatch.bannerImageUrl === "string") {
+    relationalPatch.coverImageUrl = previewPatch.bannerImageUrl.trim() || null;
+    relationalPatch.bannerImageUrl = previewPatch.bannerImageUrl.trim() || null;
+  }
+  if (resolvedVenue) {
+    relationalPatch.venue = resolvedVenue;
+  }
+  if (typeof previewPatch.logoImageUrl === "string") {
+    relationalPatch.logoImageUrl = previewPatch.logoImageUrl.trim() || null;
+  }
+  const social = previewPatch.socialLinks;
+  if (social && typeof social === "object" && !Array.isArray(social)) {
+    const links = social as Record<string, unknown>;
+    if (typeof links.website === "string") relationalPatch.websiteUrl = links.website.trim() || null;
+    if (typeof links.instagram === "string") relationalPatch.instagramUrl = links.instagram.trim() || null;
+    if (typeof links.linkedin === "string") relationalPatch.linkedinUrl = links.linkedin.trim() || null;
+    if (typeof links.twitter === "string") relationalPatch.twitterUrl = links.twitter.trim() || null;
+  }
+  if (typeof previewPatch.brandPrimaryColor === "string") {
+    relationalPatch.brandPrimaryColor = previewPatch.brandPrimaryColor.trim() || null;
+  }
+  if (typeof previewPatch.brandSecondaryColor === "string") {
+    relationalPatch.brandSecondaryColor = previewPatch.brandSecondaryColor.trim() || null;
+  }
+
+  if (Object.keys(relationalPatch).length > 0) {
+    const { title, startDate, endDate, coverImageUrl, ...configFields } = relationalPatch;
+    if (title || startDate || endDate || coverImageUrl !== undefined) {
+      await prisma.event.update({
+        where: { id: eventId },
+        data: {
+          ...(title ? { title } : {}),
+          ...(startDate ? { startDate } : {}),
+          ...(endDate ? { endDate } : {}),
+          ...(coverImageUrl !== undefined ? { coverImageUrl } : {}),
+        },
+      });
+    }
+    const configUpdate = Object.fromEntries(
+      Object.entries(configFields).filter(([, value]) => value !== undefined)
+    );
+    if (Object.keys(configUpdate).length > 0) {
+      await prisma.organizerConferenceConfig.update({
+        where: { eventId },
+        data: configUpdate,
+      });
+    }
+  }
+
   const saved = await getOrganizerPreviewConfig(eventId);
 
   return NextResponse.json({ config: saved });

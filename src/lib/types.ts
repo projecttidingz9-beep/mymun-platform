@@ -136,6 +136,44 @@ export interface Conference {
   statusBadgeLabel?: string;
 }
 
+/** Extended public fields for delegate conference detail (from organizer preview blob). */
+export interface PublicConferenceDetail extends Conference {
+  whatIsIncluded?: string[];
+  conferenceSchedule?: Array<{
+    id: string;
+    day: string;
+    fromTime: string;
+    toTime: string;
+    title: string;
+  }>;
+  termsAndConditions?: string;
+  refundPolicy?: string;
+  codeOfConduct?: string;
+  faqNotes?: string;
+  organizerName?: string;
+  awards?: Array<{
+    id: string;
+    category: string;
+    prizeTitle?: string;
+    description?: string;
+  }>;
+  socialLinks?: {
+    website?: string;
+    instagram?: string;
+    linkedin?: string;
+    twitter?: string;
+  };
+  commonDocuments?: OrganizerDocument[];
+  reviews?: Array<{
+    id: string;
+    userName: string;
+    rating: number;
+    comment: string;
+    featured?: boolean;
+    createdAt?: string;
+  }>;
+}
+
 export interface User {
   id: string;
   name: string;

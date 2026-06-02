@@ -137,6 +137,18 @@ export function resetEnvCacheForTests() {
   cached = null;
 }
 
+/** Throws in production if transactional email is not configured. */
+export function assertResendConfiguredForProduction() {
+  if (process.env.NODE_ENV !== "production") return;
+  const apiKey = getParsedEnv().RESEND_API_KEY;
+  const from = getParsedEnv().RESEND_FROM_EMAIL;
+  if (!apiKey || !from) {
+    throw new Error(
+      "RESEND_API_KEY and RESEND_FROM_EMAIL are required in production. Contact and verification emails cannot be sent without them."
+    );
+  }
+}
+
 export const env = {
   databaseUrl: () => getParsedEnv().databaseUrl,
   directDatabaseUrl: () => getParsedEnv().directDatabaseUrl,
@@ -148,4 +160,5 @@ export const env = {
   resendApiKey: () => getParsedEnv().RESEND_API_KEY,
   resendFromEmail: () => getParsedEnv().RESEND_FROM_EMAIL,
   sentryDsn: () => getParsedEnv().SENTRY_DSN,
+  isProduction: () => getParsedEnv().NODE_ENV === "production",
 };

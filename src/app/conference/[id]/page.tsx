@@ -7,7 +7,7 @@ import Image from "next/image";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import AuthModal from "@/components/AuthModal";
-import type { Conference } from "@/lib/types";
+import type { Conference, PublicConferenceDetail } from "@/lib/types";
 import { useAuth } from "@/lib/auth-context";
 import { getCategoryStartingPrice, getActivePhase, getPhaseStatus } from "@/lib/pricing";
 import {
@@ -41,11 +41,7 @@ const DEFAULT_OVERVIEW_AWARDS = [
   "Honorable Mention",
 ];
 
-const DEFAULT_OVERVIEW_DOCUMENTS = [
-  { title: "Conference Handbook", category: "guidelines", url: "#" },
-  { title: "Rules of Procedure", category: "rules", url: "#" },
-  { title: "Background Guide", category: "background-guide", url: "#" },
-];
+const DEFAULT_OVERVIEW_DOCUMENTS: { title: string; category: string; url: string }[] = [];
 
 const PREVIEW_JSON_PREFIX = "__preview_json__:";
 
@@ -93,6 +89,7 @@ export default function ConferenceDetailPage() {
 
   const eventKey = String(params.id ?? "");
   const [catalogConference, setCatalogConference] = useState<Conference | null>(null);
+  const [publicDetail, setPublicDetail] = useState<PublicConferenceDetail | null>(null);
   const [catalogLoading, setCatalogLoading] = useState(true);
 
   useEffect(() => {
@@ -100,14 +97,28 @@ export default function ConferenceDetailPage() {
     (async () => {
       setCatalogLoading(true);
       try {
-        const res = await fetch("/api/marketplace", { cache: "no-store" });
-        const data = (await res.json()) as { conferences?: Conference[] };
-        const list = Array.isArray(data.conferences) ? data.conferences : [];
+        const [listRes, detailRes] = await Promise.all([
+          fetch("/api/marketplace", { cache: "no-store" }),
+          fetch(`/api/marketplace/${encodeURIComponent(eventKey)}`, { cache: "no-store" }),
+        ]);
+        const listData = (await listRes.json()) as { conferences?: Conference[] };
+        const list = Array.isArray(listData.conferences) ? listData.conferences : [];
         const match =
           list.find((c) => c.id === eventKey || c.slug === eventKey) ?? null;
-        if (!cancelled) setCatalogConference(match);
+        let detail: PublicConferenceDetail | null = null;
+        if (detailRes.ok) {
+          const detailData = (await detailRes.json()) as { conference?: PublicConferenceDetail };
+          detail = detailData.conference ?? null;
+        }
+        if (!cancelled) {
+          setPublicDetail(detail);
+          setCatalogConference(match ?? detail);
+        }
       } catch {
-        if (!cancelled) setCatalogConference(null);
+        if (!cancelled) {
+          setCatalogConference(null);
+          setPublicDetail(null);
+        }
       } finally {
         if (!cancelled) setCatalogLoading(false);
       }
@@ -244,7 +255,10 @@ export default function ConferenceDetailPage() {
           .filter((review) => review.status === "approved")
           .map((review) => ({ ...review, sourceConferenceTitle: entry.title }))
       )
-    : [];
+    : (publicDetail?.reviews || []).map((review) => ({
+        ...review,
+        sourceConferenceTitle: c.title,
+      }));
   const dynamicStartingPrice = organizerConference
     ? mergedRegistrationCategories.length > 0
       ? Math.min(
@@ -276,7 +290,7 @@ export default function ConferenceDetailPage() {
     : c.title;
   const displayOrganizerName = organizerConference
     ? organizerConference.organizerName
-    : c.organizer;
+    : publicDetail?.organizerName || c.organizer;
   const displayDescription = organizerConference
     ? mergedOrganizerConferences
         .map((entry) => entry.description)
@@ -292,10 +306,16 @@ export default function ConferenceDetailPage() {
         .join(" | ")
     : c.location;
   const displayOrganizerEmail = c.organizerEmail;
-  const displayWebsite = organizerConference?.socialLinks?.website || c.website;
-  const displayInstagram = organizerConference?.socialLinks?.instagram;
-  const displayLinkedin = organizerConference?.socialLinks?.linkedin;
-  const displayTwitter = organizerConference?.socialLinks?.twitter;
+  const displayWebsite =
+    organizerConference?.socialLinks?.website ||
+    publicDetail?.socialLinks?.website ||
+    c.website;
+  const displayInstagram =
+    organizerConference?.socialLinks?.instagram || publicDetail?.socialLinks?.instagram;
+  const displayLinkedin =
+    organizerConference?.socialLinks?.linkedin || publicDetail?.socialLinks?.linkedin;
+  const displayTwitter =
+    organizerConference?.socialLinks?.twitter || publicDetail?.socialLinks?.twitter;
   const editableTags = Array.from(new Set([...c.tags, ...addedTags]));
   const heroBannerImage = resolveConferenceBannerImage({ conference: c, organizerConference });
   const heroLogoImage = organizerConference?.logoImageUrl || c.logoImageUrl;
@@ -313,7 +333,12 @@ export default function ConferenceDetailPage() {
         { key: "conduct", label: "Code of Conduct", value: organizerConference.codeOfConduct || "" },
         { key: "faq", label: "FAQ / Additional Notes", value: organizerConference.faqNotes || "" },
       ].filter((entry) => entry.value.trim().length > 0)
-    : [];
+    : [
+        { key: "terms", label: "Terms and Conditions", value: publicDetail?.termsAndConditions || "" },
+        { key: "refund", label: "Refund / Cancellation Policy", value: publicDetail?.refundPolicy || "" },
+        { key: "conduct", label: "Code of Conduct", value: publicDetail?.codeOfConduct || "" },
+        { key: "faq", label: "FAQ / Additional Notes", value: publicDetail?.faqNotes || "" },
+      ].filter((entry) => entry.value.trim().length > 0);
   const commonDocuments = organizerConference
     ? mergedOrganizerConferences.flatMap((entry) =>
         (entry.commonDocuments || []).map((document) => ({
@@ -321,7 +346,10 @@ export default function ConferenceDetailPage() {
           sourceConferenceTitle: entry.title,
         }))
       )
-    : [];
+    : (publicDetail?.commonDocuments || []).map((document) => ({
+        ...document,
+        sourceConferenceTitle: c.title,
+      }));
   const committeeDocumentGroups = organizerConference
     ? mergedOrganizerConferences.flatMap((entry) =>
         entry.committees
@@ -340,18 +368,37 @@ export default function ConferenceDetailPage() {
           (award) => `${award.category}: ${award.prizeTitle || "Award"}`
         )
       : DEFAULT_OVERVIEW_AWARDS;
-  const fallbackOverviewDocuments =
+  const fallbackOverviewDocuments = (
     commonDocuments.length > 0
       ? commonDocuments
       : DEFAULT_OVERVIEW_DOCUMENTS.map((document, index) => ({
           id: `default-doc-${index}`,
           sourceConferenceTitle: displayTitle,
           ...document,
-        }));
+        }))
+  ).filter((document) => {
+    const url = "url" in document ? String(document.url || "").trim() : "";
+    return url.length > 0 && url !== "#";
+  });
+  const delegateWhatsIncluded =
+    publicDetail?.whatIsIncluded && publicDetail.whatIsIncluded.length > 0
+      ? publicDetail.whatIsIncluded
+      : DEFAULT_WHATS_INCLUDED;
   const displayWhatsIncluded =
     organizerConference && (organizerConference.whatIsIncluded || []).length > 0
       ? organizerConference.whatIsIncluded || []
-      : DEFAULT_WHATS_INCLUDED;
+      : delegateWhatsIncluded;
+  const delegateSchedule =
+    publicDetail?.conferenceSchedule && publicDetail.conferenceSchedule.length > 0
+      ? Object.entries(
+          publicDetail.conferenceSchedule.reduce<Record<string, string[]>>((acc, entry) => {
+            const day = entry.day || "Day";
+            const line = `${entry.fromTime} — ${entry.title}${entry.toTime ? ` (${entry.toTime})` : ""}`;
+            acc[day] = [...(acc[day] || []), line];
+            return acc;
+          }, {})
+        ).map(([day, events]) => ({ day, events }))
+      : SCHEDULE;
   const scheduleGroups =
     organizerConference && (organizerConference.conferenceSchedule || []).length > 0
       ? Object.entries(
@@ -362,7 +409,7 @@ export default function ConferenceDetailPage() {
             return acc;
           }, {})
         ).map(([day, events]) => ({ day, events }))
-      : SCHEDULE;
+      : delegateSchedule;
 
   const defaultStats: Record<string, string | number> = {
     Committees: organizerConference ? mergedCommittees.length : c.committees.length,
@@ -401,7 +448,9 @@ export default function ConferenceDetailPage() {
   const localPendingReviews = organizerConference
     ? (organizerConference.reviews || []).filter((review) => review.status === "pending")
     : [];
-  const reviewsToShow = organizerConference ? [...instantReviews, ...localPendingReviews, ...mergedReviews] : instantReviews;
+  const reviewsToShow = organizerConference
+    ? [...instantReviews, ...localPendingReviews, ...mergedReviews]
+    : [...mergedReviews, ...instantReviews];
   const averageRating = reviewsToShow.length
     ? (
         reviewsToShow.reduce((sum, review) => sum + Math.max(1, Math.min(5, Number(review.rating) || 0)), 0) /
@@ -1249,24 +1298,24 @@ export default function ConferenceDetailPage() {
                   </div>
                 )}
               </div>
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.2em] mb-3" style={{ color: "var(--fg-muted)" }}>
-                  Additional Organizers
-                </p>
-                <div className="grid sm:grid-cols-2 gap-2">
-                  {((organizerConference?.organizerTeam || []).length > 0
-                    ? organizerConference?.organizerTeam || []
-                    : [{ id: "placeholder-org", name: "Operations Team", role: "Lead Organizer", email: displayOrganizerEmail }]).map((member) => (
-                    <div key={member.id} className="rounded-xl px-3 py-3 conference-surface">
-                      <p className="text-sm font-semibold" style={{ color: "var(--fg)" }}>{member.name}</p>
-                      <p className="text-xs" style={{ color: "var(--fg-muted)" }}>{member.role}</p>
-                      {"email" in member && member.email && (
-                        <p className="text-xs mt-1" style={{ color: "var(--fg-muted)" }}>{member.email}</p>
-                      )}
-                    </div>
-                  ))}
+              {(organizerConference?.organizerTeam || []).length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] mb-3" style={{ color: "var(--fg-muted)" }}>
+                    Additional Organizers
+                  </p>
+                  <div className="grid sm:grid-cols-2 gap-2">
+                    {(organizerConference?.organizerTeam || []).map((member) => (
+                      <div key={member.id} className="rounded-xl px-3 py-3 conference-surface">
+                        <p className="text-sm font-semibold" style={{ color: "var(--fg)" }}>{member.name}</p>
+                        <p className="text-xs" style={{ color: "var(--fg-muted)" }}>{member.role}</p>
+                        {"email" in member && member.email && (
+                          <p className="text-xs mt-1" style={{ color: "var(--fg-muted)" }}>{member.email}</p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
               <button className="btn btn-ghost w-full">Contact Organizer</button>
             </div>
           </div>

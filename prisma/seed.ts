@@ -38,6 +38,7 @@ async function main() {
       name: "Tidingz Admin",
       role: "ADMIN",
       passwordHash,
+      emailVerified: true,
     },
   });
 
@@ -47,6 +48,7 @@ async function main() {
       name: "Priya Organizer",
       role: "ORGANIZER",
       passwordHash,
+      emailVerified: true,
     },
   });
 
@@ -56,6 +58,7 @@ async function main() {
       name: "Alex Organizer",
       role: "ORGANIZER",
       passwordHash,
+      emailVerified: true,
     },
   });
 
@@ -67,6 +70,7 @@ async function main() {
           name: `Delegate ${i + 1}`,
           role: "DELEGATE",
           passwordHash,
+          emailVerified: true,
         },
       })
     )
@@ -75,6 +79,37 @@ async function main() {
   const eventId = "evt-seed-global-summit-2026";
   const start = new Date("2026-09-01T09:00:00.000Z");
   const end = new Date("2026-09-03T18:00:00.000Z");
+  const PREVIEW_JSON_PREFIX = "__preview_json__:";
+  const previewBlob = {
+    title: "Global Summit MUN 2026",
+    city: "Bengaluru",
+    country: "India",
+    organizerName: "Priya Organizer",
+    description: "Premier Model UN hosted on Tidingz (seed data).",
+    whatIsIncluded: ["Committee materials", "Opening & closing ceremonies", "Delegate kit"],
+    conferenceSchedule: [
+      {
+        id: "seed-schedule-1",
+        day: "Day 1",
+        fromTime: "09:00",
+        toTime: "10:30",
+        title: "Opening Ceremony",
+      },
+    ],
+    termsAndConditions: "Seed terms and conditions for E2E verification.",
+    refundPolicy: "Full refund until 30 days before the conference.",
+    commonDocuments: [
+      {
+        id: "seed-doc-handbook",
+        title: "Delegate Handbook",
+        category: "guidelines",
+        sourceType: "url",
+        url: "https://example.com/seed-delegate-handbook.pdf",
+      },
+    ],
+    level: "University",
+    tags: ["Global", "University"],
+  };
 
   await prisma.event.create({
     data: {
@@ -89,8 +124,8 @@ async function main() {
       ownerUserId: org1.id,
       organizerConfig: {
         create: {
-          description: "Premier Model UN hosted on Tidingz (seed data).",
-          venue: "International Convention Centre, Bengaluru",
+          description: `${PREVIEW_JSON_PREFIX}${JSON.stringify(previewBlob)}`,
+          venue: "International Convention Centre, Bengaluru, India",
           paymentUpi: "tidingz.demo@paytm",
           paymentBankHint: "Tidingz Demo Bank • A/C ****4242",
           paymentNotesMarkdown: "Use UPI or bank transfer. Include your registration ID in the reference.",
@@ -251,6 +286,17 @@ async function main() {
       { userId: delegates[0].id, notificationType: "PASS_RELEASED", emailEnabled: true, inAppEnabled: true },
     ],
     skipDuplicates: true,
+  });
+
+  await prisma.conferenceReview.create({
+    data: {
+      eventId,
+      userId: delegates[0].id,
+      rating: 5,
+      comment: "Excellent committees and hospitality (seed review).",
+      status: "approved",
+      featured: true,
+    },
   });
 
   await prisma.auditLog.create({

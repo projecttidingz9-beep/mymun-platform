@@ -165,6 +165,7 @@ export default function Navbar({ openAuthModal }: NavbarProps) {
   return (
     <>
       <nav
+        aria-label="Main navigation"
         className={`fixed top-0 w-full z-50 pt-[env(safe-area-inset-top,0px)] transition-all duration-300 ${
           scrolled ? "glass shadow-md shadow-black/5" : "bg-transparent"
         }`}
@@ -188,6 +189,7 @@ export default function Navbar({ openAuthModal }: NavbarProps) {
                 key={`${l.href}-inline`}
                 href={l.href}
                 data-active={isActive(l.href) ? "true" : "false"}
+                aria-current={isActive(l.href) ? "page" : undefined}
                 className="nav-link-lux px-3 py-2 rounded-xl text-sm font-medium transition-all"
               >
                 {l.label}
@@ -202,6 +204,7 @@ export default function Navbar({ openAuthModal }: NavbarProps) {
                 key={l.href}
                 href={l.href}
                 data-active={isActive(l.href) ? "true" : "false"}
+                aria-current={isActive(l.href) ? "page" : undefined}
                 className="nav-link-lux px-4 py-2 rounded-xl text-sm font-medium transition-all"
               >
                 {l.label}
@@ -221,6 +224,7 @@ export default function Navbar({ openAuthModal }: NavbarProps) {
                   border: "1.5px solid var(--border)",
                   color: "var(--fg-muted)",
                 }}
+                aria-label={showDarkModeOnIcon ? "Switch to light mode" : "Switch to dark mode"}
                 title="Toggle dark mode"
               >
                 {showDarkModeOnIcon ? (
@@ -242,6 +246,9 @@ export default function Navbar({ openAuthModal }: NavbarProps) {
                 <button
                   type="button"
                   onClick={() => setUserMenuOpen((p) => !p)}
+                  aria-expanded={userMenuOpen}
+                  aria-haspopup="menu"
+                  aria-label="Account menu"
                   className="flex items-center gap-2 px-3 py-2 rounded-xl transition-all min-h-[44px] sm:min-h-0 touch-manipulation"
                   style={{ background: "color-mix(in srgb, var(--bg) 84%, transparent 16%)", border: "1.5px solid var(--border)" }}
                 >
@@ -392,7 +399,9 @@ export default function Navbar({ openAuthModal }: NavbarProps) {
             {/* Mobile hamburger */}
             <button
               type="button"
+              id="mobile-nav-toggle"
               aria-expanded={mobileOpen}
+              aria-controls="mobile-nav-drawer"
               aria-label={mobileOpen ? "Close menu" : "Open menu"}
               className="md:hidden w-11 h-11 shrink-0 rounded-xl flex items-center justify-center touch-manipulation"
               style={{ background: "color-mix(in srgb, var(--bg) 86%, transparent 14%)", border: "1.5px solid var(--border)" }}
@@ -428,6 +437,7 @@ export default function Navbar({ openAuthModal }: NavbarProps) {
         {/* Mobile drawer */}
         {mobileOpen && (
           <div
+            id="mobile-nav-drawer"
             className="md:hidden px-4 sm:px-6 pb-[max(1.5rem,env(safe-area-inset-bottom,0px))] animate-slide-down max-h-[min(70vh,calc(100dvh-5rem))] overflow-y-auto overscroll-contain"
             style={{
               background: "var(--bg)",

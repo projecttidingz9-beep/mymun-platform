@@ -11,6 +11,8 @@ import ScrollShell from "@/components/ScrollShell";
 import Reveal from "@/components/Reveal";
 import WebGLLoader from "@/components/3d/WebGLLoader";
 import { useAuth } from "@/lib/auth-context";
+import ConferenceCard from "@/components/ConferenceCard";
+import type { Conference } from "@/lib/types";
 
 const HeroScene = dynamic(() => import("@/components/3d/HeroScene"), {
   ssr: false,
@@ -35,7 +37,7 @@ const PILLARS = [
   {
     index: "02",
     title: "Prepare",
-    body: "An AI co-pilot for resolutions, research, and country policy — tuned for serious delegates.",
+    body: "Committee prep, portfolio tracking, and application tools — built for delegates who show up prepared.",
   },
   {
     index: "03",
@@ -82,9 +84,28 @@ export default function HomePage() {
   const [newsletterEmail, setNewsletterEmail] = useState("");
   const [newsletterBusy, setNewsletterBusy] = useState(false);
   const [newsletterNote, setNewsletterNote] = useState<string | null>(null);
+  const [featuredConferences, setFeaturedConferences] = useState<Conference[]>([]);
   const [sceneReady, setSceneReady] = useState(false);
   const [sceneEnabled, setSceneEnabled] = useState(false);
   const openAuthModal = () => setAuthOpen(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/marketplace", { cache: "no-store" });
+        const data = (await res.json()) as { conferences?: Conference[] };
+        if (!cancelled && Array.isArray(data.conferences)) {
+          setFeaturedConferences(data.conferences.slice(0, 3));
+        }
+      } catch {
+        if (!cancelled) setFeaturedConferences([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -465,7 +486,7 @@ export default function HomePage() {
           </motion.div>
         </section>
 
-        {/* ───── Featured conferences ───── */}
+        {featuredConferences.length > 0 && (
         <section className="relative lux-section py-24 sm:py-32 lg:py-40 px-4 sm:px-6" style={VEIL}>
           <div className="max-w-7xl mx-auto">
             <div className="flex items-end justify-between flex-wrap gap-6 mb-16">
@@ -503,13 +524,14 @@ export default function HomePage() {
               </Reveal>
             </div>
 
-            <div className="lux-card p-8 text-center">
-              <p className="text-sm" style={{ color: "var(--fg-immersive-muted)" }}>
-                Featured conferences will appear here once organizers publish live events.
-              </p>
+            <div className="grid md:grid-cols-3 gap-6 mt-10">
+              {featuredConferences.map((conference) => (
+                <ConferenceCard key={conference.id} conference={conference} />
+              ))}
             </div>
           </div>
         </section>
+        )}
 
         {/* ───── CTA ───── */}
         <section
@@ -573,78 +595,6 @@ export default function HomePage() {
           </div>
         </section>
 
-        {/* ───── Proof ───── */}
-        <section className="relative lux-section py-22 sm:py-28 lg:py-36 px-4 sm:px-6" style={VEIL}>
-          <div className="max-w-5xl mx-auto">
-            <Reveal>
-              <p className="lux-eyebrow" style={{ color: "rgba(243,237,224,0.55)" }}>
-                Proof
-              </p>
-            </Reveal>
-            <Reveal delay={0.08}>
-              <h2
-                className="lux-display mt-6"
-                style={{ color: "var(--fg-immersive)" }}
-              >
-                Numbers that speak
-                <br />
-                for themselves.
-              </h2>
-            </Reveal>
-
-            <div className="lux-hairline mt-16" />
-
-            <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-0 mt-12">
-              {[
-                { value: "500+", label: "Delegates registered", sub: "across all conferences" },
-                { value: "40+",  label: "Conferences hosted",   sub: "and growing every season" },
-                { value: "30+",  label: "Countries represented", sub: "in our delegate community" },
-                { value: "98%",  label: "Delegate satisfaction", sub: "based on post-event surveys" },
-              ].map((stat, i) => (
-                <motion.div
-                  key={stat.label}
-                  initial={{ opacity: 0, y: 28 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true, margin: "-8% 0px" }}
-                  transition={{
-                    duration: 0.9,
-                    delay: reduced ? 0 : i * 0.1,
-                    ease: [0.2, 0.7, 0.2, 1],
-                  }}
-                  className="px-8 py-8 border-l first:border-l-0 border-b lg:border-b-0"
-                  style={{
-                    borderColor: "rgba(243,237,224,0.1)",
-                  }}
-                >
-                  <p
-                    className="text-5xl font-black tracking-tight"
-                    style={{
-                      background: "linear-gradient(120deg,#e7c390 10%,#f4e2c6 50%,#b28b57 90%)",
-                      WebkitBackgroundClip: "text",
-                      backgroundClip: "text",
-                      color: "transparent",
-                    }}
-                  >
-                    {stat.value}
-                  </p>
-                  <p
-                    className="mt-3 text-sm font-bold"
-                    style={{ color: "var(--fg-immersive)" }}
-                  >
-                    {stat.label}
-                  </p>
-                  <p
-                    className="mt-1 text-xs"
-                    style={{ color: "var(--fg-immersive-muted)" }}
-                  >
-                    {stat.sub}
-                  </p>
-                </motion.div>
-              ))}
-            </div>
-          </div>
-        </section>
-
         {/* ───── Contact ───── */}
         <section id="contact" className="relative lux-section py-24 sm:py-32 lg:py-40 px-4 sm:px-6" style={VEIL_SOFT}>
           <div className="max-w-4xl mx-auto text-center">
@@ -678,15 +628,13 @@ export default function HomePage() {
                 >
                   Email us →
                 </a>
-                <a
-                  href="https://x.com"
-                  target="_blank"
-                  rel="noopener noreferrer"
+                <Link
+                  href="/contact"
                   className="lux-button-ghost text-base inline-flex justify-center items-center min-h-[48px] w-full sm:w-auto touch-manipulation"
                   style={{ padding: "14px 30px" }}
                 >
-                  Follow on 𝕏
-                </a>
+                  Contact form →
+                </Link>
               </div>
             </Reveal>
 
@@ -717,6 +665,7 @@ export default function HomePage() {
                   <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
                     <input
                       type="email"
+                      aria-label="Email address for conference alerts"
                       placeholder="your@email.com"
                       value={newsletterEmail}
                       onChange={(e) => setNewsletterEmail(e.target.value)}
@@ -748,96 +697,6 @@ export default function HomePage() {
           </div>
         </section>
 
-        {/* ───── Testimonials ───── */}
-        <section className="relative lux-section py-22 sm:py-28 lg:py-36 px-4 sm:px-6" style={VEIL}>
-          <div className="max-w-6xl mx-auto">
-            <Reveal>
-              <p className="lux-eyebrow" style={{ color: "rgba(243,237,224,0.55)" }}>
-                Voices
-              </p>
-            </Reveal>
-            <Reveal delay={0.08}>
-              <h2 className="lux-display mt-6" style={{ color: "var(--fg-immersive)" }}>
-                What delegates
-                <br />
-                are saying.
-              </h2>
-            </Reveal>
-
-            <div className="lux-hairline mt-16" />
-
-            <div className="grid md:grid-cols-3 gap-6 mt-12">
-              {[
-                {
-                  quote: "Tidingz made finding and registering for MUNs completely seamless. The resolution co-pilot alone saved me hours of research.",
-                  name: "Priya S.",
-                  detail: "Best Delegate · HMUN 2025",
-                  initial: "P",
-                },
-                {
-                  quote: "Running a 400-delegate conference used to mean spreadsheets and chaos. With Tidingz we handled everything — applications, allotments, passes — from one screen.",
-                  name: "Marcus O.",
-                  detail: "Secretary-General · DUMUN 2025",
-                  initial: "M",
-                },
-                {
-                  quote: "The platform feels built for serious delegates. The conference pages, the portfolio system, the QR passes — it is a whole level above anything else out there.",
-                  name: "Aiko T.",
-                  detail: "Delegate · WorldMUN 2025",
-                  initial: "A",
-                },
-              ].map((t, i) => (
-                <motion.div
-                  key={t.name}
-                  initial={{ opacity: 0, y: 32 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true, margin: "-6% 0px" }}
-                  transition={{
-                    duration: 0.9,
-                    delay: reduced ? 0 : i * 0.12,
-                    ease: [0.2, 0.7, 0.2, 1],
-                  }}
-                  className="flex flex-col gap-6 rounded-2xl p-8"
-                  style={{
-                    background: "rgba(243,237,224,0.04)",
-                    border: "1.5px solid rgba(243,237,224,0.1)",
-                  }}
-                >
-                  {/* Quote mark */}
-                  <span
-                    className="text-4xl leading-none font-serif select-none"
-                    style={{ color: "rgba(231,195,144,0.4)" }}
-                    aria-hidden
-                  >
-                    &ldquo;
-                  </span>
-                  <p
-                    className="text-sm leading-relaxed flex-1"
-                    style={{ color: "var(--fg-immersive-muted)" }}
-                  >
-                    {t.quote}
-                  </p>
-                  <div className="flex items-center gap-3 pt-4" style={{ borderTop: "1px solid rgba(243,237,224,0.08)" }}>
-                    <div
-                      className="w-9 h-9 rounded-xl flex items-center justify-center text-sm font-black flex-shrink-0"
-                      style={{
-                        background: "linear-gradient(135deg,#b28b57,#e7c390)",
-                        color: "rgba(10,9,8,0.9)",
-                      }}
-                    >
-                      {t.initial}
-                    </div>
-                    <div>
-                      <p className="text-sm font-bold" style={{ color: "var(--fg-immersive)" }}>{t.name}</p>
-                      <p className="text-xs" style={{ color: "rgba(243,237,224,0.38)" }}>{t.detail}</p>
-                    </div>
-                  </div>
-                </motion.div>
-              ))}
-            </div>
-          </div>
-        </section>
-
         {/* ───── FAQ ───── */}
         <section className="relative lux-section py-22 sm:py-28 lg:py-36 px-4 sm:px-6" style={VEIL_SOFT}>
           <div className="max-w-3xl mx-auto">
@@ -860,7 +719,7 @@ export default function HomePage() {
               {[
                 {
                   q: "Is Tidingz free for delegates?",
-                  a: "Yes. Creating an account, browsing conferences, and using the Resolution Co-pilot are completely free. You only pay when you register for a conference, at the fee set by the organizer.",
+                  a: "Yes. Creating an account and browsing the marketplace are free. You only pay when you register for a conference, at the fee set by the organizer.",
                 },
                 {
                   q: "How do I register for a conference?",
@@ -869,10 +728,6 @@ export default function HomePage() {
                 {
                   q: "Can I host my conference on Tidingz?",
                   a: "Absolutely. Head to the Organizers page and create your conference. You get a full suite: application management, delegate allotment, committee builder, QR delegate passes, and payment collection.",
-                },
-                {
-                  q: "What is the Resolution Co-pilot?",
-                  a: "An AI-powered writing assistant tuned for MUN. It helps you draft working papers, position papers, and amendments — grounded in your country's UN voting history and the committee's topic.",
                 },
                 {
                   q: "How do delegate passes and QR codes work?",

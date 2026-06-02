@@ -48,7 +48,7 @@ export default async function AdminReviewPreviewPage({
       {detail.event.coverImageUrl && (
         <img
           src={detail.event.coverImageUrl}
-          alt=""
+          alt={`${detail.event.title} cover`}
           className="w-full max-h-64 object-cover rounded-2xl border border-[var(--border)]"
         />
       )}

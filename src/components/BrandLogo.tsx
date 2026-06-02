@@ -19,15 +19,15 @@ export type BrandLogoProps = {
 function resolveSrc(variant: BrandLogoVariant, isDark: boolean): string {
   switch (variant) {
     case "horizontal":
-      return isDark ? "/brand/logo-horizontal-dark.png" : "/brand/logo-horizontal-light.png";
+      return isDark ? "/brand/logo-horizontal-dark.svg" : "/brand/logo-horizontal-light.svg";
     case "vertical":
-      return isDark ? "/brand/logo-vertical-dark.png" : "/brand/logo-horizontal-light.png";
+      return isDark ? "/brand/logo-vertical-dark.svg" : "/brand/logo-horizontal-light.svg";
     case "verticalCompact":
-      return isDark ? "/brand/logo-vertical-dark-pfp.png" : "/brand/logo-horizontal-light.png";
+      return isDark ? "/brand/logo-vertical-dark-pfp.svg" : "/brand/logo-horizontal-light.svg";
     case "icon":
-      return isDark ? "/brand/logo-icon-dark.png" : "/brand/logo-icon-light.png";
+      return isDark ? "/brand/logo-icon-dark.svg" : "/brand/logo-icon-light.svg";
     default:
-      return "/brand/logo-horizontal-light.png";
+      return "/brand/logo-horizontal-light.svg";
   }
 }
 
@@ -87,6 +87,8 @@ export default function BrandLogo({
   const src = resolveSrc(variant, isDark);
   const { width, height, alt } = DIMS[variant];
 
+  const isSvg = src.endsWith(".svg");
+
   return (
     <Image
       src={src}
@@ -96,6 +98,7 @@ export default function BrandLogo({
       className={className}
       priority={priority}
       sizes={sizes}
+      unoptimized={isSvg}
     />
   );
 }

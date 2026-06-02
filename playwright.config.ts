@@ -12,17 +12,20 @@ export default defineConfig({
     trace: "on-first-retry",
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
-  webServer: process.env.CI
-    ? {
-        command: "npm run start",
-        url: "http://127.0.0.1:3000",
-        reuseExistingServer: false,
-        timeout: 120_000,
-      }
-    : {
-        command: "npm run dev",
-        url: "http://127.0.0.1:3000",
-        reuseExistingServer: true,
-        timeout: 120_000,
-      },
+  webServer:
+    process.env.PLAYWRIGHT_BASE_URL && !process.env.PLAYWRIGHT_BASE_URL.includes("127.0.0.1")
+      ? undefined
+      : process.env.CI
+        ? {
+            command: "npm run start",
+            url: "http://127.0.0.1:3000",
+            reuseExistingServer: false,
+            timeout: 120_000,
+          }
+        : {
+            command: "npm run dev",
+            url: "http://127.0.0.1:3000",
+            reuseExistingServer: true,
+            timeout: 120_000,
+          },
 });

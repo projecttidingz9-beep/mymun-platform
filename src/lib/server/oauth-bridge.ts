@@ -65,11 +65,13 @@ export async function bridgeOAuthSignIn(input: OAuthBridgeInput): Promise<OAuthB
     update: {
       name,
       role: roleToPersist,
+      emailVerified: true,
     },
     create: {
       email,
       name,
       role: roleToPersist,
+      emailVerified: true,
     },
     select: { id: true, email: true, name: true, role: true, sessionVersion: true },
   });
