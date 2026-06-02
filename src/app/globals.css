@@ -7,22 +7,22 @@
   --fg-muted: #5e6066;
   --border: #d7d2ca;
   --border-strong: #b9b2a8;
-  --blue: #9f7745;
-  --blue-hover: #886339;
-  --blue-subtle: #efe6d8;
+  --blue: #2563eb;
+  --blue-hover: #1d4ed8;
+  --blue-subtle: #e7eefe;
   --glass: rgba(255, 255, 255, 0.62);
   --glass-border: rgba(255, 255, 255, 0.4);
   --card-shadow: 0 2px 10px rgba(20, 15, 8, 0.08), 0 24px 60px rgba(20, 15, 8, 0.08);
   --card-shadow-hover: 0 8px 26px rgba(20, 15, 8, 0.12), 0 28px 70px rgba(20, 15, 8, 0.12);
   --overlay-dark: rgba(8, 10, 14, 0.62);
-  --overlay-warm: rgba(197, 144, 84, 0.14);
-  --focus-ring: rgba(159, 119, 69, 0.25);
+  --overlay-warm: rgba(99, 102, 241, 0.14);
+  --focus-ring: rgba(37, 99, 235, 0.25);
   --radius-lux: 18px;
   --bg-immersive: #0b0d12;
   --fg-immersive: #f3ede0;
   --fg-immersive-muted: rgba(243, 237, 224, 0.64);
-  --accent-warm: #d8ac72;
-  --accent-cool: #8ea9c9;
+  --accent-warm: #6366f1;
+  --accent-cool: #38bdf8;
   /* Semantic tokens for the light "app" tier (dashboards, checkout, etc.).
      These keep destructive / success / warning states consistent across
      both the delegate and organizer dashboards without per-component hex. */
@@ -50,16 +50,16 @@ html.dark {
   --fg-muted: #b6afa1;
   --border: #2b313a;
   --border-strong: #3c4553;
-  --blue: #c89e64;
-  --blue-hover: #dfb77f;
-  --blue-subtle: rgba(200, 158, 100, 0.14);
+  --blue: #60a5fa;
+  --blue-hover: #93c5fd;
+  --blue-subtle: rgba(96, 165, 250, 0.14);
   --glass: rgba(15, 18, 24, 0.72);
   --glass-border: rgba(255, 255, 255, 0.1);
   --card-shadow: 0 2px 10px rgba(0, 0, 0, 0.45), 0 22px 52px rgba(0, 0, 0, 0.34);
   --card-shadow-hover: 0 10px 30px rgba(0, 0, 0, 0.5), 0 28px 70px rgba(0, 0, 0, 0.44);
   --overlay-dark: rgba(4, 6, 10, 0.68);
-  --overlay-warm: rgba(200, 158, 100, 0.13);
-  --focus-ring: rgba(200, 158, 100, 0.32);
+  --overlay-warm: rgba(99, 102, 241, 0.16);
+  --focus-ring: rgba(96, 165, 250, 0.34);
   --bg-immersive: #0a0c11;
   --success: #4ade80;
   --success-hover: #22c55e;
@@ -124,7 +124,7 @@ html.lenis.lenis-smooth [data-lenis-prevent] {
 
 /* Gradient text */
 .text-gradient {
-  background: linear-gradient(125deg, #8a6339 0%, #b89159 45%, #f2d9af 100%);
+  background: linear-gradient(125deg, #2563eb 0%, #6366f1 45%, #a5b4fc 100%);
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -297,11 +297,11 @@ html.dark .badge-purple { background: rgba(124,58,237,0.12); }
 .btn:active { transform: scale(0.985); transition-duration: 0.08s; }
 
 .btn-primary {
-  background: linear-gradient(120deg, #8c653a, #b89159);
+  background: linear-gradient(120deg, #2563eb, #4f46e5);
   color: #fff;
-  box-shadow: 0 6px 22px rgba(96, 65, 28, 0.24);
+  box-shadow: 0 6px 22px rgba(37, 99, 235, 0.24);
 }
-.btn-primary:hover { filter: brightness(1.05); box-shadow: 0 10px 28px rgba(96, 65, 28, 0.3); }
+.btn-primary:hover { filter: brightness(1.05); box-shadow: 0 10px 28px rgba(37, 99, 235, 0.3); }
 
 .btn-ghost {
   background: transparent;
@@ -338,7 +338,7 @@ html.dark .badge-purple { background: rgba(124,58,237,0.12); }
   gap: 8px;
   border-radius: 14px;
   border: 1px solid rgba(245, 226, 198, 0.36);
-  background: linear-gradient(120deg, #8a6339, #b8925a);
+  background: linear-gradient(120deg, #2563eb, #4f46e5);
   color: #fbf5ed;
   font-weight: 600;
   transition: transform 0.2s ease, box-shadow 0.25s ease, filter 0.25s ease, border-color 0.25s ease;
@@ -346,7 +346,7 @@ html.dark .badge-purple { background: rgba(124,58,237,0.12); }
 
 .lux-button-primary:hover {
   transform: translateY(-1px);
-  box-shadow: 0 12px 28px rgba(80, 53, 24, 0.36);
+  box-shadow: 0 12px 28px rgba(30, 58, 138, 0.36);
   filter: brightness(1.06);
   border-color: rgba(245, 226, 198, 0.52);
 }
@@ -436,7 +436,7 @@ html.dark .badge-purple { background: rgba(124,58,237,0.12); }
   inset: 0;
   pointer-events: none;
   background:
-    radial-gradient(60% 45% at 78% 20%, rgba(216, 172, 114, 0.12), transparent 70%),
+    radial-gradient(60% 45% at 78% 20%, rgba(96, 165, 250, 0.12), transparent 70%),
     radial-gradient(55% 40% at 12% 85%, rgba(142, 169, 201, 0.09), transparent 70%);
   z-index: 0;
 }
@@ -457,13 +457,13 @@ html.dark .badge-purple { background: rgba(124,58,237,0.12); }
   --bg-subtle: rgba(243, 237, 224, 0.04);
   --border: rgba(243, 237, 224, 0.1);
   --border-strong: rgba(243, 237, 224, 0.18);
-  --blue: #e7c390;
-  --blue-subtle: rgba(216, 172, 114, 0.14);
+  --blue: #93c5fd;
+  --blue-subtle: rgba(96, 165, 250, 0.14);
   --green: #8ed1a9;
   --green-subtle: rgba(110, 180, 140, 0.14);
   --red: #f0a3a3;
   --purple: #c8b4f0;
-  --gold: #f3d8a8;
+  --gold: #a5b4fc;
   --card-shadow: 0 18px 42px rgba(0, 0, 0, 0.42);
   --card-shadow-hover: 0 28px 60px rgba(0, 0, 0, 0.52);
   --glass-border: rgba(243, 237, 224, 0.12);
@@ -570,7 +570,7 @@ html.dark .badge-purple { background: rgba(124,58,237,0.12); }
   height: 6px;
   border-radius: 999px;
   background: var(--accent-warm);
-  box-shadow: 0 0 12px rgba(216, 172, 114, 0.7);
+  box-shadow: 0 0 12px rgba(96, 165, 250, 0.7);
 }
 
 button:focus-visible,
@@ -602,7 +602,7 @@ textarea:focus-visible,
   pointer-events: none;
   z-index: 0;
   background:
-    radial-gradient(60% 45% at 78% 12%, rgba(216, 172, 114, 0.14), transparent 70%),
+    radial-gradient(60% 45% at 78% 12%, rgba(96, 165, 250, 0.14), transparent 70%),
     radial-gradient(55% 40% at 12% 88%, rgba(142, 169, 201, 0.1), transparent 70%),
     linear-gradient(180deg, #0b0d12 0%, #0a0c11 60%, #070a0f 100%);
 }
@@ -718,7 +718,7 @@ html.dark .conference-detail-page .conference-surface {
   border-radius: 999px;
   padding: 4px 10px;
   color: #fff;
-  background: linear-gradient(120deg, #8c653a, #b89159);
+  background: linear-gradient(120deg, #2563eb, #6366f1);
 }
 
 .lux-card-interactive {
@@ -736,11 +736,11 @@ html.dark .conference-detail-page .conference-surface {
 }
 
 .lux-card-accent {
-  border-color: rgba(216, 172, 114, 0.42);
+  border-color: rgba(96, 165, 250, 0.42);
   box-shadow:
     0 1px 0 rgba(243, 237, 224, 0.06) inset,
     0 28px 60px rgba(80, 53, 24, 0.35),
-    0 0 0 1px rgba(216, 172, 114, 0.14);
+    0 0 0 1px rgba(96, 165, 250, 0.14);
 }
 
 .lux-input,
@@ -774,9 +774,9 @@ html.dark .conference-detail-page .conference-surface {
 .lux-input:focus,
 .lux-select:focus,
 .lux-textarea:focus {
-  border-color: rgba(216, 172, 114, 0.6);
+  border-color: rgba(96, 165, 250, 0.6);
   background: rgba(243, 237, 224, 0.07);
-  box-shadow: 0 0 0 4px rgba(216, 172, 114, 0.18);
+  box-shadow: 0 0 0 4px rgba(96, 165, 250, 0.18);
 }
 
 .lux-select {
@@ -827,14 +827,14 @@ html.dark .conference-detail-page .conference-surface {
 
 .lux-chip-active {
   color: #1a1108;
-  background: linear-gradient(120deg, #e7c390 0%, #d8ac72 55%, #b8925a 100%);
-  border-color: rgba(216, 172, 114, 0.9);
-  box-shadow: 0 6px 18px rgba(120, 80, 32, 0.42);
+  background: linear-gradient(120deg, #60a5fa 0%, #6366f1 55%, #4f46e5 100%);
+  border-color: rgba(96, 165, 250, 0.9);
+  box-shadow: 0 6px 18px rgba(37, 99, 235, 0.42);
 }
 
 .lux-chip-active:hover {
   color: #1a1108;
-  background: linear-gradient(120deg, #efcd9c 0%, #e0b47c 55%, #c29a62 100%);
+  background: linear-gradient(120deg, #93c5fd 0%, #818cf8 55%, #6366f1 100%);
 }
 
 .lux-divider {
@@ -872,13 +872,13 @@ html.dark .conference-detail-page .conference-surface {
 /* Immersive overrides for existing badge/label/progress so they blend
    when rendered inside .lux-shell-immersive (home, marketplace, etc.). */
 .lux-shell-immersive .section-label {
-  background: rgba(216, 172, 114, 0.12);
-  color: #efcd9c;
+  background: rgba(96, 165, 250, 0.12);
+  color: #93c5fd;
 }
 
 .lux-shell-immersive .badge-blue {
-  background: rgba(216, 172, 114, 0.14);
-  color: #e7c390;
+  background: rgba(96, 165, 250, 0.14);
+  color: #93c5fd;
 }
 
 .lux-shell-immersive .badge-green {
@@ -887,8 +887,8 @@ html.dark .conference-detail-page .conference-surface {
 }
 
 .lux-shell-immersive .badge-gold {
-  background: rgba(217, 171, 86, 0.16);
-  color: #f3d8a8;
+  background: rgba(167, 139, 250, 0.16);
+  color: #a5b4fc;
 }
 
 .lux-shell-immersive .badge-red {
@@ -923,7 +923,7 @@ html.dark .conference-detail-page .conference-surface {
 }
 
 .lux-shell-immersive .card:hover {
-  border-color: rgba(216, 172, 114, 0.32);
+  border-color: rgba(96, 165, 250, 0.32);
   background: rgba(22, 25, 34, 0.78);
   box-shadow:
     0 1px 0 rgba(243, 237, 224, 0.06) inset,
@@ -954,8 +954,8 @@ html.dark .conference-detail-page .conference-surface {
 
 .lux-shell-immersive .input-base:focus,
 .lux-shell-immersive textarea.input-base:focus {
-  border-color: rgba(216, 172, 114, 0.6);
-  box-shadow: 0 0 0 4px rgba(216, 172, 114, 0.18);
+  border-color: rgba(96, 165, 250, 0.6);
+  box-shadow: 0 0 0 4px rgba(96, 165, 250, 0.18);
 }
 
 /* Footer polish for immersive shell: dark surface, refined links,
@@ -976,8 +976,8 @@ html.dark .conference-detail-page .conference-surface {
 }
 
 .lux-shell-immersive footer .input-base:focus {
-  border-color: rgba(216, 172, 114, 0.6);
-  box-shadow: 0 0 0 4px rgba(216, 172, 114, 0.18);
+  border-color: rgba(96, 165, 250, 0.6);
+  box-shadow: 0 0 0 4px rgba(96, 165, 250, 0.18);
 }
 
 .lux-shell-immersive footer > div > div:first-child > div[style*="rounded-2xl"],
@@ -1003,7 +1003,7 @@ html.dark .conference-detail-page .conference-surface {
 }
 
 .lux-shell-immersive .footer-link:hover {
-  color: #f2dcb5 !important;
+  color: #c7d2fe !important;
 }
 
 .lux-shell-immersive .footer-social {
@@ -1020,8 +1020,8 @@ html.dark .conference-detail-page .conference-surface {
 /* Navbar active-route indicator */
 .lux-shell .nav-link-lux[data-active="true"] {
   color: rgba(243, 237, 224, 0.98);
-  background: rgba(216, 172, 114, 0.14);
-  border: 1px solid rgba(216, 172, 114, 0.34);
+  background: rgba(96, 165, 250, 0.14);
+  border: 1px solid rgba(96, 165, 250, 0.34);
 }
 
 .nav-link-lux[data-active="true"] {
@@ -1948,9 +1948,10 @@ html.dark .marketplace-page .lux-subdisplay {
   position: sticky;
   bottom: 16px;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: 12px 16px;
   padding: 12px 16px;
   margin-top: 16px;
   border-radius: 14px;

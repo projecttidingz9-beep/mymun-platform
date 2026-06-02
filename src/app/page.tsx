@@ -22,7 +22,7 @@ const HeroScene = dynamic(() => import("@/components/3d/HeroScene"), {
       className="absolute inset-0"
       style={{
         background:
-          "radial-gradient(42% 52% at 50% 50%, rgba(216,172,114,0.22), transparent 70%)",
+          "radial-gradient(42% 52% at 50% 50%, rgba(96,165,250,0.22), transparent 70%)",
       }}
     />
   ),
@@ -286,7 +286,7 @@ export default function HomePage() {
               <span
                 style={{
                   background:
-                    "linear-gradient(120deg, #e7c390 10%, #f4e2c6 50%, #b28b57 90%)",
+                    "linear-gradient(120deg, #60a5fa 10%, #6366f1 50%, #a78bfa 90%)",
                   WebkitBackgroundClip: "text",
                   backgroundClip: "text",
                   color: "transparent",
@@ -451,7 +451,7 @@ export default function HomePage() {
 
         {/* ───── Marquee ───── */}
         <section
-          className="relative lux-section py-12 sm:py-16 px-4 sm:px-6 overflow-hidden"
+          className="relative lux-section py-12 sm:py-16 px-4 sm:px-6 overflow-hidden overflow-x-hidden"
           style={{
             ...VEIL_SOFT,
             borderTop: "1px solid rgba(243,237,224,0.08)",
@@ -554,7 +554,7 @@ export default function HomePage() {
                 <span
                   style={{
                     background:
-                      "linear-gradient(120deg, #e7c390 10%, #f4e2c6 50%, #b28b57 90%)",
+                      "linear-gradient(120deg, #60a5fa 10%, #6366f1 50%, #a78bfa 90%)",
                     WebkitBackgroundClip: "text",
                     backgroundClip: "text",
                     color: "transparent",
@@ -571,12 +571,12 @@ export default function HomePage() {
               </p>
             </Reveal>
             <Reveal delay={0.3}>
-              <div className="mt-12 flex justify-center">
+              <div className="mt-12 flex flex-col sm:flex-row justify-center w-full sm:w-auto">
                 {!isLoggedIn ? (
                   <button
                     type="button"
                     onClick={openAuthModal}
-                    className="lux-button-primary text-base"
+                    className="lux-button-primary text-base w-full sm:w-auto inline-flex justify-center items-center min-h-[48px] touch-manipulation"
                     style={{ padding: "16px 34px" }}
                   >
                     Create free account
@@ -584,7 +584,7 @@ export default function HomePage() {
                 ) : (
                   <Link
                     href={isOrganizerUser ? "/organizers/dashboard" : "/marketplace"}
-                    className="lux-button-primary text-base"
+                    className="lux-button-primary text-base w-full sm:w-auto inline-flex justify-center items-center min-h-[48px] touch-manipulation"
                     style={{ padding: "16px 34px" }}
                   >
                     {isOrganizerUser ? "Open organizer dashboard" : "Browse conferences"}
@@ -698,7 +698,7 @@ export default function HomePage() {
         </section>
 
         {/* ───── FAQ ───── */}
-        <section className="relative lux-section py-22 sm:py-28 lg:py-36 px-4 sm:px-6" style={VEIL_SOFT}>
+        <section className="relative lux-section py-20 sm:py-28 lg:py-36 px-4 sm:px-6" style={VEIL_SOFT}>
           <div className="max-w-3xl mx-auto">
             <Reveal>
               <p className="lux-eyebrow" style={{ color: "rgba(243,237,224,0.55)" }}>

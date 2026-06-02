@@ -38,7 +38,7 @@ export default function ModerationModal({
         aria-label="Close dialog"
         onClick={onClose}
       />
-      <div className="relative w-full max-w-lg rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-6 shadow-xl">
+      <div className="relative w-full max-w-lg max-h-[90dvh] overflow-y-auto rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-6 shadow-xl">
         <h2 id="moderation-modal-title" className="text-lg font-semibold text-[var(--fg)]">
           {title}
         </h2>

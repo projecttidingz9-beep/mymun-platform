@@ -13,7 +13,7 @@ interface FlowRibbonProps {
 }
 
 export default function FlowRibbon({
-  color = "#d6b074",
+  color = "#60a5fa",
   opacity = 0.55,
   position = [0, 0, -2],
   rotation = [0, 0, 0],

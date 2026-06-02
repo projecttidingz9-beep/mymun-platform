@@ -2332,13 +2332,13 @@ export default function OrganizerDashboardPage() {
                     <div className="grid lg:grid-cols-2 gap-6">
                       <div className="space-y-2">
                         <input value={previewDraft.title} onChange={(event) => setPreviewDraft((prev) => ({ ...prev, title: event.target.value }))} className="input-base text-sm" placeholder="Conference title" />
-                        <div className="grid grid-cols-2 gap-2">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                           <input value={previewDraft.city} onChange={(event) => setPreviewDraft((prev) => ({ ...prev, city: event.target.value }))} className="input-base text-sm" placeholder="City" />
                           <input value={previewDraft.country} onChange={(event) => setPreviewDraft((prev) => ({ ...prev, country: event.target.value }))} className="input-base text-sm" placeholder="Country" />
                         </div>
                         <input value={previewDraft.organizerName} onChange={(event) => setPreviewDraft((prev) => ({ ...prev, organizerName: event.target.value }))} className="input-base text-sm" placeholder="Organizer name" />
                         <input value={previewDraft.venue} onChange={(event) => setPreviewDraft((prev) => ({ ...prev, venue: event.target.value }))} className="input-base text-sm" placeholder="Venue" />
-                        <div className="grid grid-cols-2 gap-2">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                           <input value={previewDraft.startDate} onChange={(event) => setPreviewDraft((prev) => ({ ...prev, startDate: event.target.value }))} className="input-base text-sm" placeholder="Start date (YYYY-MM-DD)" />
                           <input value={previewDraft.endDate} onChange={(event) => setPreviewDraft((prev) => ({ ...prev, endDate: event.target.value }))} className="input-base text-sm" placeholder="End date (YYYY-MM-DD)" />
                         </div>
@@ -2487,7 +2487,7 @@ export default function OrganizerDashboardPage() {
                             ))}
                           </div>
                         </div>
-                        <div className="grid grid-cols-2 gap-2">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                           <input value={previewDraft.website} onChange={(event) => setPreviewDraft((prev) => ({ ...prev, website: event.target.value }))} className="input-base text-sm" placeholder="Website URL" />
                           <input value={previewDraft.instagram} onChange={(event) => setPreviewDraft((prev) => ({ ...prev, instagram: event.target.value }))} className="input-base text-sm" placeholder="Instagram URL" />
                           <input value={previewDraft.linkedin} onChange={(event) => setPreviewDraft((prev) => ({ ...prev, linkedin: event.target.value }))} className="input-base text-sm" placeholder="LinkedIn URL" />
@@ -3048,7 +3048,7 @@ export default function OrganizerDashboardPage() {
                       </div>
                       <div className="mb-3 p-3 rounded-xl space-y-2" style={{ background: "var(--bg-subtle)" }}>
                         <p className="text-xs font-semibold" style={{ color: "var(--fg)" }}>Add Committee</p>
-                        <div className="grid grid-cols-2 gap-2">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                           <input
                             className="input-base text-xs"
                             placeholder="Committee name"
@@ -3377,7 +3377,7 @@ export default function OrganizerDashboardPage() {
                         <p className="text-sm" style={{ color: "var(--fg-muted)" }}>No finance data.</p>
                       ) : (
                         <>
-                          <div className="grid grid-cols-2 gap-2 mb-3">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
                             {[
                               { label: "Gross", value: `$${financeSummary.gross}` },
                               { label: "Successful", value: `${financeSummary.successfulCount} ($${financeSummary.successfulAmount})` },
@@ -3609,7 +3609,7 @@ export default function OrganizerDashboardPage() {
                         </div>
                         <div className="p-3 rounded-xl" style={{ background: "var(--bg-subtle)" }}>
                           <p className="text-xs font-semibold mb-2" style={{ color: "var(--fg)" }}>Common Documents</p>
-                          <div className="grid grid-cols-2 gap-2 mb-2">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-2">
                             <input
                               className="input-base text-xs col-span-2"
                               placeholder="Document title"
@@ -3665,7 +3665,7 @@ export default function OrganizerDashboardPage() {
                         </div>
                         <div className="p-3 rounded-xl" style={{ background: "var(--bg-subtle)" }}>
                           <p className="text-xs font-semibold mb-2" style={{ color: "var(--fg)" }}>Committee Documents</p>
-                          <div className="grid grid-cols-2 gap-2 mb-2">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-2">
                             <select
                               className="input-base text-xs col-span-2"
                               value={committeeDocumentTargetId ?? ""}
@@ -3754,7 +3754,7 @@ export default function OrganizerDashboardPage() {
                         )}
                         <div className="p-3 rounded-xl" style={{ background: "var(--bg-subtle)" }}>
                           <p className="text-xs font-semibold mb-2" style={{ color: "var(--fg)" }}>Previous editions</p>
-                          <div className="grid grid-cols-2 gap-2 mb-2">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-2">
                             <input className="input-base text-xs" placeholder="Year" value={editionDraft.year} onChange={(event) => setEditionDraft((prev) => ({ ...prev, year: event.target.value }))} />
                             <input className="input-base text-xs" placeholder="Edition title" value={editionDraft.title} onChange={(event) => setEditionDraft((prev) => ({ ...prev, title: event.target.value }))} />
                             <input className="input-base text-xs" placeholder="Delegates" value={editionDraft.delegates} onChange={(event) => setEditionDraft((prev) => ({ ...prev, delegates: event.target.value }))} />
@@ -3830,7 +3830,7 @@ export default function OrganizerDashboardPage() {
                           )}
 
                           <p className="text-sm font-semibold mt-2" style={{ color: "var(--fg)" }}>Account Info</p>
-                          <div className="grid grid-cols-2 gap-2">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <input
                               className="input-base text-xs"
                               placeholder="Account holder name"
@@ -3866,7 +3866,7 @@ export default function OrganizerDashboardPage() {
                           </div>
 
                           <p className="text-sm font-semibold mt-2" style={{ color: "var(--fg)" }}>Bank & Branch Info</p>
-                          <div className="grid grid-cols-2 gap-2">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <input
                               className="input-base text-xs"
                               placeholder="IFSC code"
@@ -3894,7 +3894,7 @@ export default function OrganizerDashboardPage() {
                           </div>
 
                           <p className="text-sm font-semibold mt-2" style={{ color: "var(--fg)" }}>International / Alternate</p>
-                          <div className="grid grid-cols-2 gap-2">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <input
                               className="input-base text-xs"
                               placeholder="SWIFT / BIC"
@@ -3956,7 +3956,7 @@ export default function OrganizerDashboardPage() {
                   {activeSection === "team" && (
                     <div className="card p-6 rounded-2xl">
                       <h3 className="text-lg font-bold mb-4" style={{ color: "var(--fg)" }}>Organizer Team</h3>
-                      <div className="grid grid-cols-2 gap-2 mb-2">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-2">
                         <input className="input-base text-xs" placeholder="Name" value={teamDraft.name} onChange={(event) => setTeamDraft((prev) => ({ ...prev, name: event.target.value }))} />
                         <input className="input-base text-xs" placeholder="Email" value={teamDraft.email} onChange={(event) => setTeamDraft((prev) => ({ ...prev, email: event.target.value }))} />
                         <input
@@ -4026,7 +4026,7 @@ export default function OrganizerDashboardPage() {
                   <div className="grid md:grid-cols-1 gap-6">
                     <div className="card p-6 rounded-2xl">
                       <h3 className="text-lg font-bold mb-4" style={{ color: "var(--fg)" }}>Awards Module</h3>
-                      <div className="grid grid-cols-2 gap-2 mb-2">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-2">
                         <input className="input-base text-xs" placeholder="Award category" value={awardDraft.category} onChange={(event) => setAwardDraft((prev) => ({ ...prev, category: event.target.value }))} />
                         <input className="input-base text-xs" placeholder="Prize title" value={awardDraft.prizeTitle} onChange={(event) => setAwardDraft((prev) => ({ ...prev, prizeTitle: event.target.value }))} />
                         <input className="input-base text-xs" placeholder="Sponsor name" value={awardDraft.sponsorName} onChange={(event) => setAwardDraft((prev) => ({ ...prev, sponsorName: event.target.value }))} />

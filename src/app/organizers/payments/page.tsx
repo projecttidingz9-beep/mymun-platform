@@ -130,10 +130,10 @@ export default function OrganizerPaymentsPage() {
         </div>
 
         <div
-          className="mt-10 rounded-2xl overflow-hidden"
+          className="mt-10 rounded-2xl overflow-x-auto"
           style={{ border: "1px solid var(--border)", background: "var(--bg-subtle)" }}
         >
-          <table className="w-full text-sm">
+          <table className="min-w-[600px] w-full text-sm">
             <thead>
               <tr style={{ borderBottom: "1px solid var(--border)", textAlign: "left" }}>
                 <th className="px-4 py-3">When</th>

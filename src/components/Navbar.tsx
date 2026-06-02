@@ -183,7 +183,7 @@ export default function Navbar({ openAuthModal }: NavbarProps) {
           </Link>
 
           {/* Mid-width inline nav (priority links) */}
-          <div className="hidden sm:flex lg:hidden items-center gap-1">
+          <div className="hidden md:flex lg:hidden items-center gap-1">
             {inlinePrimaryLinks.map((l) => (
               <Link
                 key={`${l.href}-inline`}
@@ -254,7 +254,7 @@ export default function Navbar({ openAuthModal }: NavbarProps) {
                 >
                   <div
                     className="w-7 h-7 rounded-lg flex items-center justify-center text-white font-bold text-xs"
-                    style={{ background: "linear-gradient(135deg, #7f5d38, #b28b57)" }}
+                    style={{ background: "linear-gradient(135deg, #2563eb, #6366f1)" }}
                   >
                     {user?.avatar}
                   </div>

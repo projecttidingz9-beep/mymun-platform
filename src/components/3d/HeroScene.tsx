@@ -8,6 +8,7 @@ import { EffectComposer, Bloom } from "@react-three/postprocessing";
 import type { Group } from "three";
 import LiquidBlob from "./LiquidBlob";
 import FlowRibbon from "./FlowRibbon";
+import BrandOrbit from "./BrandOrbit";
 import CursorParallax from "./CursorParallax";
 
 type Tier = "full" | "lite";
@@ -113,7 +114,7 @@ function SceneContents({
       <directionalLight
         position={[4, 6, 5]}
         intensity={lite ? 0.95 : 1.15}
-        color="#f3d8a8"
+        color="#93c5fd"
       />
       {!lite && (
         <directionalLight
@@ -122,7 +123,7 @@ function SceneContents({
           color="#6b88b8"
         />
       )}
-      <pointLight position={[0, 0, 3]} intensity={0.35} color="#ffe2b6" />
+      <pointLight position={[0, 0, 3]} intensity={0.35} color="#a5b4fc" />
 
       <Suspense fallback={null}>
         {!lite && <Environment preset="sunset" background={false} />}
@@ -133,20 +134,25 @@ function SceneContents({
             floatIntensity={reducedMotion ? 0 : lite ? 0.35 : 0.6}
             rotationIntensity={reducedMotion ? 0 : lite ? 0.2 : 0.35}
           >
+            <BrandOrbit
+              position={[0, 0, 0]}
+              scale={mobile ? 0.95 : 1.15}
+              reducedMotion={reducedMotion}
+            />
             <LiquidBlob
               position={[0, 0, 0]}
-              scale={mobile ? 1.25 : 1.55}
+              scale={mobile ? 0.72 : 0.88}
               speed={reducedMotion ? 0 : lite ? 0.35 : 0.55}
               distort={reducedMotion ? 0.1 : lite ? 0.28 : 0.42}
-              color="#d8ac72"
-              emissive="#3b2715"
+              color="#4f46e5"
+              emissive="#1e1b4b"
             />
           </Float>
 
           <FlowRibbon
             position={[0, -0.2, -2.2]}
             rotation={[0.18, 0.0, 0.05]}
-            color="#c79a62"
+            color="#60a5fa"
             opacity={lite ? 0.4 : 0.5}
             scale={mobile ? 0.85 : 1}
           />
@@ -154,7 +160,7 @@ function SceneContents({
             <FlowRibbon
               position={[0.4, 0.6, -3]}
               rotation={[-0.25, 0.2, -0.15]}
-              color="#8ea9c9"
+              color="#a78bfa"
               opacity={0.35}
               scale={mobile ? 0.8 : 0.95}
             />

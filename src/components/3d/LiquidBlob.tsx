@@ -19,8 +19,8 @@ export default function LiquidBlob({
   scale = 1.6,
   speed = 0.6,
   distort = 0.38,
-  color = "#caa06a",
-  emissive = "#3a2a16",
+  color = "#4f46e5",
+  emissive = "#1e1b4b",
 }: LiquidBlobProps) {
   const meshRef = useRef<THREE.Mesh>(null);
 

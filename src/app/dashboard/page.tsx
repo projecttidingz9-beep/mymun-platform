@@ -822,7 +822,7 @@ export default function DashboardPage() {
                         </div>
                       )}
                     </div>
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <input
                         value={draftFirstName}
                         onChange={(event) => setDraftFirstName(event.target.value)}
@@ -836,7 +836,7 @@ export default function DashboardPage() {
                         placeholder="Last name"
                       />
                     </div>
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <input
                         value={draftSchool}
                         onChange={(event) => setDraftSchool(event.target.value)}
@@ -850,7 +850,7 @@ export default function DashboardPage() {
                         placeholder="Country"
                       />
                     </div>
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <input
                         value={draftCollege}
                         onChange={(event) => setDraftCollege(event.target.value)}
@@ -870,7 +870,7 @@ export default function DashboardPage() {
                       className="input-base text-xs"
                       placeholder="Profile headline"
                     />
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <input
                         value={draftPhone}
                         onChange={(event) => setDraftPhone(event.target.value)}
@@ -884,7 +884,7 @@ export default function DashboardPage() {
                         placeholder="Postal code"
                       />
                     </div>
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <input
                         value={draftCity}
                         onChange={(event) => setDraftCity(event.target.value)}
@@ -900,11 +900,11 @@ export default function DashboardPage() {
                     </div>
                     <div className="space-y-2">
                       <p className="text-xs font-semibold" style={{ color: "var(--fg)" }}>Social Media</p>
-                      <div className="grid grid-cols-2 gap-2">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <input value={draftInstagram} onChange={(event) => setDraftInstagram(event.target.value)} className="input-base text-xs" placeholder="Instagram URL" />
                         <input value={draftLinkedin} onChange={(event) => setDraftLinkedin(event.target.value)} className="input-base text-xs" placeholder="LinkedIn URL" />
                       </div>
-                      <div className="grid grid-cols-2 gap-2">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <input value={draftTwitter} onChange={(event) => setDraftTwitter(event.target.value)} className="input-base text-xs" placeholder="X/Twitter URL" />
                         <input value={draftGithub} onChange={(event) => setDraftGithub(event.target.value)} className="input-base text-xs" placeholder="GitHub URL" />
                       </div>
@@ -913,11 +913,11 @@ export default function DashboardPage() {
                       <p className="text-xs font-semibold" style={{ color: "var(--fg)" }}>Invoice Address</p>
                       <input value={draftInvoiceLine1} onChange={(event) => setDraftInvoiceLine1(event.target.value)} className="input-base text-xs" placeholder="Address line 1" />
                       <input value={draftInvoiceLine2} onChange={(event) => setDraftInvoiceLine2(event.target.value)} className="input-base text-xs" placeholder="Address line 2 (optional)" />
-                      <div className="grid grid-cols-2 gap-2">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <input value={draftInvoiceCity} onChange={(event) => setDraftInvoiceCity(event.target.value)} className="input-base text-xs" placeholder="Invoice city" />
                         <input value={draftInvoiceState} onChange={(event) => setDraftInvoiceState(event.target.value)} className="input-base text-xs" placeholder="Invoice state" />
                       </div>
-                      <div className="grid grid-cols-2 gap-2">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <input value={draftInvoicePostalCode} onChange={(event) => setDraftInvoicePostalCode(event.target.value)} className="input-base text-xs" placeholder="Invoice postal code" />
                         <input value={draftInvoiceCountry} onChange={(event) => setDraftInvoiceCountry(event.target.value)} className="input-base text-xs" placeholder="Invoice country" />
                       </div>
@@ -975,15 +975,15 @@ export default function DashboardPage() {
                               <span aria-hidden>↓</span>
                             </button>
                           </div>
-                          <div className="grid grid-cols-2 gap-2">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <input value={entry.conferenceName} onChange={(event) => updateParticipation(entry.id, { conferenceName: event.target.value })} className="input-base text-xs" placeholder="Conference" />
                             <input value={entry.committee || ""} onChange={(event) => updateParticipation(entry.id, { committee: event.target.value })} className="input-base text-xs" placeholder="Committee" />
                           </div>
-                          <div className="grid grid-cols-2 gap-2">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <input value={entry.role || ""} onChange={(event) => updateParticipation(entry.id, { role: event.target.value })} className="input-base text-xs" placeholder="Role" />
                             <input value={entry.countryRepresented || ""} onChange={(event) => updateParticipation(entry.id, { countryRepresented: event.target.value })} className="input-base text-xs" placeholder="Country represented" />
                           </div>
-                          <div className="grid grid-cols-2 gap-2">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <input
                               type="number"
                               value={entry.year ?? ""}
@@ -1055,15 +1055,15 @@ export default function DashboardPage() {
                               <span aria-hidden>↓</span>
                             </button>
                           </div>
-                          <div className="grid grid-cols-2 gap-2">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <input value={entry.title} onChange={(event) => updateAward(entry.id, { title: event.target.value })} className="input-base text-xs" placeholder="Award title" />
                             <input value={entry.conferenceName} onChange={(event) => updateAward(entry.id, { conferenceName: event.target.value })} className="input-base text-xs" placeholder="Conference" />
                           </div>
-                          <div className="grid grid-cols-2 gap-2">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <input value={entry.category || ""} onChange={(event) => updateAward(entry.id, { category: event.target.value })} className="input-base text-xs" placeholder="Category" />
                             <input value={entry.committee || ""} onChange={(event) => updateAward(entry.id, { committee: event.target.value })} className="input-base text-xs" placeholder="Committee" />
                           </div>
-                          <div className="grid grid-cols-2 gap-2">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <input
                               type="number"
                               value={entry.year ?? ""}

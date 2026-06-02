@@ -735,8 +735,8 @@ export default function ConferenceDetailPage() {
                           pct > 85
                             ? "linear-gradient(90deg, #f0a3a3, #dc6e6e)"
                             : pct > 65
-                              ? "linear-gradient(90deg, #f3d8a8, #d8ac72)"
-                              : "linear-gradient(90deg, #e7c390, #b8925a)",
+                              ? "linear-gradient(90deg, #93c5fd, #6366f1)"
+                              : "linear-gradient(90deg, #60a5fa, #4f46e5)",
                       }}
                     />
                   </div>
@@ -1216,7 +1216,7 @@ export default function ConferenceDetailPage() {
                     <span
                       className="w-10 h-10 rounded-xl flex items-center justify-center text-sm font-semibold"
                       style={{
-                        background: "rgba(216,172,114,0.16)",
+                        background: "rgba(96,165,250,0.16)",
                         color: "var(--accent-warm)",
                       }}
                     >

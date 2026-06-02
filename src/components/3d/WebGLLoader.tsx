@@ -19,7 +19,7 @@ export default function WebGLLoader({ visible }: WebGLLoaderProps) {
           className="fixed inset-0 z-[60] pointer-events-none flex items-end justify-between px-8 pb-10"
           style={{
             background:
-              "radial-gradient(60% 60% at 50% 50%, rgba(216,172,114,0.12), transparent 70%), #0b0d12",
+              "radial-gradient(60% 60% at 50% 50%, rgba(96,165,250,0.14), transparent 70%), #0b0d12",
           }}
         >
           <motion.span
@@ -37,7 +37,7 @@ export default function WebGLLoader({ visible }: WebGLLoaderProps) {
               className="block h-[1px] w-16 md:w-24"
               style={{
                 background:
-                  "linear-gradient(90deg, rgba(243,237,224,0.08), rgba(216,172,114,0.8), rgba(243,237,224,0.08))",
+                  "linear-gradient(90deg, rgba(243,237,224,0.08), rgba(96,165,250,0.85), rgba(243,237,224,0.08))",
                 backgroundSize: "200% 100%",
               }}
               animate={{ backgroundPosition: ["0% 50%", "200% 50%"] }}
@@ -52,7 +52,7 @@ export default function WebGLLoader({ visible }: WebGLLoaderProps) {
               animate={{ opacity: 1 }}
               transition={{ duration: 0.8, delay: 0.15 }}
               className="text-[10px] tracking-[0.38em] uppercase"
-              style={{ color: "var(--accent-warm, #c79a62)" }}
+              style={{ color: "var(--accent-warm, #6366f1)" }}
             >
               Rendering
             </motion.span>

@@ -263,12 +263,13 @@ export default function AuthModal({ isOpen, onClose, defaultTab = "signin" }: Au
         },
       });
       googleButtonRef.current.innerHTML = "";
+      const buttonWidth = Math.min(320, Math.max(200, window.innerWidth - 64));
       googleApi.accounts.id.renderButton(googleButtonRef.current, {
         theme: "outline",
         size: "large",
         shape: "pill",
         text: tab === "signin" ? "signin_with" : "signup_with",
-        width: 320,
+        width: buttonWidth,
       });
     };
 
@@ -321,7 +322,7 @@ export default function AuthModal({ isOpen, onClose, defaultTab = "signin" }: Au
               <BrandLogo
                 variant="icon"
                 themeOverride="dark"
-                className="w-8 h-8 rounded-xl object-cover border border-[#f4e2c6]/30"
+                className="w-8 h-8 rounded-xl object-cover border border-[#93c5fd]/30"
               />
               <span className="text-[#f8f4ec] font-bold tracking-wide uppercase text-sm">Tidingz</span>
             </div>
