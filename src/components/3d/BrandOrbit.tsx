@@ -21,6 +21,7 @@ export default function BrandOrbit({
   lite = false,
 }: BrandOrbitProps) {
   const groupRef = useRef<THREE.Group>(null);
+  const spinRef = useRef<THREE.Group>(null);
   const ringRef = useRef<THREE.Mesh>(null);
   const particlesRef = useRef<THREE.Points>(null);
 
@@ -42,13 +43,17 @@ export default function BrandOrbit({
   useFrame((state) => {
     const t = state.clock.getElapsedTime();
     const group = groupRef.current;
+    const spin = spinRef.current;
     const ring = ringRef.current;
     const particles = particlesRef.current;
 
     if (group && !reducedMotion) {
-      group.rotation.y = t * 0.12;
       const breathe = 1 + Math.sin(t * 0.55) * 0.03;
       group.scale.setScalar(scale * breathe);
+    }
+
+    if (spin && !reducedMotion) {
+      spin.rotation.y = t * 0.12;
     }
 
     if (ring && !reducedMotion) {
@@ -64,41 +69,43 @@ export default function BrandOrbit({
 
   return (
     <group ref={groupRef} position={position} scale={scale}>
-      <mesh ref={ringRef} rotation={[Math.PI * 0.42, 0, 0]}>
-        <torusGeometry args={[1.42, 0.055, 32, 128]} />
-        <meshStandardMaterial
-          color="#60a5fa"
-          emissive="#3b82f6"
-          emissiveIntensity={0.85}
-          roughness={0.15}
-          metalness={0.65}
-          transparent
-          opacity={0.92}
-        />
-      </mesh>
+      <group ref={spinRef}>
+        <mesh ref={ringRef} rotation={[Math.PI * 0.42, 0, 0]}>
+          <torusGeometry args={[1.42, 0.055, 32, 128]} />
+          <meshStandardMaterial
+            color="#60a5fa"
+            emissive="#3b82f6"
+            emissiveIntensity={0.85}
+            roughness={0.15}
+            metalness={0.65}
+            transparent
+            opacity={0.92}
+          />
+        </mesh>
 
-      <mesh rotation={[Math.PI * 0.42, 0, 0]}>
-        <torusGeometry args={[1.42, 0.12, 32, 128]} />
-        <meshBasicMaterial
-          color="#6366f1"
-          transparent
-          opacity={0.08}
-          blending={THREE.AdditiveBlending}
-          depthWrite={false}
-        />
-      </mesh>
+        <mesh rotation={[Math.PI * 0.42, 0, 0]}>
+          <torusGeometry args={[1.42, 0.12, 32, 128]} />
+          <meshBasicMaterial
+            color="#6366f1"
+            transparent
+            opacity={0.08}
+            blending={THREE.AdditiveBlending}
+            depthWrite={false}
+          />
+        </mesh>
 
-      <points ref={particlesRef} geometry={particleGeometry}>
-        <pointsMaterial
-          color="#a78bfa"
-          size={0.045}
-          transparent
-          opacity={0.75}
-          blending={THREE.AdditiveBlending}
-          depthWrite={false}
-          sizeAttenuation
-        />
-      </points>
+        <points ref={particlesRef} geometry={particleGeometry}>
+          <pointsMaterial
+            color="#a78bfa"
+            size={0.045}
+            transparent
+            opacity={0.75}
+            blending={THREE.AdditiveBlending}
+            depthWrite={false}
+            sizeAttenuation
+          />
+        </points>
+      </group>
 
       <BrandTMark scale={1} reducedMotion={reducedMotion} lite={lite} />
     </group>

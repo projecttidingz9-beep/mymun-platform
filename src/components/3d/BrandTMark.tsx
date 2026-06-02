@@ -136,7 +136,7 @@ export default function BrandTMark({
   });
 
   return (
-    <group scale={scale} rotation={[Math.PI * 0.42, 0, 0]}>
+    <group scale={scale} rotation={[0, 0, 0]}>
       <mesh ref={meshRef} geometry={geometry} renderOrder={2}>
         <meshStandardMaterial
           ref={materialRef}
