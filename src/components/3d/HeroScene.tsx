@@ -104,7 +104,6 @@ function SceneContents({
   reducedMotion: boolean;
 }) {
   const lite = tier === "lite";
-  const mobile = lite; // lite mostly corresponds to mobile in our heuristic
 
   return (
     <>
@@ -132,19 +131,21 @@ function SceneContents({
             floatIntensity={reducedMotion ? 0 : lite ? 0.35 : 0.6}
             rotationIntensity={reducedMotion ? 0 : lite ? 0.2 : 0.35}
           >
-            <BrandLogoMark
-              scale={mobile ? 0.95 : 1.15}
-              reducedMotion={reducedMotion}
-              lite={lite}
-            />
+            <group position={lite ? [0, 0.2, 0] : [2.15, 0.1, 0]}>
+              <BrandLogoMark
+                scale={lite ? 1.0 : 1.7}
+                reducedMotion={reducedMotion}
+                lite={lite}
+              />
+            </group>
           </Float>
         </CursorParallax>
 
         {!lite && (
           <EffectComposer multisampling={0} enableNormalPass={false}>
             <Bloom
-              intensity={0.55}
-              luminanceThreshold={0.55}
+              intensity={1.1}
+              luminanceThreshold={0.3}
               luminanceSmoothing={0.22}
               mipmapBlur
             />
