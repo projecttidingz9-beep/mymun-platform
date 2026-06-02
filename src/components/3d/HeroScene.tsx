@@ -6,8 +6,7 @@ import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Environment, Float } from "@react-three/drei";
 import { EffectComposer, Bloom } from "@react-three/postprocessing";
 import type { Group } from "three";
-import FlowRibbon from "./FlowRibbon";
-import BrandOrbit from "./BrandOrbit";
+import BrandLogoMark from "./BrandLogoMark";
 import CursorParallax from "./CursorParallax";
 
 type Tier = "full" | "lite";
@@ -133,30 +132,12 @@ function SceneContents({
             floatIntensity={reducedMotion ? 0 : lite ? 0.35 : 0.6}
             rotationIntensity={reducedMotion ? 0 : lite ? 0.2 : 0.35}
           >
-            <BrandOrbit
-              position={[0, 0, 0]}
+            <BrandLogoMark
               scale={mobile ? 0.95 : 1.15}
               reducedMotion={reducedMotion}
               lite={lite}
             />
           </Float>
-
-          <FlowRibbon
-            position={[0, -0.2, -2.2]}
-            rotation={[0.18, 0.0, 0.05]}
-            color="#60a5fa"
-            opacity={lite ? 0.4 : 0.5}
-            scale={mobile ? 0.85 : 1}
-          />
-          {!lite && (
-            <FlowRibbon
-              position={[0.4, 0.6, -3]}
-              rotation={[-0.25, 0.2, -0.15]}
-              color="#a78bfa"
-              opacity={0.35}
-              scale={mobile ? 0.8 : 0.95}
-            />
-          )}
         </CursorParallax>
 
         {!lite && (
