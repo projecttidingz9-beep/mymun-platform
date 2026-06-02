@@ -6,7 +6,6 @@ import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Environment, Float } from "@react-three/drei";
 import { EffectComposer, Bloom } from "@react-three/postprocessing";
 import type { Group } from "three";
-import LiquidBlob from "./LiquidBlob";
 import FlowRibbon from "./FlowRibbon";
 import BrandOrbit from "./BrandOrbit";
 import CursorParallax from "./CursorParallax";
@@ -138,14 +137,7 @@ function SceneContents({
               position={[0, 0, 0]}
               scale={mobile ? 0.95 : 1.15}
               reducedMotion={reducedMotion}
-            />
-            <LiquidBlob
-              position={[0, 0, 0]}
-              scale={mobile ? 0.72 : 0.88}
-              speed={reducedMotion ? 0 : lite ? 0.35 : 0.55}
-              distort={reducedMotion ? 0.1 : lite ? 0.28 : 0.42}
-              color="#4f46e5"
-              emissive="#1e1b4b"
+              lite={lite}
             />
           </Float>
 

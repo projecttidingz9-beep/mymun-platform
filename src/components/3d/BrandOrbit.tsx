@@ -3,11 +3,13 @@
 import { useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
+import BrandTMark from "./BrandTMark";
 
 interface BrandOrbitProps {
   position?: [number, number, number];
   scale?: number;
   reducedMotion?: boolean;
+  lite?: boolean;
 }
 
 const PARTICLE_COUNT = 120;
@@ -16,6 +18,7 @@ export default function BrandOrbit({
   position = [0, 0, 0],
   scale = 1,
   reducedMotion = false,
+  lite = false,
 }: BrandOrbitProps) {
   const groupRef = useRef<THREE.Group>(null);
   const ringRef = useRef<THREE.Mesh>(null);
@@ -96,6 +99,8 @@ export default function BrandOrbit({
           sizeAttenuation
         />
       </points>
+
+      <BrandTMark scale={1} reducedMotion={reducedMotion} lite={lite} />
     </group>
   );
 }
