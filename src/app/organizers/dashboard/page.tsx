@@ -402,6 +402,8 @@ export default function OrganizerDashboardPage() {
   const [applicationTypeTab, setApplicationTypeTab] = useState<
     "delegate" | "chair" | "organizer" | "delegation"
   >("delegate");
+  const [autoAssigning, setAutoAssigning] = useState(false);
+  const [autoAssignProgress, setAutoAssignProgress] = useState("");
   const [pricingCategoryTypeTab, setPricingCategoryTypeTab] = useState<RegistrationCategoryType>("delegate");
   const [applicantProfileDrawerOpen, setApplicantProfileDrawerOpen] = useState(false);
   const [participantSearchQuery, setParticipantSearchQuery] = useState("");
@@ -845,8 +847,14 @@ export default function OrganizerDashboardPage() {
       userEmail: applicant.userEmail || `${applicant.id}@delegate.local`,
       userName: applicant.name,
       categoryName: applicant.categoryName || "Delegate Registration",
-      committeeName: applicant.assignedCommitteeName || applicant.committeePreference || undefined,
-      portfolioName: applicant.assignedPortfolioName || undefined,
+      committeeName:
+        applicant.status === "Allotted"
+          ? applicant.assignedCommitteeName ?? null
+          : undefined,
+      portfolioName:
+        applicant.status === "Allotted"
+          ? applicant.assignedPortfolioName ?? null
+          : undefined,
       amount: applicant.amount || 0,
       paid: applicant.paid,
       organizerStatus: applicant.status,
@@ -1525,6 +1533,106 @@ export default function OrganizerDashboardPage() {
       return categoryType === applicationTypeTab;
     });
   }, [selectedConference, applicationTypeTab]);
+
+  const handleAutoAssign = async () => {
+    if (!selectedConference || autoAssigning) return;
+    const pending = filteredApplications.filter(
+      (applicant) => applicant.status === "Pending" || applicant.status === "Invited"
+    );
+    if (pending.length === 0) {
+      alert("No pending applications to assign on this tab.");
+      return;
+    }
+    setAutoAssigning(true);
+    let assigned = 0;
+    let failed = 0;
+    try {
+      for (let index = 0; index < pending.length; index += 1) {
+        const applicant = pending[index]!;
+        setAutoAssignProgress(`${index + 1}/${pending.length}`);
+        const preferenceIds = applicant.committeePreferences?.filter(Boolean) ?? [];
+        const preferenceNames = applicant.committeePreference ? [applicant.committeePreference] : [];
+        const committees = selectedConference.committees;
+
+        const pickCommittee = (preferMatches: boolean) => {
+          const ordered: typeof committees = [];
+          const seen = new Set<string>();
+          if (preferMatches) {
+            for (const pref of preferenceIds) {
+              const match = committees.find((entry) => entry.id === pref);
+              if (match && !seen.has(match.id)) {
+                ordered.push(match);
+                seen.add(match.id);
+              }
+            }
+            for (const prefName of preferenceNames) {
+              const match = committees.find(
+                (entry) => entry.name.toLowerCase() === prefName.toLowerCase()
+              );
+              if (match && !seen.has(match.id)) {
+                ordered.push(match);
+                seen.add(match.id);
+              }
+            }
+          }
+          for (const committee of committees) {
+            if (!seen.has(committee.id)) {
+              ordered.push(committee);
+              seen.add(committee.id);
+            }
+          }
+          return ordered.find((committee) => {
+            const filled = selectedConference.applicants.filter(
+              (entry) => entry.status === "Allotted" && entry.assignedCommitteeId === committee.id
+            ).length;
+            return filled < committee.seatCount;
+          });
+        };
+
+        const committee = pickCommittee(true) ?? pickCommittee(false);
+        if (!committee) {
+          failed += 1;
+          continue;
+        }
+
+        let portfolioId: string | undefined;
+        if (applicationTypeTab !== "chair" && (committee.portfolios?.length ?? 0) > 0) {
+          const prefNames =
+            applicant.portfolioPreferencesByCommittee?.[committee.id] ?? [];
+          const portfolioCandidates = [
+            ...prefNames
+              .map((name) => committee.portfolios?.find((entry) => entry.name === name))
+              .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry)),
+            ...(committee.portfolios ?? []),
+          ];
+          const seenPortfolio = new Set<string>();
+          for (const portfolio of portfolioCandidates) {
+            if (seenPortfolio.has(portfolio.id)) continue;
+            seenPortfolio.add(portfolio.id);
+            if (portfolio.assignedApplicantIds.length < portfolio.seatCount) {
+              portfolioId = portfolio.id;
+              break;
+            }
+          }
+        }
+
+        const result = assignApplicant({
+          conferenceId: selectedConference.id,
+          applicantId: applicant.id,
+          committeeId: committee.id,
+          portfolioId,
+          allowOverride: false,
+        });
+        if (result.ok) assigned += 1;
+        else failed += 1;
+        await new Promise((resolve) => setTimeout(resolve, 80));
+      }
+      alert(`Auto-assign complete: ${assigned} allotted, ${failed} skipped or failed.`);
+    } finally {
+      setAutoAssigning(false);
+      setAutoAssignProgress("");
+    }
+  };
 
   const selectedPricingCategory = useMemo(() => {
     if (!selectedConference) return undefined;
@@ -2904,6 +3012,18 @@ export default function OrganizerDashboardPage() {
                           </div>
                         );
                       })}
+                    </div>
+                    <div className="mb-4">
+                      <button
+                        type="button"
+                        className="btn btn-outline-blue text-xs"
+                        onClick={() => void handleAutoAssign()}
+                        disabled={autoAssigning}
+                      >
+                        {autoAssigning
+                          ? `Auto-assigning… (${autoAssignProgress})`
+                          : "Auto-assign all pending"}
+                      </button>
                     </div>
                     {filteredApplications.length === 0 ? (
                       <p className="text-sm" style={{ color: "var(--fg-muted)" }}>No applications yet.</p>

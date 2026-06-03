@@ -11,7 +11,7 @@ type SyncRegistrationPayload = {
   userName: string;
   categoryName: string;
   committeeName?: string;
-  portfolioName?: string;
+  portfolioName?: string | null;
   amount: number;
   paid: boolean;
   organizerStatus?: "Pending" | "Allotted" | "Waitlisted" | "Rejected";
@@ -57,7 +57,8 @@ export async function upsertRegistrationFromClient(payload: SyncRegistrationPayl
     eventId: event.id,
     categoryName: payload.categoryName,
     committeeName: payload.committeeName,
-    portfolioName: payload.portfolioName,
+    portfolioName:
+      payload.portfolioName !== undefined ? payload.portfolioName : undefined,
     amount: payload.amount,
     paid: payload.paid,
     status: mapStatus(payload.organizerStatus),

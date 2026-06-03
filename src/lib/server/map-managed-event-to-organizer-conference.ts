@@ -287,8 +287,11 @@ export async function mapManagedEventToOrganizerConference(eventId: string): Pro
       }
     }
 
+    const isAllotted = reg.status === RegistrationStatus.ALLOTTED;
     const assignedCommitteeId =
-      reg.committeeName && committeeNameToId.has(reg.committeeName.toLowerCase())
+      isAllotted &&
+      reg.committeeName &&
+      committeeNameToId.has(reg.committeeName.toLowerCase())
         ? committeeNameToId.get(reg.committeeName.toLowerCase())
         : undefined;
 
@@ -297,14 +300,14 @@ export async function mapManagedEventToOrganizerConference(eventId: string): Pro
       name: reg.user.name,
       school: String(responses.school ?? responses.School ?? ""),
       countryPreference: String(responses.country ?? responses.Country ?? ""),
-      committeePreference: reg.committeeName ?? "",
-      committeePreferences: reg.committeeName ? [reg.committeeName] : [],
+      committeePreference: isAllotted ? "" : reg.committeeName ?? "",
+      committeePreferences: isAllotted ? [] : reg.committeeName ? [reg.committeeName] : [],
       categoryName: reg.categoryName,
       assignmentStatus: mapRegistrationStatus(reg.status),
       assignedCommitteeId,
-      assignedCommitteeName: reg.committeeName ?? undefined,
+      assignedCommitteeName: isAllotted ? reg.committeeName ?? undefined : undefined,
       assignedPortfolioId: undefined,
-      assignedPortfolioName: reg.portfolioName ?? undefined,
+      assignedPortfolioName: isAllotted ? reg.portfolioName ?? undefined : undefined,
       assignedAt: reg.allottedAt?.toISOString(),
       paid: reg.paid,
       amount: moneyNumber(reg.amount),

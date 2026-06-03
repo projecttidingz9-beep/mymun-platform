@@ -40,9 +40,7 @@ export async function POST(request: NextRequest) {
     }
 
     const eligible =
-      registration.paid &&
-      registration.status === RegistrationStatus.ALLOTTED &&
-      registration.committeeName;
+      registration.paid && registration.status === RegistrationStatus.ALLOTTED;
     if (!eligible) {
       return NextResponse.json(
         { error: "Registration is not eligible for pass issuance." },

@@ -23,6 +23,7 @@ function mapRegistrationToClient(
   reg: PrismaRegistration & { event: { title: string } }
 ): Registration {
   const org = mapRegistrationStatusToOrganizer(reg.status);
+  const isAllotted = reg.status === RegistrationStatus.ALLOTTED;
   const status: Registration["status"] =
     reg.status === RegistrationStatus.ALLOTTED
       ? "Confirmed"
@@ -38,8 +39,8 @@ function mapRegistrationToClient(
     categoryName: reg.categoryName,
     committeeName: reg.committeeName ?? undefined,
     portfolioPreferencesByCommittee: undefined,
-    assignedCommitteeName: reg.committeeName ?? undefined,
-    assignedPortfolioName: reg.portfolioName ?? undefined,
+    assignedCommitteeName: isAllotted ? reg.committeeName ?? undefined : undefined,
+    assignedPortfolioName: isAllotted ? reg.portfolioName ?? undefined : undefined,
     assignedAt: reg.allottedAt?.toISOString(),
     formAnswers: {},
     status,

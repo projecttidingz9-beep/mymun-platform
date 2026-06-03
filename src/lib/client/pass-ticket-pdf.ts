@@ -1,9 +1,11 @@
 import { jsPDF } from "jspdf";
+import type { RegistrationCategory } from "@/lib/types";
 
 export type PassTicketInput = {
   eventName: string;
   delegateName: string;
   categoryName: string;
+  applicationType?: RegistrationCategory["applicationType"];
   committeeName?: string;
   portfolioName?: string;
   registrationId: string;
@@ -11,6 +13,42 @@ export type PassTicketInput = {
   issuedAt: string;
   qrImageDataUrl: string;
 };
+
+function passTypeLabel(applicationType?: string): string {
+  switch (applicationType) {
+    case "chair":
+      return "CHAIR PASS";
+    case "delegation":
+      return "DELEGATION PASS";
+    case "organizer":
+      return "ORGANIZER PASS";
+    case "other":
+      return "EVENT PASS";
+    default:
+      return "DELEGATE PASS";
+  }
+}
+
+function holderLabel(applicationType?: string): string {
+  switch (applicationType) {
+    case "chair":
+      return "CHAIR";
+    case "delegation":
+      return "DELEGATION HEAD";
+    case "organizer":
+      return "ORGANIZER";
+    default:
+      return "DELEGATE";
+  }
+}
+
+function officialPassSubtitle(applicationType?: string): string {
+  return `OFFICIAL ${passTypeLabel(applicationType)}`;
+}
+
+function isDelegatePass(applicationType?: string): boolean {
+  return !applicationType || applicationType === "delegate";
+}
 
 type Rgb = { r: number; g: number; b: number };
 
@@ -166,7 +204,9 @@ function drawHeader(
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8);
-  doc.text("OFFICIAL DELEGATE PASS", cardX + cardW - 10, cardY + 11, { align: "right" });
+  doc.text(officialPassSubtitle(pass.applicationType), cardX + cardW - 10, cardY + 11, {
+    align: "right",
+  });
 
   const pillText = pass.categoryName.trim() || "Delegate";
   doc.setFontSize(7.5);
@@ -262,28 +302,37 @@ function drawDetailsAndQr(doc: jsPDF, pass: PassTicketInput, bounds: TicketBound
   const leftW = cardW - 14 - 88;
   let y = bodyTop + 8;
 
+  const committeeName = pass.committeeName?.trim() || "";
+  const portfolioName = pass.portfolioName?.trim() || "";
+  const applicationType = pass.applicationType;
+
   y = drawSection(doc, "EVENT", pass.eventName, leftX, y, leftW, 13, true);
-  y = drawSection(doc, "DELEGATE", pass.delegateName, leftX, y, leftW, 11, true);
-  y = drawSection(
-    doc,
-    "COMMITTEE",
-    pass.committeeName?.trim() || "Not assigned",
-    leftX,
-    y,
-    leftW,
-    11,
-    true
-  );
-  drawSection(
-    doc,
-    "PORTFOLIO",
-    pass.portfolioName?.trim() || "Not assigned",
-    leftX,
-    y,
-    leftW,
-    11,
-    false
-  );
+  y = drawSection(doc, holderLabel(applicationType), pass.delegateName, leftX, y, leftW, 11, true);
+
+  if (isDelegatePass(applicationType)) {
+    y = drawSection(
+      doc,
+      "COMMITTEE",
+      committeeName || "Pending assignment",
+      leftX,
+      y,
+      leftW,
+      11,
+      true
+    );
+    drawSection(doc, "PORTFOLIO", portfolioName || "—", leftX, y, leftW, 11, false);
+  } else if (applicationType === "chair") {
+    if (committeeName) {
+      drawSection(doc, "COMMITTEE", committeeName, leftX, y, leftW, 11, false);
+    }
+  } else {
+    if (committeeName) {
+      y = drawSection(doc, "COMMITTEE", committeeName, leftX, y, leftW, 11, true);
+    }
+    if (portfolioName) {
+      drawSection(doc, "PORTFOLIO", portfolioName, leftX, y, leftW, 11, false);
+    }
+  }
 
   const qrSize = 52;
   const qrPad = 3;
@@ -347,8 +396,10 @@ function drawStubAndFooter(doc: jsPDF, pass: PassTicketInput, bounds: TicketBoun
   drawPerforation(doc, tearY, cardX, cardW);
 
   const stubY = tearY + 6;
+  const committeeStub = isDelegatePass(pass.applicationType) && Boolean(pass.committeeName?.trim());
+  const stubHeight = committeeStub ? 28 : 22;
   setFillRgb(doc, STUB_BG);
-  doc.roundedRect(cardX + 8, stubY, cardW - 16, 22, 2, 2, "F");
+  doc.roundedRect(cardX + 8, stubY, cardW - 16, stubHeight, 2, 2, "F");
 
   doc.setFont("courier", "normal");
   doc.setFontSize(7.5);
@@ -359,11 +410,15 @@ function drawStubAndFooter(doc: jsPDF, pass: PassTicketInput, bounds: TicketBoun
     stubY + 8
   );
   doc.text(`PASS ${truncateId(pass.passId, 28)}`, cardX + 12, stubY + 14);
+  if (committeeStub) {
+    doc.text(`COMMITTEE  ${pass.committeeName!.trim()}`, cardX + 12, stubY + 20);
+  }
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(8);
   setRgb(doc, VALUE);
-  doc.text(`ISSUED  ${formatIssuedAt(pass.issuedAt)}`, cardX + cardW - 12, stubY + 11, {
+  const issuedY = committeeStub ? stubY + 16 : stubY + 11;
+  doc.text(`ISSUED  ${formatIssuedAt(pass.issuedAt)}`, cardX + cardW - 12, issuedY, {
     align: "right",
   });
 
@@ -387,11 +442,19 @@ function drawStubAndFooter(doc: jsPDF, pass: PassTicketInput, bounds: TicketBoun
   doc.text("This pass is for one-time use only.", cardX + 12, barY + 15);
 }
 
-function drawPageFooter(doc: jsPDF, pageW: number, pageH: number) {
+function drawPageFooter(
+  doc: jsPDF,
+  pageW: number,
+  pageH: number,
+  applicationType?: string
+) {
   doc.setFont("helvetica", "normal");
   doc.setFontSize(7);
   setRgb(doc, { r: 148, g: 163, b: 184 });
-  doc.text("tidingz.com  ·  Official Delegate Pass", pageW / 2, pageH - 11, {
+  const footerLabel = passTypeLabel(applicationType)
+    .toLowerCase()
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+  doc.text(`tidingz.com  ·  Official ${footerLabel}`, pageW / 2, pageH - 11, {
     align: "center",
   });
 }
@@ -427,7 +490,7 @@ export async function downloadPassTicketPdf(pass: PassTicketInput) {
   drawHeader(doc, pass, bounds, logoDataUrl);
   drawDetailsAndQr(doc, pass, bounds);
   drawStubAndFooter(doc, pass, bounds);
-  drawPageFooter(doc, pageW, pageH);
+  drawPageFooter(doc, pageW, pageH, pass.applicationType);
 
-  doc.save(`delegate-pass-${pass.registrationId}.pdf`);
+  doc.save(`event-pass-${pass.registrationId}.pdf`);
 }

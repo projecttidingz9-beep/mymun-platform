@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { RegistrationStatus } from "@/generated/prisma/enums";
 import { getRequestActor } from "@/lib/server/auth";
 import { consumeRateLimitBucket } from "@/lib/server/rate-limit-db";
 import {
@@ -42,6 +43,7 @@ export async function POST(request: NextRequest) {
     }
 
     const { pass } = loaded;
+    const isAllotted = pass.registration.status === RegistrationStatus.ALLOTTED;
 
     if (isPassAlreadyUsed(pass)) {
       return NextResponse.json(alreadyUsedResponse(), { status: 409 });
@@ -55,8 +57,8 @@ export async function POST(request: NextRequest) {
       delegateName: pass.registration.user.name,
       delegateEmail: pass.registration.user.email,
       eventName: pass.registration.event.title,
-      committeeName: pass.registration.committeeName,
-      portfolioName: pass.registration.portfolioName,
+      committeeName: isAllotted ? pass.registration.committeeName : null,
+      portfolioName: isAllotted ? pass.registration.portfolioName : null,
       categoryName: pass.registration.categoryName,
       checkedIn: false,
       checkedInAt: null,

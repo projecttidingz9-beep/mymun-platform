@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { RegistrationStatus } from "@/generated/prisma/enums";
 import { getRequestActor, requireEventOrganizerAccess, requireOrganizer } from "@/lib/server/auth";
-import { issueDelegatePassForRegistration } from "@/lib/server/issue-delegate-pass";
+import {
+  issueDelegatePassForRegistration,
+  resolveReleaseAt,
+} from "@/lib/server/issue-delegate-pass";
 import { prisma } from "@/lib/server/prisma";
 
 function mapOrganizerStatusToDb(
@@ -32,7 +35,7 @@ export async function PATCH(
 
   const registration = await prisma.registration.findFirst({
     where: { id: registrationId, deletedAt: null },
-    select: { id: true, eventId: true },
+    select: { id: true, eventId: true, event: { select: { startDate: true } } },
   });
   if (!registration) {
     return NextResponse.json({ error: "Registration not found." }, { status: 404 });
@@ -93,7 +96,9 @@ export async function PATCH(
 
   if (updated?.paid && updated.status === RegistrationStatus.ALLOTTED) {
     try {
-      await issueDelegatePassForRegistration(registrationId, { immediateRelease: true });
+      await issueDelegatePassForRegistration(registrationId, {
+        releaseAt: resolveReleaseAt(registration.event.startDate),
+      });
     } catch {
       // PATCH succeeded; pass issuance is best-effort.
     }

@@ -11,7 +11,12 @@ import { ensureServerSession } from "@/lib/client/session";
 import { downloadRegistrationInvoicePdf } from "@/lib/client/invoice-pdf";
 import { downloadPassTicketPdf } from "@/lib/client/pass-ticket-pdf";
 import { useAuth } from "@/lib/auth-context";
-import { DelegateMunAward, DelegateMunParticipation, Registration } from "@/lib/types";
+import {
+  DelegateMunAward,
+  DelegateMunParticipation,
+  Registration,
+  RegistrationCategory,
+} from "@/lib/types";
 
 type DelegateTabId = "conferences" | "profile" | "security" | "payments" | "notifications";
 
@@ -63,6 +68,7 @@ export default function DashboardPage() {
     registrationId: string;
     releaseAt: string;
     issuedAt: string;
+    applicationType?: RegistrationCategory["applicationType"];
     released: boolean;
     checkedIn: boolean;
     checkedInAt?: string | null;
@@ -611,78 +617,6 @@ export default function DashboardPage() {
           <div>
             {activeTab === "conferences" && (
               <div className="space-y-4">
-              {delegatePasses.length > 0 && (
-                <div className="card p-6 rounded-2xl mb-5">
-                  <h3 className="font-bold mb-3" style={{ color: "var(--fg)" }}>Digital Delegate Passes</h3>
-                  <div className="space-y-3">
-                    {delegatePasses.map((pass) => (
-                      <div key={pass.id} className="p-4 rounded-xl" style={{ background: "var(--bg-subtle)" }}>
-                        <div className="flex items-start justify-between gap-3 flex-wrap">
-                          <div>
-                            <p className="text-sm font-semibold" style={{ color: "var(--fg)" }}>{pass.eventName}</p>
-                            <p className="text-xs mt-1" style={{ color: "var(--fg-muted)" }}>
-                              {pass.categoryName} · {pass.committeeName || "No committee"} · {pass.portfolioName || "No portfolio"}
-                            </p>
-                            <p className="text-xs mt-1" style={{ color: "var(--fg-muted)" }}>
-                              Registration ID: {pass.registrationId}
-                            </p>
-                            {!pass.released && (
-                              <p className="text-xs mt-1" style={{ color: "#d97706" }}>
-                                Pass releases at {new Date(pass.releaseAt).toLocaleString()}
-                              </p>
-                            )}
-                            {pass.checkedIn && (
-                              <p className="text-xs mt-1" style={{ color: "#16a34a" }}>
-                                Checked in at {pass.checkedInAt ? new Date(pass.checkedInAt).toLocaleString() : "event gate"}
-                              </p>
-                            )}
-                          </div>
-                          {pass.released && pass.qrImageDataUrl ? (
-                            <div className="text-center flex flex-col items-center gap-2">
-                              <Image
-                                src={pass.qrImageDataUrl}
-                                alt="Delegate QR code"
-                                width={112}
-                                height={112}
-                                className="w-28 h-28 rounded-lg bg-white p-2"
-                              />
-                              <a
-                                href={pass.qrImageDataUrl}
-                                download={`delegate-pass-${pass.registrationId}.png`}
-                                className="btn btn-ghost text-xs w-full"
-                              >
-                                Download QR (PNG)
-                              </a>
-                              <button
-                                type="button"
-                                className="btn btn-primary text-xs w-full"
-                                onClick={() =>
-                                  void downloadPassTicketPdf({
-                                    eventName: pass.eventName,
-                                    delegateName: user?.name ?? "Delegate",
-                                    categoryName: pass.categoryName,
-                                    committeeName: pass.committeeName,
-                                    portfolioName: pass.portfolioName,
-                                    registrationId: pass.registrationId,
-                                    passId: pass.id,
-                                    issuedAt: pass.issuedAt,
-                                    qrImageDataUrl: pass.qrImageDataUrl!,
-                                  })
-                                }
-                              >
-                                Download Ticket (PDF)
-                              </button>
-                            </div>
-                          ) : (
-                            <span className="badge badge-gold">Locked</span>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
               {registrations.length === 0 ? (
                 <div
                   className="app-card py-20 text-center"
@@ -696,6 +630,7 @@ export default function DashboardPage() {
               ) : (
                 <div className="space-y-4">
                   {registrations.map((reg) => {
+                    const matchedPass = delegatePasses.find((pass) => pass.registrationId === reg.id);
                     return (
                       <div key={reg.id} className="card p-5 rounded-2xl">
                         <div className="flex items-start gap-4">
@@ -771,6 +706,95 @@ export default function DashboardPage() {
                               );
                             })()}
                           </div>
+                        </div>
+                        <div
+                          className="mt-4 pt-4 space-y-3"
+                          style={{ borderTop: "1px solid var(--border)" }}
+                        >
+                          <p className="text-xs font-bold uppercase tracking-wide" style={{ color: "var(--fg-muted)" }}>
+                            Invoice &amp; Pass
+                          </p>
+                          <button
+                            type="button"
+                            className="btn btn-outline-blue text-xs w-full sm:w-auto"
+                            onClick={() => onDownloadInvoicePdf(reg)}
+                            disabled={!reg.paid}
+                          >
+                            Download Invoice (PDF)
+                          </button>
+                          {!reg.paid && (
+                            <p className="text-xs" style={{ color: "var(--fg-muted)" }}>
+                              Invoice downloads after payment is confirmed.
+                            </p>
+                          )}
+                          {matchedPass ? (
+                            <div className="p-4 rounded-xl space-y-3" style={{ background: "var(--bg-subtle)" }}>
+                              <p className="text-sm font-semibold" style={{ color: "var(--fg)" }}>
+                                Digital pass
+                              </p>
+                              <p className="text-xs" style={{ color: "var(--fg-muted)" }}>
+                                {matchedPass.categoryName}
+                                {matchedPass.committeeName ? ` · ${matchedPass.committeeName}` : ""}
+                                {matchedPass.portfolioName ? ` · ${matchedPass.portfolioName}` : ""}
+                              </p>
+                              {matchedPass.checkedIn && (
+                                <p className="text-xs" style={{ color: "#16a34a" }}>
+                                  Checked in at{" "}
+                                  {matchedPass.checkedInAt
+                                    ? new Date(matchedPass.checkedInAt).toLocaleString()
+                                    : "event gate"}
+                                </p>
+                              )}
+                              {matchedPass.released && matchedPass.qrImageDataUrl ? (
+                                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                                  <Image
+                                    src={matchedPass.qrImageDataUrl}
+                                    alt="Event pass QR code"
+                                    width={112}
+                                    height={112}
+                                    className="w-28 h-28 rounded-lg bg-white p-2"
+                                  />
+                                  <div className="flex flex-col gap-2 w-full sm:w-auto">
+                                    <a
+                                      href={matchedPass.qrImageDataUrl}
+                                      download={`event-pass-${matchedPass.registrationId}.png`}
+                                      className="btn btn-ghost text-xs"
+                                    >
+                                      Download QR (PNG)
+                                    </a>
+                                    <button
+                                      type="button"
+                                      className="btn btn-primary text-xs"
+                                      onClick={() =>
+                                        void downloadPassTicketPdf({
+                                          eventName: matchedPass.eventName,
+                                          delegateName: user.name,
+                                          categoryName: matchedPass.categoryName,
+                                          applicationType: matchedPass.applicationType,
+                                          committeeName: matchedPass.committeeName,
+                                          portfolioName: matchedPass.portfolioName,
+                                          registrationId: matchedPass.registrationId,
+                                          passId: matchedPass.id,
+                                          issuedAt: matchedPass.issuedAt,
+                                          qrImageDataUrl: matchedPass.qrImageDataUrl!,
+                                        })
+                                      }
+                                    >
+                                      Download Ticket (PDF)
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <p className="text-xs" style={{ color: "#d97706" }}>
+                                  Pass locked until {new Date(matchedPass.releaseAt).toLocaleString()}
+                                </p>
+                              )}
+                            </div>
+                          ) : (
+                            <p className="text-xs" style={{ color: "var(--fg-muted)" }}>
+                              Pass will be issued once allotment is complete.
+                            </p>
+                          )}
                         </div>
                       </div>
                     );

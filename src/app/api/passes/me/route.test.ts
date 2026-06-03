@@ -24,6 +24,10 @@ vi.mock("qrcode", () => ({
   },
 }));
 
+vi.mock("@/lib/server/resolve-registration-application-type", () => ({
+  resolveRegistrationApplicationType: vi.fn(() => Promise.resolve("delegate")),
+}));
+
 describe("GET /api/passes/me", () => {
   beforeEach(async () => {
     const auth = await import("@/lib/server/auth");
@@ -79,5 +83,92 @@ describe("GET /api/passes/me", () => {
     expect(body.passes[0].qrToken).toBeNull();
     expect(body.passes[0].qrImageDataUrl).toBeUndefined();
     expect(body.passes[0].released).toBe(false);
+  });
+
+  it("hides legacy preference portfolio until registration is allotted", async () => {
+    const { prisma } = await import("@/lib/server/prisma");
+    const releaseAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({
+      id: "user-1",
+      email: "delegate@test.com",
+      name: "Delegate",
+      registrations: [
+        {
+          id: "reg-pending",
+          userId: "user-1",
+          eventId: "evt-1",
+          categoryName: "Delegate",
+          committeeName: "UNSC",
+          portfolioName: "China",
+          status: "PENDING",
+          checkedIn: false,
+          checkedInAt: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          event: { id: "evt-1", title: "Test Conference" },
+          pass: {
+            id: "pass-pending",
+            registrationId: "reg-pending",
+            eventId: "evt-1",
+            qrTokenHash: "hash",
+            releaseAt,
+            issuedAt: new Date(),
+            status: "ISSUED",
+            deletedAt: null,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+        },
+      ],
+    } as never);
+
+    const res = await GET(new NextRequest("http://localhost/api/passes/me"));
+    const body = await res.json();
+    expect(body.passes[0].portfolioName).toBeNull();
+    expect(body.passes[0].committeeName).toBeNull();
+  });
+
+  it("returns assigned portfolio when registration is allotted", async () => {
+    const { prisma } = await import("@/lib/server/prisma");
+    const releaseAt = new Date(Date.now() - 60_000);
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({
+      id: "user-1",
+      email: "delegate@test.com",
+      name: "Delegate",
+      registrations: [
+        {
+          id: "reg-allotted",
+          userId: "user-1",
+          eventId: "evt-1",
+          categoryName: "Delegate",
+          committeeName: "UNSC",
+          portfolioName: "China",
+          status: "ALLOTTED",
+          checkedIn: false,
+          checkedInAt: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          event: { id: "evt-1", title: "Test Conference" },
+          pass: {
+            id: "pass-allotted",
+            registrationId: "reg-allotted",
+            eventId: "evt-1",
+            qrTokenHash: "hash",
+            releaseAt,
+            issuedAt: new Date(),
+            status: "ISSUED",
+            deletedAt: null,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+        },
+      ],
+    } as never);
+
+    const res = await GET(new NextRequest("http://localhost/api/passes/me"));
+    const body = await res.json();
+    expect(body.passes[0].portfolioName).toBe("China");
+    expect(body.passes[0].committeeName).toBe("UNSC");
+    expect(body.passes[0].released).toBe(true);
   });
 });

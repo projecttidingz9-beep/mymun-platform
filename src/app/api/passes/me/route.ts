@@ -1,8 +1,10 @@
 import QRCode from "qrcode";
 import { NextRequest, NextResponse } from "next/server";
+import { RegistrationStatus } from "@/generated/prisma/enums";
 import { getRequestActor } from "@/lib/server/auth";
 import { signPassToken } from "@/lib/server/pass-token";
 import { prisma } from "@/lib/server/prisma";
+import { resolveRegistrationApplicationType } from "@/lib/server/resolve-registration-application-type";
 
 export async function GET(request: NextRequest) {
   const actor = await getRequestActor(request);
@@ -41,15 +43,21 @@ export async function GET(request: NextRequest) {
           });
           const isReleased = pass.releaseAt <= now;
           const qrImageDataUrl = isReleased ? await QRCode.toDataURL(token) : undefined;
+          const applicationType = await resolveRegistrationApplicationType(
+            registration.eventId,
+            registration.categoryName
+          );
+          const isAllotted = registration.status === RegistrationStatus.ALLOTTED;
           return {
             id: pass.id,
             registrationId: registration.id,
             eventId: registration.eventId,
             eventName: registration.event.title,
             delegateName: user.name,
+            applicationType,
             categoryName: registration.categoryName,
-            committeeName: registration.committeeName,
-            portfolioName: registration.portfolioName,
+            committeeName: isAllotted ? registration.committeeName : null,
+            portfolioName: isAllotted ? registration.portfolioName : null,
             status: registration.status,
             checkedIn: registration.checkedIn,
             checkedInAt: registration.checkedInAt?.toISOString() ?? null,
@@ -64,6 +72,6 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ passes });
   } catch {
-    return NextResponse.json({ error: "Failed to fetch delegate passes." }, { status: 500 });
+    return NextResponse.json({ error: "Failed to fetch event passes." }, { status: 500 });
   }
 }

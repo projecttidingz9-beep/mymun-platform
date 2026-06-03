@@ -17,8 +17,9 @@ import { getPhaseStatus, resolveRegistrationPrice } from "@/lib/pricing";
 import { getCategoryTypeHint, getCategoryTypeLabel } from "@/lib/registration-category-types";
 import { getMarketplaceConferences } from "@/lib/marketplace-conferences";
 import { formatMoney } from "@/lib/format-money";
+import { downloadRegistrationInvoicePdf } from "@/lib/client/invoice-pdf";
 
-type Step = 1 | 2 | 3 | 4;
+type Step = 1 | 2 | 3 | 4 | 5;
 
 const createConfirmationId = () => `TZ-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
 
@@ -41,6 +42,7 @@ export default function CheckoutPage() {
   const [loading, setLoading] = useState(false);
   const [uploadedFiles, setUploadedFiles] = useState<Record<string, string[]>>({});
   const [catalogConference, setCatalogConference] = useState<Conference | null>(null);
+  const [submittedRegistration, setSubmittedRegistration] = useState<Registration | null>(null);
 
   const eventKey = String(params.id);
   const organizerConference = organizerConferences.find((conference) => conference.id === eventKey);
@@ -182,7 +184,6 @@ export default function CheckoutPage() {
           categoryName: selectedCategory.name,
           committeeConfigId: selectedCommitteeId || undefined,
           committeeName: selectedCommittee?.name,
-          portfolioName: portfolioPreferencePrimary || undefined,
           committeePreferences: [selectedCommitteeId, secondPreferenceCommitteeId, thirdPreferenceCommitteeId].filter(
             Boolean
           ),
@@ -203,7 +204,8 @@ export default function CheckoutPage() {
         return;
       }
       addRegistration(payload.clientRegistration);
-      router.push("/dashboard");
+      setSubmittedRegistration(payload.clientRegistration);
+      setStep(5);
     } finally {
       setLoading(false);
     }
@@ -266,7 +268,7 @@ export default function CheckoutPage() {
           <header className="app-header">
             <div className="app-header-copy">
               <div className="section-label mb-3">
-                {`Checkout · Step ${step}/4`}
+                {step === 5 ? "Checkout · Complete" : `Checkout · Step ${step}/4`}
               </div>
               <h1 className="app-title">
                 Complete Your Registration
@@ -633,6 +635,64 @@ export default function CheckoutPage() {
                       : `Submit registration (${resolvedFeeDisplay})`}
                 </button>
               </div>
+            </div>
+          )}
+
+          {step === 5 && submittedRegistration && (
+            <div className="card p-8 rounded-2xl space-y-5">
+              <div className="text-center space-y-2">
+                <p className="text-4xl" aria-hidden>
+                  ✓
+                </p>
+                <h2 className="text-xl font-bold" style={{ color: "var(--fg)" }}>
+                  Registration submitted!
+                </h2>
+                <p className="text-sm" style={{ color: "var(--fg-muted)" }}>
+                  Your application for {displayTitle} has been recorded.
+                </p>
+              </div>
+              <div className="rounded-xl p-4 space-y-1" style={{ background: "var(--bg-subtle)", border: "1px solid var(--border)" }}>
+                <p className="text-sm font-semibold" style={{ color: "var(--fg)" }}>
+                  Registration summary
+                </p>
+                <p className="text-xs" style={{ color: "var(--fg-muted)" }}>
+                  Registration ID: {submittedRegistration.id}
+                </p>
+                <p className="text-xs" style={{ color: "var(--fg-muted)" }}>
+                  Category: {submittedRegistration.categoryName}
+                </p>
+                <p className="text-xs" style={{ color: "var(--fg-muted)" }}>
+                  Fee: {formatMoney(submittedRegistration.amount, checkoutCurrency)} ·{" "}
+                  {submittedRegistration.paid ? "Paid" : "Payment pending"}
+                </p>
+                <p className="text-xs" style={{ color: "var(--fg-muted)" }}>
+                  Registered: {submittedRegistration.registeredAt}
+                </p>
+              </div>
+              <button
+                type="button"
+                className="btn btn-outline-blue w-full"
+                onClick={() => {
+                  if (!user) return;
+                  downloadRegistrationInvoicePdf(submittedRegistration, {
+                    name: user.name,
+                    email: user.email,
+                    invoiceAddress: user.invoiceAddress,
+                  });
+                }}
+              >
+                Download Invoice (PDF)
+              </button>
+              <p className="text-xs text-center" style={{ color: "var(--fg-muted)" }}>
+                Your digital pass will be issued after the organizer completes allotment.
+              </p>
+              <button
+                type="button"
+                className="btn btn-primary w-full"
+                onClick={() => router.push("/dashboard")}
+              >
+                Go to Dashboard
+              </button>
             </div>
           )}
         </div>
