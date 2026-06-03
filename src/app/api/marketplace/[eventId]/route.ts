@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/server/prisma";
 import { mapPublishedEventToPublicDetail } from "@/lib/server/marketplace-public";
+import { getCachedPublishedEventDetail } from "@/lib/server/marketplace-queries";
 import { MARKETPLACE_DETAIL_CACHE_CONTROL } from "@/lib/server/http-cache";
 
 /** Public conference detail for delegates (published events only). */
@@ -15,35 +15,7 @@ export async function GET(
   }
 
   try {
-    const event = await prisma.event.findFirst({
-      where: {
-        status: "PUBLISHED",
-        deletedAt: null,
-        OR: [{ id: eventKey }, { slug: eventKey }],
-      },
-      include: {
-        organizerConfig: {
-          include: {
-            committees: true,
-            pricingPhases: true,
-          },
-        },
-        owner: { select: { name: true, email: true } },
-        reviews: {
-          where: { status: "approved" },
-          include: { user: { select: { name: true } } },
-          orderBy: { createdAt: "desc" },
-          take: 50,
-        },
-        _count: {
-          select: {
-            registrations: {
-              where: { deletedAt: null },
-            },
-          },
-        },
-      },
-    });
+    const event = await getCachedPublishedEventDetail(eventKey);
 
     if (!event) {
       return NextResponse.json({ error: "Conference not found." }, { status: 404 });

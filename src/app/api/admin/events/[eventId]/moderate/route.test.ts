@@ -12,6 +12,14 @@ vi.mock("@/lib/server/admin-conference-moderation", () => ({
   moderateConference: vi.fn(),
 }));
 
+vi.mock("next/cache", () => ({
+  revalidateTag: vi.fn(),
+}));
+
+vi.mock("@/lib/server/marketplace-queries", () => ({
+  MARKETPLACE_CACHE_TAG: "marketplace",
+}));
+
 describe("POST /api/admin/events/[eventId]/moderate", () => {
   beforeEach(() => {
     vi.clearAllMocks();

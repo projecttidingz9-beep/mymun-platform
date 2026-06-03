@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { revalidateTag } from "next/cache";
 import { getRequestActor, isSuperAdmin, resolveActorUserId } from "@/lib/server/auth";
 import {
   moderateConference,
   type ModerationAction,
 } from "@/lib/server/admin-conference-moderation";
+import { MARKETPLACE_CACHE_TAG } from "@/lib/server/marketplace-queries";
 
 export async function POST(
   request: NextRequest,
@@ -51,6 +53,10 @@ export async function POST(
       ip: request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || undefined,
       userAgent: request.headers.get("user-agent") || undefined,
     });
+
+    if (action === "approve") {
+      revalidateTag(MARKETPLACE_CACHE_TAG, { expire: 0 });
+    }
 
     return NextResponse.json({ ok: true, ...result });
   } catch (err) {

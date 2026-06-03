@@ -17,6 +17,14 @@ vi.mock("@/lib/server/map-managed-event-to-organizer-conference", () => ({
   mapManagedEventToOrganizerConference: vi.fn(),
 }));
 
+vi.mock("next/cache", () => ({
+  revalidateTag: vi.fn(),
+}));
+
+vi.mock("@/lib/server/marketplace-queries", () => ({
+  MARKETPLACE_CACHE_TAG: "marketplace",
+}));
+
 describe("PUT /api/organizers/conferences/[eventId]/sync", () => {
   beforeEach(() => {
     vi.clearAllMocks();

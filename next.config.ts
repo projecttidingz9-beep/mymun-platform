@@ -2,6 +2,9 @@ import { withSentryConfig } from "@sentry/nextjs";
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  experimental: {
+    optimizePackageImports: ["framer-motion", "lucide-react"],
+  },
   images: {
     // Next/Image optimization on Vercel (disable again only if host lacks optimizer).
     remotePatterns: [

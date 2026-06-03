@@ -29,4 +29,15 @@ describe("resolveRegistrationApplicationType", () => {
     const type = await resolveRegistrationApplicationType("evt-1", "Executive Chair");
     expect(type).toBe("chair");
   });
+
+  it("uses preloaded blob without fetching again", async () => {
+    const { getOrganizerStoredBlob } = await import("@/lib/server/organizer-config-store");
+    const type = await resolveRegistrationApplicationType("evt-1", "Chair Registration", {
+      registrationCategories: [
+        { id: "cat-chair", name: "Chair Registration", applicationType: "chair" },
+      ],
+    });
+    expect(type).toBe("chair");
+    expect(getOrganizerStoredBlob).not.toHaveBeenCalled();
+  });
 });

@@ -6,6 +6,16 @@ import {
 import type { RegistrationCategory } from "@/lib/types";
 import { getOrganizerStoredBlob } from "@/lib/server/organizer-config-store";
 
+export async function loadOrganizerBlobsByEventIds(
+  eventIds: string[]
+): Promise<Map<string, Record<string, unknown>>> {
+  const unique = [...new Set(eventIds)];
+  const entries = await Promise.all(
+    unique.map(async (eventId) => [eventId, await getOrganizerStoredBlob(eventId)] as const)
+  );
+  return new Map(entries);
+}
+
 const CATEGORY_TYPES: RegistrationCategoryType[] = [
   "delegate",
   "chair",
@@ -34,9 +44,12 @@ function inferFromCategoryName(categoryName: string): RegistrationCategoryType {
 
 export async function resolveRegistrationApplicationType(
   eventId: string,
-  categoryName: string
+  categoryName: string,
+  preloadedBlob?: Record<string, unknown>
 ): Promise<RegistrationCategoryType> {
-  const blob = await getOrganizerStoredBlob(eventId);
+  const blob =
+    preloadedBlob ??
+    (await getOrganizerStoredBlob(eventId));
   const categories = Array.isArray(blob.registrationCategories)
     ? (blob.registrationCategories as RegistrationCategory[])
     : [];

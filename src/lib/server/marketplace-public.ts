@@ -91,10 +91,13 @@ function statusBadge(
 }
 
 export type EventWithListing = Event & {
-  organizerConfig: (OrganizerConferenceConfig & {
-    committees: CommitteeConfig[];
-    pricingPhases: PricingPhaseConfig[];
-  }) | null;
+  organizerConfig:
+    | (Omit<OrganizerConferenceConfig, "description"> & {
+        description?: string | null;
+        committees: CommitteeConfig[];
+        pricingPhases: PricingPhaseConfig[];
+      })
+    | null;
   owner: Pick<User, "name" | "email"> | null;
   _count: { registrations: number };
 };

@@ -27,6 +27,7 @@ vi.mock("qrcode", () => ({
 
 vi.mock("@/lib/server/resolve-registration-application-type", () => ({
   resolveRegistrationApplicationType: vi.fn(() => Promise.resolve("delegate")),
+  loadOrganizerBlobsByEventIds: vi.fn(() => Promise.resolve(new Map())),
 }));
 
 describe("GET /api/passes/me", () => {

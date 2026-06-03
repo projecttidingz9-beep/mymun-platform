@@ -2,12 +2,8 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { GET } from "./route";
 import { MARKETPLACE_CATALOG_CACHE_CONTROL } from "@/lib/server/http-cache";
 
-vi.mock("@/lib/server/prisma", () => ({
-  prisma: {
-    event: {
-      findMany: vi.fn(),
-    },
-  },
+vi.mock("@/lib/server/marketplace-queries", () => ({
+  getCachedPublishedCatalog: vi.fn(),
 }));
 
 vi.mock("@/lib/server/marketplace-public", () => ({
@@ -23,9 +19,9 @@ describe("GET /api/marketplace", () => {
   });
 
   it("returns only published events mapped for catalog", async () => {
-    const { prisma } = await import("@/lib/server/prisma");
+    const { getCachedPublishedCatalog } = await import("@/lib/server/marketplace-queries");
     const { mapPublishedEventToConference } = await import("@/lib/server/marketplace-public");
-    vi.mocked(prisma.event.findMany).mockResolvedValue([
+    vi.mocked(getCachedPublishedCatalog).mockResolvedValue([
       { id: "evt-published" },
     ] as never);
 
@@ -33,11 +29,7 @@ describe("GET /api/marketplace", () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as { conferences: Array<{ id: string }> };
     expect(body.conferences).toEqual([{ id: "evt-published", title: "Mapped" }]);
-    expect(prisma.event.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { status: "PUBLISHED", deletedAt: null },
-      })
-    );
+    expect(getCachedPublishedCatalog).toHaveBeenCalledTimes(1);
     expect(mapPublishedEventToConference).toHaveBeenCalledTimes(1);
     expect(res.headers.get("Cache-Control")).toBe(MARKETPLACE_CATALOG_CACHE_CONTROL);
   });

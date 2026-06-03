@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { revalidateTag } from "next/cache";
 import type { OrganizerConference } from "@/lib/types";
 import {
   getRequestActor,
@@ -11,6 +12,7 @@ import {
   persistOrganizerConferenceSync,
 } from "@/lib/server/persist-organizer-conference-sync";
 import { mapManagedEventToOrganizerConference } from "@/lib/server/map-managed-event-to-organizer-conference";
+import { MARKETPLACE_CACHE_TAG } from "@/lib/server/marketplace-queries";
 
 export async function PUT(
   request: NextRequest,
@@ -44,6 +46,7 @@ export async function PUT(
       skipReviewGate: isSuperAdmin(actor),
       syncStatus: body.syncStatus !== false,
     });
+    revalidateTag(MARKETPLACE_CACHE_TAG, { expire: 0 });
     const conference = await mapManagedEventToOrganizerConference(eventId);
     return NextResponse.json({ conference });
   } catch (error) {

@@ -179,7 +179,7 @@ export async function mapManagedEventToOrganizerConference(eventId: string): Pro
       registrations: {
         where: { deletedAt: null },
         include: {
-          user: true,
+          user: { select: { name: true, email: true } },
           paymentIntent: { select: { status: true } },
           applicationAnswers: { include: { question: true } },
         },

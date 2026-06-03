@@ -3,12 +3,8 @@ import { NextRequest } from "next/server";
 import { GET } from "./route";
 import { MARKETPLACE_DETAIL_CACHE_CONTROL } from "@/lib/server/http-cache";
 
-vi.mock("@/lib/server/prisma", () => ({
-  prisma: {
-    event: {
-      findFirst: vi.fn(),
-    },
-  },
+vi.mock("@/lib/server/marketplace-queries", () => ({
+  getCachedPublishedEventDetail: vi.fn(),
 }));
 
 vi.mock("@/lib/server/marketplace-public", () => ({
@@ -25,8 +21,8 @@ describe("GET /api/marketplace/[eventId]", () => {
   });
 
   it("returns 404 when published event not found", async () => {
-    const { prisma } = await import("@/lib/server/prisma");
-    vi.mocked(prisma.event.findFirst).mockResolvedValue(null);
+    const { getCachedPublishedEventDetail } = await import("@/lib/server/marketplace-queries");
+    vi.mocked(getCachedPublishedEventDetail).mockResolvedValue(null);
 
     const req = new NextRequest("http://localhost/api/marketplace/missing");
     const res = await GET(req, { params: Promise.resolve({ eventId: "missing" }) });
@@ -34,8 +30,8 @@ describe("GET /api/marketplace/[eventId]", () => {
   });
 
   it("returns public detail for published event", async () => {
-    const { prisma } = await import("@/lib/server/prisma");
-    vi.mocked(prisma.event.findFirst).mockResolvedValue({ id: "evt-1", reviews: [] } as never);
+    const { getCachedPublishedEventDetail } = await import("@/lib/server/marketplace-queries");
+    vi.mocked(getCachedPublishedEventDetail).mockResolvedValue({ id: "evt-1", reviews: [] } as never);
 
     const req = new NextRequest("http://localhost/api/marketplace/evt-1");
     const res = await GET(req, { params: Promise.resolve({ eventId: "evt-1" }) });

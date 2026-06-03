@@ -8,9 +8,6 @@ import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import AppRouteSkeleton from "@/components/AppRouteSkeleton";
 import { ensureServerSession } from "@/lib/client/session";
-import { downloadRegistrationInvoicePdf } from "@/lib/client/invoice-pdf";
-import { downloadPassTicketPdf } from "@/lib/client/pass-ticket-pdf";
-import { downloadParticipationCertificatePdf } from "@/lib/client/participation-certificate-pdf";
 import { useAuth } from "@/lib/auth-context";
 import {
   DelegateMunAward,
@@ -433,11 +430,12 @@ export default function DashboardPage() {
     setIsEditingProfile(false);
   };
 
-  const onDownloadInvoicePdf = (registration: Registration) => {
+  const onDownloadInvoicePdf = async (registration: Registration) => {
     if (!registration.paid) {
       alert("Invoice is available after payment is completed.");
       return;
     }
+    const { downloadRegistrationInvoicePdf } = await import("@/lib/client/invoice-pdf");
     downloadRegistrationInvoicePdf(registration, {
       name: user.name,
       email: user.email,
@@ -766,20 +764,25 @@ export default function DashboardPage() {
                                     <button
                                       type="button"
                                       className="btn btn-primary text-xs"
-                                      onClick={() =>
-                                        void downloadPassTicketPdf({
-                                          eventName: matchedPass.eventName,
-                                          delegateName: user.name,
-                                          categoryName: matchedPass.categoryName,
-                                          applicationType: matchedPass.applicationType,
-                                          committeeName: matchedPass.committeeName,
-                                          portfolioName: matchedPass.portfolioName,
-                                          registrationId: matchedPass.registrationId,
-                                          passId: matchedPass.id,
-                                          issuedAt: matchedPass.issuedAt,
-                                          qrImageDataUrl: matchedPass.qrImageDataUrl!,
-                                        })
-                                      }
+                                      onClick={() => {
+                                        void (async () => {
+                                          const { downloadPassTicketPdf } = await import(
+                                            "@/lib/client/pass-ticket-pdf"
+                                          );
+                                          await downloadPassTicketPdf({
+                                            eventName: matchedPass.eventName,
+                                            delegateName: user.name,
+                                            categoryName: matchedPass.categoryName,
+                                            applicationType: matchedPass.applicationType,
+                                            committeeName: matchedPass.committeeName,
+                                            portfolioName: matchedPass.portfolioName,
+                                            registrationId: matchedPass.registrationId,
+                                            passId: matchedPass.id,
+                                            issuedAt: matchedPass.issuedAt,
+                                            qrImageDataUrl: matchedPass.qrImageDataUrl!,
+                                          });
+                                        })();
+                                      }}
                                     >
                                       Download Ticket (PDF)
                                     </button>
@@ -818,6 +821,9 @@ export default function DashboardPage() {
                                     categoryName?: string;
                                     issuedAt: string;
                                   };
+                                  const { downloadParticipationCertificatePdf } = await import(
+                                    "@/lib/client/participation-certificate-pdf"
+                                  );
                                   downloadParticipationCertificatePdf(data);
                                 })();
                               }}
