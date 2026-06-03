@@ -27,6 +27,7 @@
     "verify:env": "node scripts/verify-production-env.mjs",
     "pre-launch:check": "node scripts/pre-launch-check.mjs",
     "brand:generate": "node scripts/generate-brand-pngs.mjs",
+    "favicon:generate": "node scripts/generate-favicon.mjs",
     "cf:build": "opennextjs-cloudflare build",
     "cf:preview": "opennextjs-cloudflare build && wrangler dev",
     "cf:deploy": "opennextjs-cloudflare build && wrangler deploy"
