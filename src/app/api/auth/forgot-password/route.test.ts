@@ -51,7 +51,6 @@ describe("POST /api/auth/forgot-password", () => {
   const prevKey = process.env.RESEND_API_KEY;
   const prevFrom = process.env.RESEND_FROM_EMAIL;
   const prevPublicUrl = process.env.NEXT_PUBLIC_APP_URL;
-  const prevNodeEnv = process.env.NODE_ENV;
 
   beforeEach(async () => {
     process.env.RESEND_API_KEY = "re_test";
@@ -76,6 +75,7 @@ describe("POST /api/auth/forgot-password", () => {
   });
 
   afterEach(() => {
+    vi.unstubAllEnvs();
     process.env.RESEND_API_KEY = prevKey;
     process.env.RESEND_FROM_EMAIL = prevFrom;
     if (prevPublicUrl === undefined) {
@@ -83,7 +83,6 @@ describe("POST /api/auth/forgot-password", () => {
     } else {
       process.env.NEXT_PUBLIC_APP_URL = prevPublicUrl;
     }
-    process.env.NODE_ENV = prevNodeEnv;
   });
 
   async function allLoggerPayloads() {
@@ -110,7 +109,7 @@ describe("POST /api/auth/forgot-password", () => {
   it("returns 503 email_not_configured when Resend env is missing in production", async () => {
     delete process.env.RESEND_API_KEY;
     delete process.env.RESEND_FROM_EMAIL;
-    process.env.NODE_ENV = "production";
+    vi.stubEnv("NODE_ENV", "production");
 
     const req = new NextRequest("http://localhost:3000/api/auth/forgot-password", {
       method: "POST",
@@ -131,7 +130,7 @@ describe("POST /api/auth/forgot-password", () => {
   it("returns devResetUrl when Resend env is missing outside production", async () => {
     delete process.env.RESEND_API_KEY;
     delete process.env.RESEND_FROM_EMAIL;
-    process.env.NODE_ENV = "test";
+    vi.stubEnv("NODE_ENV", "test");
 
     const req = new NextRequest("http://localhost:3000/api/auth/forgot-password", {
       method: "POST",
@@ -158,9 +157,9 @@ describe("POST /api/auth/forgot-password", () => {
     const res = await POST(req);
     expect(res.status).toBe(200);
     expect(resendSendMock).toHaveBeenCalled();
-    const arg = resendSendMock.mock.calls[0][0] as { text?: string };
-    expect(arg.text).toContain("https://app.example.com/reset-password?token=");
-    expect(arg.text).not.toContain("http://localhost:9999");
+    const calls = resendSendMock.mock.calls as unknown as Array<[{ text?: string }]>;
+    expect(calls[0]?.[0]?.text).toContain("https://app.example.com/reset-password?token=");
+    expect(calls[0]?.[0]?.text).not.toContain("http://localhost:9999");
   });
 
   it("returns 503 with error JSON when Resend send fails", async () => {

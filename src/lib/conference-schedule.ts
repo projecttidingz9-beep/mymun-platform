@@ -16,17 +16,15 @@ export type ConferenceScheduleDisplayDay = {
   events: string[];
 };
 
-const REQUIRED_FIELDS: Array<keyof ConferenceScheduleEntry> = [
-  "day",
-  "fromTime",
-  "toTime",
-  "title",
-];
+const REQUIRED_SCHEDULE_FIELDS = ["day", "fromTime", "toTime", "title"] as const;
+type RequiredScheduleFields = (typeof REQUIRED_SCHEDULE_FIELDS)[number];
 
 export function isConferenceScheduleEntryComplete(
-  entry: Pick<ConferenceScheduleEntry, "day" | "fromTime" | "toTime" | "title">
+  entry: Pick<ConferenceScheduleEntry, RequiredScheduleFields>
 ): boolean {
-  return REQUIRED_FIELDS.every((field) => String(entry[field] || "").trim().length > 0);
+  return REQUIRED_SCHEDULE_FIELDS.every(
+    (field) => String(entry[field] ?? "").trim().length > 0
+  );
 }
 
 /** Parse raw blob/API rows into editable entries (keeps incomplete rows for the editor). */
