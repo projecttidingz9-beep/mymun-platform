@@ -33,6 +33,9 @@ import {
   type RegistrationCategoryType,
 } from "@/lib/registration-category-types";
 import { canAccessSuperDashboard, SUPER_ADMIN_HREF, SUPER_ADMIN_LABEL } from "@/lib/admin-nav";
+import ScheduleAddDayModal, {
+  type ScheduleFirstEventDraft,
+} from "@/components/organizer/ScheduleAddDayModal";
 import {
   type ConferenceScheduleEntry,
   findIncompleteConferenceScheduleEntries,
@@ -40,6 +43,9 @@ import {
   normalizeConferenceScheduleEntries,
   parseConferenceScheduleEntries,
 } from "@/lib/conference-schedule";
+
+const nextScheduleDayName = (entries: ConferenceScheduleEntry[]) =>
+  `Day ${new Set(entries.map((entry) => entry.day)).size + 1}`;
 
 const STATUS_STYLES: Record<OrganizerConference["status"], string> = {
   Draft: "badge-gray",
@@ -174,6 +180,7 @@ type OrganizerSectionId =
   | "overview"
   | "conferences"
   | "preview"
+  | "schedule"
   | "applications"
   | "participants"
   | "committees"
@@ -209,6 +216,7 @@ const ORGANIZER_NAV: OrganizerNavGroup[] = [
     label: "This conference",
     items: [
       { id: "preview", label: "Preview & Content", icon: "▣", scope: "conference" },
+      { id: "schedule", label: "Schedule", icon: "◷", scope: "conference" },
       { id: "applications", label: "Applications", icon: "◉", scope: "conference" },
       { id: "participants", label: "Participants", icon: "◈", scope: "conference" },
       { id: "committees", label: "Committees", icon: "◇", scope: "conference" },
@@ -225,6 +233,7 @@ const ORGANIZER_NAV: OrganizerNavGroup[] = [
 
 const CONFERENCE_SCOPED_SECTIONS: ReadonlySet<OrganizerSectionId> = new Set<OrganizerSectionId>([
   "preview",
+  "schedule",
   "applications",
   "participants",
   "committees",
@@ -252,6 +261,11 @@ const ORGANIZER_SECTION_META: Record<OrganizerSectionId, { label: string; eyebro
     label: "Preview & Content",
     eyebrow: "This conference",
     subtitle: "Edit the public conference page, policies, and marketing copy.",
+  },
+  schedule: {
+    label: "Schedule",
+    eyebrow: "This conference",
+    subtitle: "Build the public Schedule tab with days and timed events.",
   },
   applications: {
     label: "Applications",
@@ -308,7 +322,8 @@ const ORGANIZER_SECTION_META: Record<OrganizerSectionId, { label: string; eyebro
 const SECTION_SEARCH_KEYWORDS: Record<OrganizerSectionId, string[]> = {
   overview: ["workspace", "analytics", "stats"],
   conferences: ["active conference", "create conference"],
-  preview: ["conference tags", "conference stats", "what's included", "schedule", "place", "dates", "venue"],
+  preview: ["conference tags", "conference stats", "what's included", "place", "dates", "venue"],
+  schedule: ["conference schedule", "add day", "events", "opening ceremony", "timed events"],
   applications: ["delegate application", "chair application", "organiser application", "delegation application"],
   participants: ["participant profile", "allotment", "country matrix"],
   committees: ["add committee", "edit details", "chairs", "agenda"],
@@ -467,6 +482,7 @@ export default function OrganizerDashboardPage() {
     () => parseConferenceScheduleEntries(organizerConferences[0]?.conferenceSchedule || [])
   );
   const [previewSaveStatus, setPreviewSaveStatus] = useState("");
+  const [scheduleAddDayOpen, setScheduleAddDayOpen] = useState(false);
   const [deleteConfirmStep, setDeleteConfirmStep] = useState<0 | 1>(0);
   const [partnerRelationships, setPartnerRelationships] = useState<PartnerRelationship[]>([]);
   const [partnerInviteTargetId, setPartnerInviteTargetId] = useState("");
@@ -902,6 +918,24 @@ export default function OrganizerDashboardPage() {
     () => groupConferenceScheduleByDay(previewScheduleDraft),
     [previewScheduleDraft]
   );
+  const defaultScheduleDayName = useMemo(
+    () => nextScheduleDayName(previewScheduleDraft),
+    [previewScheduleDraft]
+  );
+
+  const handleScheduleAddDayConfirm = (dayName: string, firstEvent?: ScheduleFirstEventDraft) => {
+    setPreviewScheduleDraft((prev) => {
+      const entry: ConferenceScheduleEntry = {
+        id: `schedule-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        day: dayName,
+        fromTime: firstEvent?.fromTime ?? "",
+        toTime: firstEvent?.toTime ?? "",
+        title: firstEvent?.title ?? "",
+      };
+      return [...prev, entry];
+    });
+    setScheduleAddDayOpen(false);
+  };
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -2484,44 +2518,51 @@ export default function OrganizerDashboardPage() {
                   </div>
                   )}
 
-                  {activeSection === "preview" && (
-                  <div className="card p-6 rounded-2xl mt-6">
-                    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-6">
+                  {activeSection === "schedule" && (
+                  <div className="app-card">
+                    <div className="app-card-header flex-col sm:flex-row sm:items-start gap-4">
                       <div>
-                        <h3 className="text-lg font-bold" style={{ color: "var(--fg)" }}>
-                          Conference Schedule
-                        </h3>
-                        <p className="text-sm mt-1" style={{ color: "var(--fg-muted)" }}>
-                          Shown on the public MUN page Schedule tab after you save Preview Settings.
+                        <h3 className="app-card-title text-lg">Conference Schedule</h3>
+                        <p className="app-card-subtitle mt-1 max-w-xl">
+                          Shown on the public MUN page Schedule tab. Save when you are done editing days and events.
                         </p>
+                        {previewSaveStatus ? (
+                          <p className="text-xs mt-2" style={{ color: "var(--fg-muted)" }}>
+                            {previewSaveStatus}
+                          </p>
+                        ) : null}
                       </div>
-                      <button
-                        type="button"
-                        className="btn btn-primary text-xs shrink-0 self-start sm:self-auto"
-                        onClick={() =>
-                          setPreviewScheduleDraft((prev) => {
-                            const nextDay = `Day ${new Set(prev.map((entry) => entry.day)).size + 1}`;
-                            return [
-                              ...prev,
-                              {
-                                id: `schedule-${Date.now()}`,
-                                day: nextDay,
-                                fromTime: "",
-                                toTime: "",
-                                title: "",
-                              },
-                            ];
-                          })
-                        }
-                      >
-                        + Add Day
-                      </button>
+                      <div className="flex flex-wrap items-center gap-2 shrink-0">
+                        <button
+                          type="button"
+                          className="btn btn-primary text-xs"
+                          onClick={() => void savePreviewSettings()}
+                        >
+                          Save schedule
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-ghost text-xs"
+                          onClick={() => setScheduleAddDayOpen(true)}
+                        >
+                          + Add Day
+                        </button>
+                      </div>
                     </div>
-                    {previewScheduleDraft.length === 0 && (
-                      <p className="text-sm text-center py-6" style={{ color: "var(--fg-muted)" }}>
-                        No schedule events yet. Add a day, then add events with from, to, and title.
-                      </p>
-                    )}
+                    {previewScheduleDraft.length === 0 ? (
+                      <div className="text-center py-10 px-4">
+                        <p className="text-sm" style={{ color: "var(--fg-muted)" }}>
+                          No schedule days yet. Add a day to start building your conference timeline.
+                        </p>
+                        <button
+                          type="button"
+                          className="btn btn-primary text-xs mt-4"
+                          onClick={() => setScheduleAddDayOpen(true)}
+                        >
+                          + Add Day
+                        </button>
+                      </div>
+                    ) : (
                     <div className="space-y-6">
                       {previewScheduleByDay.map((dayGroup) => (
                         <div
@@ -2675,8 +2716,15 @@ export default function OrganizerDashboardPage() {
                             ))}
                           </div>
                         </div>
-                      ))}
+                        ))}
                     </div>
+                    )}
+                    <ScheduleAddDayModal
+                      open={scheduleAddDayOpen}
+                      defaultDayName={defaultScheduleDayName}
+                      onClose={() => setScheduleAddDayOpen(false)}
+                      onConfirm={handleScheduleAddDayConfirm}
+                    />
                   </div>
                   )}
 
