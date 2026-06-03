@@ -74,6 +74,7 @@ export async function POST(request: NextRequest) {
       committeeName,
       committeePreferencesJson: prefs.committeePreferencesJson,
       portfolioPreferencesJson: prefs.portfolioPreferencesJson,
+      countryPreferencesJson: prefs.countryPreferencesJson,
       amount: validated.pricing.amount,
       currency: validated.pricing.currency,
     });

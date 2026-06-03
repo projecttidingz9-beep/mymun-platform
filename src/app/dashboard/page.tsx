@@ -72,7 +72,19 @@ export default function DashboardPage() {
     checkedInAt?: string | null;
     qrImageDataUrl?: string;
     qrToken: string | null;
+    pendingDocumentCount?: number;
+    documentsAcknowledged?: boolean;
   }>>([]);
+  const [registrationAwards, setRegistrationAwards] = useState<
+    Record<string, Array<{ id: string; category: string; presetKey?: string; prizeTitle?: string | null }>>
+  >({});
+  const [committeeDocsByRegistration, setCommitteeDocsByRegistration] = useState<
+    Record<
+      string,
+      Array<{ id: string; title: string; category: string; fileUrl: string; acknowledged: boolean }>
+    >
+  >({});
+  const [positionPaperDrafts, setPositionPaperDrafts] = useState<Record<string, string>>({});
   const [serverNotifications, setServerNotifications] = useState<Array<{
     id: string;
     title: string;
@@ -164,6 +176,35 @@ export default function DashboardPage() {
       .then((response) => response.json())
       .then((data) => setServerNotifications(data.notifications || []))
       .catch(() => setServerNotifications([]));
+  }, [isLoggedIn, user]);
+
+  useEffect(() => {
+    if (!isLoggedIn || !user) return;
+    const allotted = user.registeredConferences.filter(
+      (registration) => registration.organizerStatus === "Allotted"
+    );
+    allotted.forEach((registration) => {
+      void fetch(`/api/registrations/${registration.id}/committee-documents`, {
+        credentials: "include",
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          setCommitteeDocsByRegistration((prev) => ({
+            ...prev,
+            [registration.id]: data.documents || [],
+          }));
+        })
+        .catch(() => undefined);
+      void fetch(`/api/registrations/${registration.id}/awards`, { credentials: "include" })
+        .then((res) => res.json())
+        .then((data) => {
+          setRegistrationAwards((prev) => ({
+            ...prev,
+            [registration.id]: data.awards || [],
+          }));
+        })
+        .catch(() => undefined);
+    });
   }, [isLoggedIn, user]);
 
   if (!authReady || !isLoggedIn || !user) {
@@ -790,7 +831,9 @@ export default function DashboardPage() {
                                 </div>
                               ) : (
                                 <p className="text-xs" style={{ color: "#d97706" }}>
-                                  Pass locked until {new Date(matchedPass.releaseAt).toLocaleString()}
+                                  {matchedPass.pendingDocumentCount && matchedPass.pendingDocumentCount > 0
+                                    ? `Acknowledge ${matchedPass.pendingDocumentCount} committee document(s) below to unlock your pass.`
+                                    : `Pass locked until ${new Date(matchedPass.releaseAt).toLocaleString()}`}
                                 </p>
                               )}
                             </div>
@@ -798,6 +841,125 @@ export default function DashboardPage() {
                             <p className="text-xs" style={{ color: "var(--fg-muted)" }}>
                               Pass will be issued once allotment is complete.
                             </p>
+                          )}
+                          {reg.organizerStatus === "Allotted" &&
+                            (committeeDocsByRegistration[reg.id] || []).length > 0 && (
+                              <div className="p-4 rounded-xl space-y-2" style={{ background: "var(--bg-subtle)" }}>
+                                <p className="text-xs font-bold uppercase tracking-wide" style={{ color: "var(--fg-muted)" }}>
+                                  Committee documents
+                                </p>
+                                {(committeeDocsByRegistration[reg.id] || []).map((doc) => (
+                                  <label key={doc.id} className="flex items-start gap-2 text-xs">
+                                    <input
+                                      type="checkbox"
+                                      checked={doc.acknowledged}
+                                      onChange={() => {
+                                        void fetch(
+                                          `/api/registrations/${reg.id}/acknowledge-documents`,
+                                          {
+                                            method: "POST",
+                                            credentials: "include",
+                                            headers: { "Content-Type": "application/json" },
+                                            body: JSON.stringify({ documentIds: [doc.id] }),
+                                          }
+                                        ).then(() => {
+                                          setCommitteeDocsByRegistration((prev) => ({
+                                            ...prev,
+                                            [reg.id]: (prev[reg.id] || []).map((entry) =>
+                                              entry.id === doc.id
+                                                ? { ...entry, acknowledged: true }
+                                                : entry
+                                            ),
+                                          }));
+                                          void fetch("/api/passes/me", { credentials: "include" })
+                                            .then((response) => response.json())
+                                            .then((data) => setDelegatePasses(data.passes || []));
+                                        });
+                                      }}
+                                    />
+                                    <span>
+                                      {doc.title} ({doc.category}){" "}
+                                      <a href={doc.fileUrl} target="_blank" rel="noopener noreferrer" className="underline">
+                                        Download
+                                      </a>
+                                    </span>
+                                  </label>
+                                ))}
+                              </div>
+                            )}
+                          {reg.organizerStatus === "Allotted" && (
+                            <div className="p-4 rounded-xl space-y-2" style={{ background: "var(--bg-subtle)" }}>
+                              <p className="text-xs font-bold uppercase tracking-wide" style={{ color: "var(--fg-muted)" }}>
+                                Position paper
+                              </p>
+                              <textarea
+                                className="input-base text-xs"
+                                rows={3}
+                                placeholder="Paste position paper text or summary..."
+                                value={positionPaperDrafts[reg.id] || ""}
+                                onChange={(event) =>
+                                  setPositionPaperDrafts((prev) => ({
+                                    ...prev,
+                                    [reg.id]: event.target.value,
+                                  }))
+                                }
+                              />
+                              <button
+                                type="button"
+                                className="btn btn-ghost text-xs"
+                                onClick={() => {
+                                  void fetch(`/api/registrations/${reg.id}/position-paper`, {
+                                    method: "POST",
+                                    credentials: "include",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({
+                                      textContent: positionPaperDrafts[reg.id] || "",
+                                      committeeId: undefined,
+                                    }),
+                                  }).then(async (res) => {
+                                    if (!res.ok) {
+                                      const data = (await res.json()) as { error?: string };
+                                      alert(data.error || "Could not submit position paper.");
+                                      return;
+                                    }
+                                    alert("Position paper submitted.");
+                                  });
+                                }}
+                              >
+                                Submit position paper
+                              </button>
+                            </div>
+                          )}
+                          {(registrationAwards[reg.id] || []).length > 0 && (
+                            <div className="p-4 rounded-xl space-y-2" style={{ background: "var(--bg-subtle)" }}>
+                              <p className="text-xs font-bold uppercase tracking-wide" style={{ color: "var(--fg-muted)" }}>
+                                Conference awards
+                              </p>
+                              {(registrationAwards[reg.id] || []).map((award) => (
+                                <button
+                                  key={award.id}
+                                  type="button"
+                                  className="btn btn-outline-blue text-xs w-full sm:w-auto"
+                                  onClick={() => {
+                                    void import("@/lib/client/award-certificate-pdf").then(
+                                      ({ downloadAwardCertificatePdf }) => {
+                                        downloadAwardCertificatePdf({
+                                          delegateName: user.name,
+                                          eventName: reg.conferenceTitle,
+                                          awardCategory: award.category,
+                                          presetKey: award.presetKey,
+                                          prizeTitle: award.prizeTitle,
+                                          committeeName: reg.assignedCommitteeName || reg.committeeName,
+                                          issuedAt: new Date().toISOString(),
+                                        });
+                                      }
+                                    );
+                                  }}
+                                >
+                                  Download {award.prizeTitle || award.category} certificate
+                                </button>
+                              ))}
+                            </div>
                           )}
                           {reg.organizerStatus === "Allotted" && (
                             <button

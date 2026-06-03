@@ -16,6 +16,8 @@ export type PassTicketInput = {
 
 function passTypeLabel(applicationType?: string): string {
   switch (applicationType) {
+    case "press":
+      return "PRESS PASS";
     case "chair":
       return "CHAIR PASS";
     case "delegation":
@@ -31,6 +33,8 @@ function passTypeLabel(applicationType?: string): string {
 
 function holderLabel(applicationType?: string): string {
   switch (applicationType) {
+    case "press":
+      return "PRESS";
     case "chair":
       return "CHAIR";
     case "delegation":
@@ -321,6 +325,17 @@ function drawDetailsAndQr(doc: jsPDF, pass: PassTicketInput, bounds: TicketBound
       true
     );
     drawSection(doc, "PORTFOLIO", portfolioName || "—", leftX, y, leftW, 11, false);
+  } else if (applicationType === "press") {
+    y = drawSection(
+      doc,
+      "BEAT",
+      portfolioName || committeeName || "International Press",
+      leftX,
+      y,
+      leftW,
+      11,
+      true
+    );
   } else if (applicationType === "chair") {
     if (committeeName) {
       drawSection(doc, "COMMITTEE", committeeName, leftX, y, leftW, 11, false);

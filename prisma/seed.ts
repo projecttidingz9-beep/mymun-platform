@@ -9,6 +9,9 @@ import { issueDelegatePassForRegistration } from "../src/lib/server/issue-delega
 
 async function main() {
   await prisma.participationCertificate.deleteMany();
+  await prisma.documentAcknowledgment.deleteMany();
+  await prisma.positionPaper.deleteMany();
+  await prisma.committeeDocument.deleteMany();
   await prisma.applicationAnswer.deleteMany();
   await prisma.paymentIntent.deleteMany();
   await prisma.checkin.deleteMany();
@@ -251,6 +254,87 @@ async function main() {
   );
   const usaPortfolio = portfolioRows[0]!;
 
+  const aippm = await prisma.committeeConfig.create({
+    data: {
+      organizerConfigId: organizerConfig.id,
+      name: "AIPPM",
+      agenda: "National policy coordination on climate and federalism.",
+      seatCount: 10,
+      committeeFormat: "AIPPM",
+      type: "AIPPM",
+      metadataJson: JSON.stringify({ crisisEnabled: false }),
+      visibility: "PUBLIC",
+    },
+  });
+  const aippmParties = ["Bharatiya Janata Party", "Indian National Congress", "Aam Aadmi Party"];
+  await Promise.all(
+    aippmParties.map((name) =>
+      prisma.portfolio.create({ data: { committeeId: aippm.id, name, seatCount: 1 } })
+    )
+  );
+
+  const pressCorps = await prisma.committeeConfig.create({
+    data: {
+      organizerConfigId: organizerConfig.id,
+      name: "International Press Corps",
+      agenda: "Cover committee proceedings across the conference.",
+      seatCount: 6,
+      committeeFormat: "PRESS_CORPS",
+      type: "International Press",
+      metadataJson: JSON.stringify({ pressBeatRequired: true }),
+      visibility: "PUBLIC",
+    },
+  });
+  await Promise.all(
+    ["UN Security Council", "UNHRC", "General Assembly"].map((name) =>
+      prisma.portfolio.create({ data: { committeeId: pressCorps.id, name, seatCount: 2 } })
+    )
+  );
+
+  await prisma.committeeDocument.createMany({
+    data: [
+      {
+        committeeId: unsc.id,
+        title: "UNSC Background Guide",
+        category: "background-guide",
+        fileUrl: "https://example.com/unsc-background-guide.pdf",
+      },
+      {
+        committeeId: aippm.id,
+        title: "AIPPM Background Guide",
+        category: "background-guide",
+        fileUrl: "https://example.com/aippm-background-guide.pdf",
+      },
+    ],
+  });
+
+  await prisma.registrationCategoryConfig.create({
+    data: {
+      id: "cat-press",
+      organizerConfigId: organizerConfig.id,
+      name: "International Press",
+      applicationType: "press",
+      description: "Press Corps registration",
+      isOpen: true,
+      basePrice: 999,
+      requiresCommitteeSelection: true,
+    },
+  });
+
+  await prisma.registrationCategoryConfig.create({
+    data: {
+      id: "cat-delegation",
+      organizerConfigId: organizerConfig.id,
+      name: "Delegation Head",
+      applicationType: "delegation",
+      description: "School delegation registration",
+      isOpen: true,
+      basePrice: 4999,
+      requiresCommitteeSelection: false,
+      maxDelegatesPerDelegation: 12,
+    },
+  });
+
   await prisma.applicationQuestion.createMany({
     data: [
       {
@@ -302,6 +386,7 @@ async function main() {
       status: "ALLOTTED",
       allottedAt: new Date(),
       committeePreferencesJson: JSON.stringify([unsc.name, unhcr.name]),
+      countryPreferencesJson: JSON.stringify(["United States of America", "France"]),
       portfolioPreferencesJson: JSON.stringify({
         [unsc.id]: [usaPortfolio.name, "France"],
       }),
@@ -331,6 +416,45 @@ async function main() {
       registrationId: reg1.id,
       eventId,
       issuedByUserId: org1.id,
+    },
+  });
+
+  const delegation = await prisma.delegation.create({
+    data: {
+      eventId,
+      inviteToken: "seed-delegation-invite-token",
+      schoolName: "Delhi Public School",
+      name: "Delhi Public School",
+      maxMembers: 8,
+      ownerUserId: delegates[2].id,
+      status: "OPEN",
+    },
+  });
+
+  await prisma.registration.update({
+    where: { id: reg1.id },
+    data: { delegationId: delegation.id, isDelegationHead: false },
+  });
+
+  await prisma.positionPaper.create({
+    data: {
+      registrationId: reg1.id,
+      eventId,
+      committeeId: unsc.id,
+      textContent: "Seed position paper on Middle East crisis response.",
+      status: "PENDING",
+    },
+  });
+
+  await prisma.conferenceAward.create({
+    data: {
+      eventId,
+      category: "Best Delegate",
+      presetKey: "best_delegate",
+      prizeTitle: "Best Delegate",
+      recipientRegistrationId: reg1.id,
+      recipientUserId: delegates[0].id,
+      participantName: delegates[0].name,
     },
   });
 

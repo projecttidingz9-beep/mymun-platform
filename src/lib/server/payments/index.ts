@@ -38,6 +38,7 @@ export async function createRegistrationAndPayment(params: {
   portfolioName?: string | null;
   committeePreferencesJson?: string | null;
   portfolioPreferencesJson?: string | null;
+  countryPreferencesJson?: string | null;
   formAnswersJson?: string | null;
   amount: number;
   currency: string;
@@ -70,6 +71,7 @@ export async function createRegistrationAndPayment(params: {
     portfolioName: params.portfolioName ?? undefined,
     committeePreferencesJson: params.committeePreferencesJson ?? undefined,
     portfolioPreferencesJson: params.portfolioPreferencesJson ?? undefined,
+    countryPreferencesJson: params.countryPreferencesJson ?? undefined,
     formAnswersJson: params.formAnswersJson ?? undefined,
     amount,
     status: RegistrationStatus.PENDING,

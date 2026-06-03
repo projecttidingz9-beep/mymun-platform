@@ -15,6 +15,7 @@ import {
 } from "@/lib/types";
 import { getPhaseStatus, resolveRegistrationPrice } from "@/lib/pricing";
 import { getCategoryTypeHint, getCategoryTypeLabel } from "@/lib/registration-category-types";
+import { preferenceLabelForCommittee } from "@/lib/india-committee-presets";
 import { getMarketplaceConferences } from "@/lib/marketplace-conferences";
 import { formatMoney } from "@/lib/format-money";
 import { downloadRegistrationInvoicePdf } from "@/lib/client/invoice-pdf";
@@ -38,11 +39,17 @@ export default function CheckoutPage() {
   const [thirdPreferenceCommitteeId, setThirdPreferenceCommitteeId] = useState("");
   const [portfolioPreferencePrimary, setPortfolioPreferencePrimary] = useState("");
   const [portfolioPreferenceSecondary, setPortfolioPreferenceSecondary] = useState("");
+  const [countryPreferencePrimary, setCountryPreferencePrimary] = useState("");
+  const [countryPreferenceSecondary, setCountryPreferenceSecondary] = useState("");
   const [answers, setAnswers] = useState<Record<string, string | number | boolean | string[]>>({});
   const [loading, setLoading] = useState(false);
   const [uploadedFiles, setUploadedFiles] = useState<Record<string, string[]>>({});
   const [catalogConference, setCatalogConference] = useState<Conference | null>(null);
   const [submittedRegistration, setSubmittedRegistration] = useState<Registration | null>(null);
+  const [delegationSchoolName, setDelegationSchoolName] = useState("");
+  const [delegationMaxMembers, setDelegationMaxMembers] = useState("");
+  const [delegationInviteLink, setDelegationInviteLink] = useState("");
+  const [creatingDelegation, setCreatingDelegation] = useState(false);
 
   const eventKey = String(params.id);
   const organizerConference = organizerConferences.find((conference) => conference.id === eventKey);
@@ -134,6 +141,17 @@ export default function CheckoutPage() {
     committees.find((committee) => committee.id === selectedCommitteeId)?.portfolios ?? [];
   const delegationSizeRaw = Number(answers.delegation_size ?? 0);
   const isDelegationCategory = selectedCategory?.applicationType === "delegation";
+  const isPressCategory = selectedCategory?.applicationType === "press";
+  const pressCommittees = committees.filter(
+    (committee) =>
+      committee.committeeFormat === "PRESS_CORPS" ||
+      committee.committeeFormat === "IP" ||
+      committee.customTypeLabel?.toLowerCase().includes("press")
+  );
+  const checkoutCommittees = isPressCategory && pressCommittees.length > 0 ? pressCommittees : committees;
+  const preferenceLabel = selectedCommittee
+    ? preferenceLabelForCommittee(selectedCommittee.committeeType, selectedCommittee.committeeFormat)
+    : "Country";
   const delegationSizeValid =
     !isDelegationCategory ||
     (Number.isFinite(delegationSizeRaw) &&
@@ -192,6 +210,7 @@ export default function CheckoutPage() {
           committeePreferences: [selectedCommitteeId, secondPreferenceCommitteeId, thirdPreferenceCommitteeId].filter(
             Boolean
           ),
+          countryPreferences: [countryPreferencePrimary, countryPreferenceSecondary].filter(Boolean),
           portfolioPreferencesByCommittee: selectedCommitteeId
             ? {
                 [selectedCommitteeId]: [portfolioPreferencePrimary, portfolioPreferenceSecondary].filter(Boolean),
@@ -220,7 +239,10 @@ export default function CheckoutPage() {
   const isStep2Valid = !!selectedCategory && fullName.trim().length > 0 && school.trim().length > 0 && phone.trim().length > 0 && selectedCategory.formFields.every(
     (field) => !field.required || answers[field.id] !== undefined
   ) && delegationSizeValid;
-  const isStep3Valid = (!selectedCategory?.requiresCommitteeSelection || !!selectedCommitteeId) && committeeQuestionsValid;
+  const isStep3Valid =
+    (isPressCategory
+      ? !selectedCategory?.requiresCommitteeSelection || !!selectedCommitteeId
+      : !selectedCategory?.requiresCommitteeSelection || !!selectedCommitteeId) && committeeQuestionsValid;
   const isStep4Valid = isStep1Valid && isStep2Valid && isStep3Valid;
 
   if (!authReady) {
@@ -523,7 +545,7 @@ export default function CheckoutPage() {
                       className="input-base"
                     >
                       <option value="">Select first preference</option>
-                      {committees.map((committee) => (
+                      {checkoutCommittees.map((committee) => (
                         <option key={committee.id} value={committee.id}>
                           {committeeOptionLabel(committee)}
                         </option>
@@ -553,7 +575,7 @@ export default function CheckoutPage() {
                     <label className="block text-sm font-semibold mb-1.5" style={{ color: "var(--fg)" }}>Second Preference</label>
                     <select value={secondPreferenceCommitteeId} onChange={(event) => setSecondPreferenceCommitteeId(event.target.value)} className="input-base">
                       <option value="">Select second preference</option>
-                      {committees.map((committee) => (
+                      {checkoutCommittees.map((committee) => (
                         <option key={committee.id} value={committee.id}>{committee.name}</option>
                       ))}
                     </select>
@@ -562,13 +584,35 @@ export default function CheckoutPage() {
                     <label className="block text-sm font-semibold mb-1.5" style={{ color: "var(--fg)" }}>Third Preference</label>
                     <select value={thirdPreferenceCommitteeId} onChange={(event) => setThirdPreferenceCommitteeId(event.target.value)} className="input-base">
                       <option value="">Select third preference</option>
-                      {committees.map((committee) => (
+                      {checkoutCommittees.map((committee) => (
                         <option key={committee.id} value={committee.id}>{committee.name}</option>
                       ))}
                     </select>
                   </div>
                   {selectedCommitteePortfolios.length > 0 && (
                     <>
+                      <div>
+                        <label className="block text-sm font-semibold mb-1.5" style={{ color: "var(--fg)" }}>
+                          {preferenceLabel} Preference 1
+                        </label>
+                        <select value={countryPreferencePrimary} onChange={(event) => setCountryPreferencePrimary(event.target.value)} className="input-base">
+                          <option value="">Select {preferenceLabel.toLowerCase()}</option>
+                          {selectedCommitteePortfolios.map((portfolio) => (
+                            <option key={portfolio.id} value={portfolio.name}>{portfolio.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-semibold mb-1.5" style={{ color: "var(--fg)" }}>
+                          {preferenceLabel} Preference 2
+                        </label>
+                        <select value={countryPreferenceSecondary} onChange={(event) => setCountryPreferenceSecondary(event.target.value)} className="input-base">
+                          <option value="">Select {preferenceLabel.toLowerCase()}</option>
+                          {selectedCommitteePortfolios.map((portfolio) => (
+                            <option key={portfolio.id} value={portfolio.name}>{portfolio.name}</option>
+                          ))}
+                        </select>
+                      </div>
                       <div>
                         <label className="block text-sm font-semibold mb-1.5" style={{ color: "var(--fg)" }}>Portfolio Preference 1</label>
                         <select value={portfolioPreferencePrimary} onChange={(event) => setPortfolioPreferencePrimary(event.target.value)} className="input-base">
@@ -688,6 +732,75 @@ export default function CheckoutPage() {
               >
                 Download Invoice (PDF)
               </button>
+              {submittedRegistration.categoryName?.toLowerCase().includes("delegation") ||
+              selectedCategory?.applicationType === "delegation" ? (
+                <div className="rounded-xl p-4 space-y-3" style={{ background: "var(--bg-subtle)", border: "1px solid var(--border)" }}>
+                  <p className="text-sm font-semibold" style={{ color: "var(--fg)" }}>
+                    Create your delegation
+                  </p>
+                  {delegationInviteLink ? (
+                    <div className="space-y-2">
+                      <p className="text-xs" style={{ color: "var(--fg-muted)" }}>
+                        Share this link with your delegation members:
+                      </p>
+                      <input className="input-base text-xs" readOnly value={delegationInviteLink} />
+                    </div>
+                  ) : (
+                    <>
+                      <input
+                        className="input-base text-xs"
+                        placeholder="School / institution name"
+                        value={delegationSchoolName}
+                        onChange={(event) => setDelegationSchoolName(event.target.value)}
+                      />
+                      <input
+                        className="input-base text-xs"
+                        type="number"
+                        min={1}
+                        placeholder="Max members (optional)"
+                        value={delegationMaxMembers}
+                        onChange={(event) => setDelegationMaxMembers(event.target.value)}
+                      />
+                      <button
+                        type="button"
+                        className="btn btn-primary text-xs w-full"
+                        disabled={!delegationSchoolName.trim() || creatingDelegation}
+                        onClick={() => {
+                          setCreatingDelegation(true);
+                          void fetch("/api/delegations", {
+                            method: "POST",
+                            credentials: "include",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                              eventId: String(params.id),
+                              schoolName: delegationSchoolName.trim(),
+                              maxMembers: delegationMaxMembers ? Number(delegationMaxMembers) : undefined,
+                              registrationId: submittedRegistration.id,
+                            }),
+                          })
+                            .then(async (res) => {
+                              const data = (await res.json()) as {
+                                delegation?: { inviteToken?: string };
+                                error?: string;
+                              };
+                              const token = data.delegation?.inviteToken;
+                              if (!res.ok || !token) {
+                                alert(data.error || "Could not create delegation.");
+                                return;
+                              }
+                              setDelegationInviteLink(
+                                `${window.location.origin}/join/delegation/${token}`
+                              );
+                            })
+                            .finally(() => setCreatingDelegation(false));
+                        }}
+                      >
+                        {creatingDelegation ? "Creating…" : "Create delegation & get invite link"}
+                      </button>
+                    </>
+                  )}
+                </div>
+              ) : null}
               <p className="text-xs text-center" style={{ color: "var(--fg-muted)" }}>
                 Your digital pass will be issued after the organizer completes allotment.
               </p>

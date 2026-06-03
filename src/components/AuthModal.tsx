@@ -128,7 +128,16 @@ export default function AuthModal({ isOpen, onClose, defaultTab = "signin" }: Au
       setGoogleLoading(false);
       return;
     }
-    login(payload.email, payload.name || undefined, payload.role || "delegate");
+    const signedIn = await login(
+      payload.email,
+      payload.name || undefined,
+      payload.role || "delegate"
+    );
+    if (!signedIn) {
+      setError("Signed in but session could not be loaded. Please try again.");
+      setGoogleLoading(false);
+      return;
+    }
     closeModal();
   }, [closeModal, login]);
 
@@ -197,7 +206,17 @@ export default function AuthModal({ isOpen, onClose, defaultTab = "signin" }: Au
         setError(payload.error || "Authentication failed.");
         return;
       }
-      login(email, payload.name || (tab === "register" ? name : undefined), payload.role || "delegate");
+      const signedIn = await login(
+        email,
+        payload.name || (tab === "register" ? name : undefined),
+        payload.role || "delegate"
+      );
+      if (!signedIn) {
+        setError(
+          "Signed in on the server but your session could not be loaded. Check your connection and try again."
+        );
+        return;
+      }
       closeModal();
     } catch {
       setError("Could not reach authentication server. Please try again.");

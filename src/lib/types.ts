@@ -21,8 +21,15 @@ export interface OrganizerCommittee {
   description?: string;
   logoImageUrl?: string;
   committeeType?: "UN" | "NON_UN" | "CUSTOM";
+  committeeFormat?: string;
   customTypeLabel?: string;
   memberMode?: "UN_COUNTRY" | "CUSTOM_MEMBER";
+  metadata?: {
+    historicalDate?: string;
+    crisisEnabled?: boolean;
+    pressBeatRequired?: boolean;
+  };
+  positionPaperDeadline?: string;
   // Backward-compatible display type persisted by older records.
   type?: string;
   seatCount: number;
@@ -96,7 +103,7 @@ export interface RegistrationCategory {
   id: string;
   name: string;
   description: string;
-  applicationType?: "delegate" | "chair" | "delegation" | "organizer" | "other";
+  applicationType?: "delegate" | "chair" | "delegation" | "organizer" | "press" | "other";
   maxDelegatesPerDelegation?: number;
   isOpen?: boolean;
   deadlineOverride?: string;
@@ -249,6 +256,7 @@ export interface OrganizerApplicant {
   name: string;
   school: string;
   countryPreference: string;
+  countryPreferences?: string[];
   committeePreference: string;
   committeePreferences: string[];
   portfolioPreferencesByCommittee?: Record<string, string[]>;
@@ -387,6 +395,7 @@ export type OrganizerPermission =
 export interface OrganizerAwardConfig {
   id: string;
   category: string;
+  presetKey?: string;
   prizeTitle?: string;
   sponsorName?: string;
   sponsorLogoUrl?: string;
@@ -395,6 +404,7 @@ export interface OrganizerAwardConfig {
   participantName?: string;
   participantUserId?: string;
   participantUserEmail?: string;
+  recipientDelegationId?: string;
 }
 
 export interface ConferenceReview {

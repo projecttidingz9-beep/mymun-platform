@@ -662,6 +662,30 @@ const recomputeCommitteeAllotments = (conference: OrganizerConference): Organize
   };
 };
 
+function buildOptimisticUser(
+  email: string,
+  name?: string,
+  role: "delegate" | "organizer" | "admin" = "delegate"
+): User {
+  const normalizedEmail = email.trim().toLowerCase();
+  const displayName =
+    name?.trim() ||
+    normalizedEmail
+      .split("@")[0]
+      .replace(/\./g, " ")
+      .replace(/\b\w/g, (char) => char.toUpperCase());
+  return {
+    id: "",
+    email: normalizedEmail,
+    name: displayName,
+    role,
+    avatar: displayName[0]?.toUpperCase() || "U",
+    school: "",
+    country: "",
+    registeredConferences: [],
+  };
+}
+
 const normalizeUser = (raw: unknown): User | null => {
   if (!raw || typeof raw !== "object") return null;
   const value = raw as Record<string, unknown>;
@@ -786,7 +810,7 @@ interface AuthContextType {
   organizerConferences: OrganizerConference[];
   lastOrganizerSyncError: string | null;
   clearOrganizerSyncError: () => void;
-  login: (email: string, name?: string, role?: "delegate" | "organizer" | "admin") => void;
+  login: (email: string, name?: string, role?: "delegate" | "organizer" | "admin") => Promise<boolean>;
   logout: () => void;
   addRegistration: (reg: Registration) => void;
   addOrganizerConference: (
@@ -978,7 +1002,7 @@ const AuthContext = createContext<AuthContextType>({
   organizerConferences: [],
   lastOrganizerSyncError: null,
   clearOrganizerSyncError: () => {},
-  login: () => {},
+  login: async () => false,
   logout: () => {},
   addRegistration: () => {},
   addOrganizerConference: async () => {},
@@ -1079,27 +1103,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return u;
   }, []);
 
-  const refreshAuthState = React.useCallback(async () => {
+  const refreshAuthState = React.useCallback(async (): Promise<boolean> => {
     try {
       const sessionRes = await fetch("/api/auth/session", { credentials: "include" });
       if (!sessionRes.ok) {
         setUser(null);
         setOrganizerConferences([]);
         setNotifications([]);
-        return;
+        return false;
       }
 
       await sessionRes.json().catch(() => ({}));
 
       const u = await refreshUserAndNotifications();
+      if (!u) {
+        setUser(null);
+        setOrganizerConferences([]);
+        setNotifications([]);
+        return false;
+      }
 
-      if (!u || !isOrganizerUser(u)) {
+      if (!isOrganizerUser(u)) {
         setOrganizerConferences([]);
       }
+      return true;
     } catch {
       setUser(null);
       setOrganizerConferences([]);
       setNotifications([]);
+      return false;
     }
   }, [refreshUserAndNotifications]);
 
@@ -1239,8 +1271,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const clearOrganizerSyncError = () => setLastOrganizerSyncError(null);
 
-  const login: AuthContextType["login"] = () => {
-    void refreshAuthState();
+  const login: AuthContextType["login"] = async (email, name, role) => {
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!normalizedEmail) return false;
+    setUser(buildOptimisticUser(normalizedEmail, name, role ?? "delegate"));
+    return refreshAuthState();
   };
 
   const logout = () => {

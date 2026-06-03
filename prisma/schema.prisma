@@ -70,6 +70,17 @@ enum PaymentIntentStatus {
   REFUNDED
 }
 
+enum PositionPaperStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum DelegationStatus {
+  OPEN
+  CLOSED
+}
+
 enum TeamRole {
   LEAD_ORGANIZER
   USG
@@ -162,6 +173,7 @@ model Event {
   participationCertificates ParticipationCertificate[]
   reviews                 ConferenceReview[]
   delegations             Delegation[]
+  positionPapers          PositionPaper[]
   owner                   User?                   @relation("EventOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
   createdAt               DateTime                @default(now())
   updatedAt               DateTime                @updatedAt
@@ -216,6 +228,7 @@ model Registration {
   portfolioId              String?
   committeePreferencesJson String?
   portfolioPreferencesJson String?
+  countryPreferencesJson   String?
   formAnswersJson          String?
   amount                   Decimal            @db.Decimal(12, 2)
   paid                     Boolean            @default(false)
@@ -223,16 +236,21 @@ model Registration {
   allottedAt               DateTime?
   checkedIn                Boolean            @default(false)
   checkedInAt              DateTime?
+  delegationId             String?
+  isDelegationHead         Boolean            @default(false)
   deletedAt                DateTime?
   user                     User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   event                    Event              @relation(fields: [eventId], references: [id], onDelete: Cascade)
   portfolio                Portfolio?         @relation(fields: [portfolioId], references: [id], onDelete: SetNull)
+  delegation               Delegation?        @relation(fields: [delegationId], references: [id], onDelete: SetNull)
   pass                     DelegatePass?
   checkins                 Checkin[]
   notifications            Notification[]
   paymentIntent            PaymentIntent?
   applicationAnswers       ApplicationAnswer[]
   participationCertificate ParticipationCertificate?
+  positionPapers           PositionPaper[]
+  documentAcknowledgments  DocumentAcknowledgment[]
   createdAt                DateTime           @default(now())
   updatedAt                DateTime           @updatedAt
 
@@ -240,6 +258,7 @@ model Registration {
   @@index([userId])
   @@index([eventId, deletedAt])
   @@index([portfolioId])
+  @@index([delegationId])
   @@index([eventId, committeeName, portfolioName, status])
 }
 
@@ -355,6 +374,9 @@ model CommitteeConfig {
   name              String
   agenda            String
   type              String?
+  committeeFormat   String?
+  metadataJson      String?
+  positionPaperDeadline DateTime?
   chairName         String?
   chairEmail        String?
   seatCount         Int
@@ -363,6 +385,8 @@ model CommitteeConfig {
   organizerConfig   OrganizerConferenceConfig @relation(fields: [organizerConfigId], references: [id], onDelete: Cascade)
   portfolios        Portfolio[]
   questions         ApplicationQuestion[]
+  documents         CommitteeDocument[]
+  positionPapers    PositionPaper[]
   createdAt         DateTime                  @default(now())
   updatedAt         DateTime                  @updatedAt
 }
@@ -484,12 +508,14 @@ model ConferenceAward {
   id                       String   @id @default(cuid())
   eventId                  String
   category                 String
+  presetKey                String?
   prizeTitle               String?
   sponsorLogoUrl           String?
   sponsorName              String?
   description              String?
   recipientRegistrationId  String?
   recipientUserId          String?
+  recipientDelegationId    String?
   participantName          String?
   createdAt                DateTime @default(now())
   event                    Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
@@ -519,11 +545,15 @@ model Delegation {
   eventId      String
   inviteToken  String             @unique
   name         String?
+  schoolName   String?
+  maxMembers   Int?
+  status       DelegationStatus   @default(OPEN)
   ownerUserId  String
   createdAt    DateTime           @default(now())
   event        Event              @relation(fields: [eventId], references: [id], onDelete: Cascade)
   owner        User               @relation("DelegationOwner", fields: [ownerUserId], references: [id], onDelete: Cascade)
   members      DelegationMember[]
+  registrations Registration[]
 
   @@index([eventId])
 }
@@ -538,4 +568,51 @@ model DelegationMember {
   user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([delegationId, userId])
+}
+
+model PositionPaper {
+  id             String              @id @default(cuid())
+  registrationId String
+  eventId        String
+  committeeId    String
+  fileUrl        String?
+  textContent    String?
+  status         PositionPaperStatus @default(PENDING)
+  reviewerNotes  String?
+  submittedAt    DateTime            @default(now())
+  reviewedAt     DateTime?
+  registration   Registration        @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+  event          Event               @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  committee      CommitteeConfig     @relation(fields: [committeeId], references: [id], onDelete: Cascade)
+
+  @@unique([registrationId, committeeId])
+  @@index([eventId])
+  @@index([committeeId])
+}
+
+model CommitteeDocument {
+  id          String          @id @default(cuid())
+  committeeId String
+  title       String
+  category    String
+  fileUrl     String
+  version     String?
+  publishedAt DateTime        @default(now())
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  committee   CommitteeConfig @relation(fields: [committeeId], references: [id], onDelete: Cascade)
+  acknowledgments DocumentAcknowledgment[]
+
+  @@index([committeeId])
+}
+
+model DocumentAcknowledgment {
+  id             String            @id @default(cuid())
+  registrationId String
+  documentId     String
+  acknowledgedAt DateTime          @default(now())
+  registration   Registration      @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+  document       CommitteeDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@unique([registrationId, documentId])
 }

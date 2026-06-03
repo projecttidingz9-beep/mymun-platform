@@ -30,6 +30,12 @@ vi.mock("@/lib/server/resolve-registration-application-type", () => ({
   loadOrganizerBlobsByEventIds: vi.fn(() => Promise.resolve(new Map())),
 }));
 
+vi.mock("@/lib/server/registration-documents-acknowledged", () => ({
+  registrationDocumentsAcknowledged: vi.fn(() =>
+    Promise.resolve({ acknowledged: true, pendingCount: 0 })
+  ),
+}));
+
 describe("GET /api/passes/me", () => {
   beforeEach(async () => {
     const auth = await import("@/lib/server/auth");

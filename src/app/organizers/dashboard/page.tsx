@@ -55,6 +55,12 @@ import {
   normalizeConferenceScheduleEntries,
   parseConferenceScheduleEntries,
 } from "@/lib/conference-schedule";
+import {
+  INDIA_COMMITTEE_PRESETS,
+  getCommitteePreset,
+  type CommitteeFormatKey,
+} from "@/lib/india-committee-presets";
+import { MUN_AWARD_PRESETS } from "@/lib/mun-award-presets";
 
 const nextScheduleDayName = (entries: ConferenceScheduleEntry[]) =>
   `Day ${new Set(entries.map((entry) => entry.day)).size + 1}`;
@@ -378,6 +384,8 @@ export default function OrganizerDashboardPage() {
     removeOrganizerCommittee,
     updateRegistrationCategoryConfig,
     addRegistrationCategory,
+    waitlistApplicant,
+    inviteApplicant,
     addConferenceAward,
     removeConferenceAward,
     updateOrganizerConferenceStatus,
@@ -401,6 +409,34 @@ export default function OrganizerDashboardPage() {
   const [globalSearchOpen, setGlobalSearchOpen] = useState(false);
   const [announcementTitle, setAnnouncementTitle] = useState("");
   const [announcementMessage, setAnnouncementMessage] = useState("");
+  const [broadcastAlsoEmail, setBroadcastAlsoEmail] = useState(false);
+  const [broadcastFilter, setBroadcastFilter] = useState<
+    "all" | "paid" | "allotted" | "committeeId" | "categoryId" | "delegationId"
+  >("all");
+  const [broadcastSending, setBroadcastSending] = useState(false);
+  const [indiaPresetSelection, setIndiaPresetSelection] = useState<CommitteeFormatKey>("AIPPM");
+  const [awardPresetKey, setAwardPresetKey] = useState("");
+  const [eventDelegations, setEventDelegations] = useState<
+    Array<{
+      id: string;
+      schoolName: string;
+      status: string;
+      memberCount: number;
+      paidCount: number;
+      allottedCount: number;
+      inviteToken: string;
+    }>
+  >([]);
+  const [positionPapers, setPositionPapers] = useState<
+    Array<{
+      id: string;
+      registrationId: string;
+      delegateName: string;
+      committeeName: string;
+      status: string;
+      submittedAt: string;
+    }>
+  >([]);
   const [assignmentCommittee, setAssignmentCommittee] = useState<Record<string, string>>({});
   const [assignmentPortfolio, setAssignmentPortfolio] = useState<Record<string, string>>({});
   const [selectedApplicantId, setSelectedApplicantId] = useState<string>("");
@@ -458,6 +494,8 @@ export default function OrganizerDashboardPage() {
     seatCount: "",
     committeeType: "UN" as "UN" | "NON_UN" | "CUSTOM",
     customTypeLabel: "",
+    committeeFormat: "" as CommitteeFormatKey | "",
+    metadata: undefined as OrganizerConference["committees"][number]["metadata"],
     members: [] as Array<{ id: string; name: string; seatCount: string }>,
     memberInput: "",
   });
@@ -587,6 +625,27 @@ export default function OrganizerDashboardPage() {
         }));
       if (additions.length === 0) return prev;
       return { ...prev, members: [...prev.members, ...additions] };
+    });
+  };
+
+  const importIndiaPresetIntoCreateDraft = (presetKey: CommitteeFormatKey) => {
+    const preset = getCommitteePreset(presetKey);
+    if (!preset) return;
+    const totalSeats = preset.members.reduce((sum, member) => sum + member.seatCount, 0);
+    setCommitteeDraft({
+      name: preset.label.split("(")[0]?.trim() || preset.label,
+      agenda: "",
+      seatCount: String(totalSeats),
+      committeeType: preset.committeeType,
+      customTypeLabel: preset.customTypeLabel || "",
+      committeeFormat: preset.key,
+      metadata: preset.metadata,
+      members: preset.members.map((member, index) => ({
+        id: `india-preset-${preset.key}-${index}`,
+        name: member.name,
+        seatCount: String(member.seatCount),
+      })),
+      memberInput: "",
     });
   };
 
@@ -965,6 +1024,74 @@ export default function OrganizerDashboardPage() {
     }, 180);
     return () => window.clearTimeout(timer);
   }, [globalSearchInput]);
+
+  useEffect(() => {
+    if (!selectedConference?.id) {
+      setEventDelegations([]);
+      setPositionPapers([]);
+      return;
+    }
+    void fetch(`/api/organizers/conferences/${selectedConference.id}/delegations`, {
+      credentials: "include",
+    })
+      .then((res) => res.json())
+      .then((data) =>
+        setEventDelegations(
+          (data.delegations || []).map(
+            (delegation: {
+              id: string;
+              schoolName: string;
+              status: string;
+              memberCount: number;
+              inviteToken: string;
+              members?: Array<{ registration?: { paid?: boolean; status?: string } | null }>;
+              ownerRegistration?: { paid?: boolean; status?: string } | null;
+            }) => {
+              const regs = [
+                delegation.ownerRegistration,
+                ...(delegation.members || []).map((member) => member.registration),
+              ].filter(Boolean) as Array<{ paid?: boolean; status?: string }>;
+              return {
+                id: delegation.id,
+                schoolName: delegation.schoolName,
+                status: delegation.status,
+                memberCount: delegation.memberCount,
+                paidCount: regs.filter((entry) => entry.paid).length,
+                allottedCount: regs.filter((entry) => entry.status === "ALLOTTED").length,
+                inviteToken: delegation.inviteToken,
+              };
+            }
+          )
+        )
+      )
+      .catch(() => setEventDelegations([]));
+    void fetch(`/api/organizers/conferences/${selectedConference.id}/position-papers`, {
+      credentials: "include",
+    })
+      .then((res) => res.json())
+      .then((data) =>
+        setPositionPapers(
+          (data.positionPapers || []).map(
+            (paper: {
+              id: string;
+              registrationId: string;
+              committeeName: string;
+              status: string;
+              submittedAt: string;
+              registration?: { user?: { name?: string } };
+            }) => ({
+              id: paper.id,
+              registrationId: paper.registrationId,
+              delegateName: paper.registration?.user?.name || "Delegate",
+              committeeName: paper.committeeName,
+              status: paper.status,
+              submittedAt: paper.submittedAt,
+            })
+          )
+        )
+      )
+      .catch(() => setPositionPapers([]));
+  }, [selectedConference?.id]);
 
   const globalSearchResults = useMemo(() => {
     const q = globalSearchQuery.trim().toLowerCase();
@@ -1613,7 +1740,9 @@ export default function OrganizerDashboardPage() {
 
         let portfolioId: string | undefined;
         if (applicationTypeTab !== "chair" && (committee.portfolios?.length ?? 0) > 0) {
-          const prefNames = applicant.portfolioPreferencesByCommittee?.[committee.id] ?? [];
+          const countryPrefNames = applicant.countryPreferences?.filter(Boolean) ?? [];
+          const portfolioPrefNames = applicant.portfolioPreferencesByCommittee?.[committee.id] ?? [];
+          const prefNames = [...countryPrefNames, ...portfolioPrefNames];
           const portfolioCandidates = [
             ...prefNames
               .map((name) => committee.portfolios?.find((entry) => entry.name === name))
@@ -3033,6 +3162,7 @@ export default function OrganizerDashboardPage() {
                   )}
 
                   {activeSection === "applications" && (
+                  <>
                   <div className="card p-6 rounded-2xl">
                     <h3 className="text-2xl font-bold mb-4" style={{ color: "var(--fg)" }}>Applications</h3>
                     <div className="flex flex-wrap gap-2 mb-4">
@@ -3053,8 +3183,8 @@ export default function OrganizerDashboardPage() {
                         </button>
                       ))}
                     </div>
-                    <div className="grid md:grid-cols-3 gap-2 mb-4">
-                      {(["Pending", "Allotted", "Rejected"] as const).map((status) => {
+                    <div className="grid md:grid-cols-5 gap-2 mb-4">
+                      {(["Pending", "Waitlisted", "Invited", "Allotted", "Rejected"] as const).map((status) => {
                         const count = filteredApplications.filter((entry) => entry.status === status).length;
                         return (
                           <div key={status} className="rounded-xl p-3" style={{ background: "var(--bg-subtle)" }}>
@@ -3208,6 +3338,30 @@ export default function OrganizerDashboardPage() {
                                   Unassign
                                 </button>
                                 <button
+                                  type="button"
+                                  className="btn btn-ghost text-xs"
+                                  disabled={applicant.status === "Allotted" || applicant.status === "Rejected"}
+                                  onClick={() => {
+                                    const result = waitlistApplicant(selectedConference.id, applicant.id);
+                                    if (!result.ok) alert(result.message);
+                                  }}
+                                >
+                                  Waitlist
+                                </button>
+                                <button
+                                  type="button"
+                                  className="btn btn-ghost text-xs"
+                                  disabled={
+                                    applicant.status !== "Waitlisted" && applicant.status !== "Pending"
+                                  }
+                                  onClick={() => {
+                                    const result = inviteApplicant(selectedConference.id, applicant.id);
+                                    if (!result.ok) alert(result.message);
+                                  }}
+                                >
+                                  Invite
+                                </button>
+                                <button
                                   onClick={() => updateApplicantStatus(selectedConference.id, applicant.id, "Rejected")}
                                   className="btn btn-ghost text-xs"
                                 >
@@ -3250,6 +3404,81 @@ export default function OrganizerDashboardPage() {
                       </div>
                     )}
                   </div>
+
+                  <div className="card p-6 rounded-2xl mt-6">
+                    <h3 className="text-lg font-bold mb-4" style={{ color: "var(--fg)" }}>Position Papers</h3>
+                    {positionPapers.length === 0 ? (
+                      <p className="text-sm" style={{ color: "var(--fg-muted)" }}>No position papers submitted yet.</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {positionPapers.map((paper) => (
+                          <div
+                            key={paper.id}
+                            className="p-3 rounded-xl flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2"
+                            style={{ background: "var(--bg-subtle)" }}
+                          >
+                            <div>
+                              <p className="text-xs font-semibold" style={{ color: "var(--fg)" }}>
+                                {paper.delegateName} · {paper.committeeName}
+                              </p>
+                              <p className="text-[11px]" style={{ color: "var(--fg-muted)" }}>
+                                {paper.status} · {new Date(paper.submittedAt).toLocaleString()}
+                              </p>
+                            </div>
+                            <div className="flex gap-2">
+                              <button
+                                type="button"
+                                className="btn btn-ghost text-xs"
+                                onClick={() => {
+                                  void fetch(
+                                    `/api/organizers/registrations/${paper.registrationId}/position-paper`,
+                                    {
+                                      method: "PATCH",
+                                      credentials: "include",
+                                      headers: { "Content-Type": "application/json" },
+                                      body: JSON.stringify({ status: "APPROVED" }),
+                                    }
+                                  ).then(() => {
+                                    setPositionPapers((prev) =>
+                                      prev.map((entry) =>
+                                        entry.id === paper.id ? { ...entry, status: "APPROVED" } : entry
+                                      )
+                                    );
+                                  });
+                                }}
+                              >
+                                Approve
+                              </button>
+                              <button
+                                type="button"
+                                className="btn btn-ghost text-xs"
+                                onClick={() => {
+                                  void fetch(
+                                    `/api/organizers/registrations/${paper.registrationId}/position-paper`,
+                                    {
+                                      method: "PATCH",
+                                      credentials: "include",
+                                      headers: { "Content-Type": "application/json" },
+                                      body: JSON.stringify({ status: "REJECTED", reviewerNotes: "Needs revision" }),
+                                    }
+                                  ).then(() => {
+                                    setPositionPapers((prev) =>
+                                      prev.map((entry) =>
+                                        entry.id === paper.id ? { ...entry, status: "REJECTED" } : entry
+                                      )
+                                    );
+                                  });
+                                }}
+                              >
+                                Reject
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  </>
                   )}
 
                   {activeSection === "participants" && (
@@ -3335,6 +3564,36 @@ export default function OrganizerDashboardPage() {
                             >
                               Details
                             </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="card p-6 rounded-2xl mt-6">
+                    <h3 className="text-lg font-bold mb-4" style={{ color: "var(--fg)" }}>Delegations</h3>
+                    {eventDelegations.length === 0 ? (
+                      <p className="text-sm" style={{ color: "var(--fg-muted)" }}>
+                        No delegations created yet. Delegation heads can create one after registering.
+                      </p>
+                    ) : (
+                      <div className="space-y-2">
+                        {eventDelegations.map((delegation) => (
+                          <div
+                            key={delegation.id}
+                            className="p-3 rounded-xl"
+                            style={{ background: "var(--bg-subtle)", border: "1px solid var(--border)" }}
+                          >
+                            <p className="text-sm font-semibold" style={{ color: "var(--fg)" }}>
+                              {delegation.schoolName}
+                            </p>
+                            <p className="text-xs mt-1" style={{ color: "var(--fg-muted)" }}>
+                              {delegation.memberCount} members · {delegation.paidCount} paid ·{" "}
+                              {delegation.allottedCount} allotted · {delegation.status}
+                            </p>
+                            <p className="text-xs mt-1 break-all" style={{ color: "var(--fg-muted)" }}>
+                              Invite: {typeof window !== "undefined" ? `${window.location.origin}/join/delegation/${delegation.inviteToken}` : `/join/delegation/${delegation.inviteToken}`}
+                            </p>
                           </div>
                         ))}
                       </div>
@@ -3501,12 +3760,35 @@ export default function OrganizerDashboardPage() {
                           />
                         </div>
                         {committeeDraft.committeeType === "CUSTOM" && (
+                          <>
                           <input
                             className="input-base text-xs"
                             placeholder="Custom type label (e.g. Lok Sabha)"
                             value={committeeDraft.customTypeLabel}
                             onChange={(event) => setCommitteeDraft((prev) => ({ ...prev, customTypeLabel: event.target.value }))}
                           />
+                          <div className="flex items-center gap-2">
+                            <select
+                              className="input-base text-xs"
+                              value={indiaPresetSelection}
+                              onChange={(event) =>
+                                setIndiaPresetSelection(event.target.value as CommitteeFormatKey)
+                              }
+                            >
+                              {INDIA_COMMITTEE_PRESETS.map((preset) => (
+                                <option key={preset.key} value={preset.key}>
+                                  {preset.label}
+                                </option>
+                              ))}
+                            </select>
+                            <button
+                              className="btn btn-ghost text-xs"
+                              onClick={() => importIndiaPresetIntoCreateDraft(indiaPresetSelection)}
+                            >
+                              Import India Preset
+                            </button>
+                          </div>
+                          </>
                         )}
                         <div className="rounded-lg p-2 space-y-2" style={{ border: "1px solid var(--border)" }}>
                           <p className="text-[11px] font-semibold" style={{ color: "var(--fg-muted)" }}>
@@ -3542,6 +3824,27 @@ export default function OrganizerDashboardPage() {
                                   onClick={() => importTemplateIntoCreateDraft(createTemplateSelection)}
                                 >
                                   Import Template (Append)
+                                </button>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <select
+                                  className="input-base text-xs"
+                                  value={indiaPresetSelection}
+                                  onChange={(event) =>
+                                    setIndiaPresetSelection(event.target.value as CommitteeFormatKey)
+                                  }
+                                >
+                                  {INDIA_COMMITTEE_PRESETS.map((preset) => (
+                                    <option key={preset.key} value={preset.key}>
+                                      {preset.label}
+                                    </option>
+                                  ))}
+                                </select>
+                                <button
+                                  className="btn btn-ghost text-xs"
+                                  onClick={() => importIndiaPresetIntoCreateDraft(indiaPresetSelection)}
+                                >
+                                  Import India Preset
                                 </button>
                               </div>
                               <p className="text-[11px] font-semibold" style={{ color: "var(--fg-muted)" }}>
@@ -3620,6 +3923,8 @@ export default function OrganizerDashboardPage() {
                               name: committeeDraft.name.trim(),
                               agenda: committeeDraft.agenda.trim(),
                               committeeType: committeeDraft.committeeType,
+                              committeeFormat: committeeDraft.committeeFormat || undefined,
+                              metadata: committeeDraft.metadata,
                               memberMode: memberModeForType(committeeDraft.committeeType),
                               customTypeLabel:
                                 committeeDraft.committeeType === "CUSTOM"
@@ -3645,6 +3950,8 @@ export default function OrganizerDashboardPage() {
                               seatCount: "",
                               committeeType: "UN",
                               customTypeLabel: "",
+                              committeeFormat: "",
+                              metadata: undefined,
                               members: [],
                               memberInput: "",
                             });
@@ -3763,17 +4070,74 @@ export default function OrganizerDashboardPage() {
                           placeholder="Share an update with delegates..."
                           style={{ resize: "none" }}
                         />
+                        <label className="flex items-center gap-2 text-sm" style={{ color: "var(--fg-muted)" }}>
+                          <input
+                            type="checkbox"
+                            checked={broadcastAlsoEmail}
+                            onChange={(event) => setBroadcastAlsoEmail(event.target.checked)}
+                          />
+                          Also email registered delegates
+                        </label>
+                        {broadcastAlsoEmail && (
+                          <select
+                            className="input-base text-xs"
+                            value={broadcastFilter}
+                            onChange={(event) =>
+                              setBroadcastFilter(
+                                event.target.value as typeof broadcastFilter
+                              )
+                            }
+                          >
+                            <option value="all">All registrations</option>
+                            <option value="paid">Paid only</option>
+                            <option value="allotted">Allotted only</option>
+                          </select>
+                        )}
                         <button
                           className="btn btn-primary w-full text-sm"
-                          disabled={!announcementTitle.trim() || !announcementMessage.trim()}
-                          style={{ opacity: announcementTitle.trim() && announcementMessage.trim() ? 1 : 0.6 }}
+                          disabled={
+                            !announcementTitle.trim() ||
+                            !announcementMessage.trim() ||
+                            broadcastSending
+                          }
+                          style={{
+                            opacity:
+                              announcementTitle.trim() && announcementMessage.trim() ? 1 : 0.6,
+                          }}
                           onClick={() => {
-                            addAnnouncement(selectedConference.id, announcementTitle.trim(), announcementMessage.trim());
+                            const title = announcementTitle.trim();
+                            const message = announcementMessage.trim();
+                            addAnnouncement(selectedConference.id, title, message);
+                            if (broadcastAlsoEmail) {
+                              setBroadcastSending(true);
+                              void fetch(
+                                `/api/organizers/conferences/${selectedConference.id}/broadcast-email`,
+                                {
+                                  method: "POST",
+                                  credentials: "include",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({
+                                    title,
+                                    message,
+                                    filter: broadcastFilter,
+                                  }),
+                                }
+                              )
+                                .then(async (res) => {
+                                  const data = (await res.json()) as { error?: string; sent?: number };
+                                  if (!res.ok) {
+                                    alert(data.error || "Email broadcast failed.");
+                                    return;
+                                  }
+                                  alert(`Emailed ${data.sent ?? 0} delegate(s).`);
+                                })
+                                .finally(() => setBroadcastSending(false));
+                            }
                             setAnnouncementTitle("");
                             setAnnouncementMessage("");
                           }}
                         >
-                          Send Announcement
+                          {broadcastSending ? "Sending…" : "Send Announcement"}
                         </button>
                       </div>
                       <div className="space-y-2 mt-4">
@@ -4471,6 +4835,29 @@ export default function OrganizerDashboardPage() {
                     <div className="card p-6 rounded-2xl">
                       <h3 className="text-lg font-bold mb-4" style={{ color: "var(--fg)" }}>Awards Module</h3>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-2">
+                        <select
+                          className="input-base text-xs col-span-2"
+                          value={awardPresetKey}
+                          onChange={(event) => {
+                            const key = event.target.value;
+                            setAwardPresetKey(key);
+                            const preset = MUN_AWARD_PRESETS.find((entry) => entry.key === key);
+                            if (preset) {
+                              setAwardDraft((prev) => ({
+                                ...prev,
+                                category: preset.category,
+                                prizeTitle: preset.defaultPrizeTitle || preset.category,
+                              }));
+                            }
+                          }}
+                        >
+                          <option value="">Add from preset (optional)</option>
+                          {MUN_AWARD_PRESETS.map((preset) => (
+                            <option key={preset.key} value={preset.key}>
+                              {preset.category}
+                            </option>
+                          ))}
+                        </select>
                         <input className="input-base text-xs" placeholder="Award category" value={awardDraft.category} onChange={(event) => setAwardDraft((prev) => ({ ...prev, category: event.target.value }))} />
                         <input className="input-base text-xs" placeholder="Prize title" value={awardDraft.prizeTitle} onChange={(event) => setAwardDraft((prev) => ({ ...prev, prizeTitle: event.target.value }))} />
                         <input className="input-base text-xs" placeholder="Sponsor name" value={awardDraft.sponsorName} onChange={(event) => setAwardDraft((prev) => ({ ...prev, sponsorName: event.target.value }))} />
@@ -4524,6 +4911,7 @@ export default function OrganizerDashboardPage() {
                           const participant = selectedConference.applicants.find((entry) => entry.id === awardDraft.participantId);
                           addConferenceAward(selectedConference.id, {
                             category: awardDraft.category.trim(),
+                            presetKey: awardPresetKey || undefined,
                             prizeTitle: awardDraft.prizeTitle.trim() || undefined,
                             sponsorName: awardDraft.sponsorName.trim() || undefined,
                             sponsorLogoUrl: awardDraft.sponsorLogoUrl.trim() || undefined,
@@ -4542,6 +4930,7 @@ export default function OrganizerDashboardPage() {
                             description: "",
                             participantId: "",
                           });
+                          setAwardPresetKey("");
                         }}
                       >
                         Add Award

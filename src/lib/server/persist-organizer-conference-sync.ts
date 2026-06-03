@@ -171,7 +171,12 @@ export async function persistOrganizerConferenceSync(
           organizerConfigId: configRow.id,
           name: c.name,
           agenda: c.agenda,
-          type: c.type ?? c.committeeType ?? null,
+          type: c.type ?? c.committeeType ?? c.customTypeLabel ?? null,
+          committeeFormat: c.committeeFormat ?? null,
+          metadataJson: c.metadata ? JSON.stringify(c.metadata) : null,
+          positionPaperDeadline: c.positionPaperDeadline
+            ? new Date(c.positionPaperDeadline)
+            : null,
           seatCount: c.seatCount,
           basePrice: c.basePrice ?? null,
           chairName: c.chairName ?? null,
@@ -202,6 +207,20 @@ export async function persistOrganizerConferenceSync(
       );
       if (portfolioRows.length > 0) {
         await tx.portfolio.createMany({ data: portfolioRows });
+      }
+
+      const documentRows = conference.committees.flatMap((c) =>
+        (c.documents ?? []).map((doc) => ({
+          id: doc.id,
+          committeeId: c.id,
+          title: doc.title,
+          category: doc.category,
+          fileUrl: doc.url,
+          version: null as string | null,
+        }))
+      );
+      if (documentRows.length > 0) {
+        await tx.committeeDocument.createMany({ data: documentRows });
       }
     }
 
@@ -236,12 +255,14 @@ export async function persistOrganizerConferenceSync(
         data: (conference.awards ?? []).map((award) => ({
           eventId,
           category: award.category || "General",
+          presetKey: award.presetKey ?? null,
           prizeTitle: award.prizeTitle || null,
           sponsorLogoUrl: award.sponsorLogoUrl ?? null,
           sponsorName: award.sponsorName ?? null,
           description: award.description ?? null,
           recipientRegistrationId: award.participantId ?? null,
           recipientUserId: award.participantUserId ?? null,
+          recipientDelegationId: award.recipientDelegationId ?? null,
           participantName: award.participantName ?? null,
         })),
       });

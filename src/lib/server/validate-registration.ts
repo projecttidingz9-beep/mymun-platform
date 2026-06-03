@@ -4,6 +4,7 @@ import {
   RegistrationPricingError,
   resolveServerRegistrationAmount,
 } from "@/lib/server/resolve-registration-price";
+import { validateCountryPreferencesForCommittee } from "@/lib/server/country-preference-validation";
 
 export class RegistrationValidationError extends Error {
   constructor(message: string) {
@@ -63,6 +64,12 @@ export async function validateRegistrationRequest(body: Record<string, unknown>)
       : []
   );
 
+  const countryPreferences = dedupeStrings(
+    Array.isArray(body.countryPreferences)
+      ? body.countryPreferences.map(String)
+      : []
+  );
+
   if (categoryId) {
     const category = await loadRegistrationCategoryForValidation(eventId, categoryId);
     if (!category) {
@@ -100,6 +107,20 @@ export async function validateRegistrationRequest(body: Record<string, unknown>)
     }
   }
 
+  if (countryPreferences.length > 0) {
+    try {
+      await validateCountryPreferencesForCommittee({
+        eventId,
+        committeeConfigId,
+        countryPreferences,
+      });
+    } catch (error) {
+      throw new RegistrationValidationError(
+        error instanceof Error ? error.message : "Invalid country/party preferences."
+      );
+    }
+  }
+
   let pricing;
   try {
     pricing = await resolveServerRegistrationAmount({
@@ -124,6 +145,7 @@ export async function validateRegistrationRequest(body: Record<string, unknown>)
     categoryName,
     committeeConfigId,
     committeePreferences,
+    countryPreferences,
     pricing,
     fullName,
     school,
@@ -139,6 +161,9 @@ export function serializeRegistrationPreferences(body: Record<string, unknown>) 
     typeof body.portfolioPreferencesByCommittee === "object"
       ? body.portfolioPreferencesByCommittee
       : {};
+  const countryPreferences = Array.isArray(body.countryPreferences)
+    ? body.countryPreferences.map(String)
+    : [];
   const formAnswers =
     body.formAnswers && typeof body.formAnswers === "object"
       ? (body.formAnswers as Record<string, unknown>)
@@ -151,6 +176,7 @@ export function serializeRegistrationPreferences(body: Record<string, unknown>) 
     portfolioPreferencesJson: Object.keys(portfolioPreferencesByCommittee).length
       ? JSON.stringify(portfolioPreferencesByCommittee)
       : null,
+    countryPreferencesJson: countryPreferences.length ? JSON.stringify(countryPreferences) : null,
     formAnswersJson: Object.keys(formAnswers).length ? JSON.stringify(formAnswers) : null,
   };
 }

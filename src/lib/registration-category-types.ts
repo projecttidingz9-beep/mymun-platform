@@ -7,11 +7,13 @@ export const REGISTRATION_CATEGORY_TYPES: RegistrationCategoryType[] = [
   "chair",
   "delegation",
   "organizer",
+  "press",
   "other",
 ];
 
 export const getCategoryTypeLabel = (applicationType?: RegistrationCategory["applicationType"]) => {
   if (applicationType === "delegation") return "Delegation";
+  if (applicationType === "press") return "International Press";
   if (applicationType === "chair") return "Chair";
   if (applicationType === "organizer") return "Organizer Team";
   if (applicationType === "other") return "Custom";
@@ -20,6 +22,7 @@ export const getCategoryTypeLabel = (applicationType?: RegistrationCategory["app
 
 export const getCategoryRegistrationLabel = (applicationType?: RegistrationCategory["applicationType"]) => {
   if (applicationType === "delegation") return "Delegation Registration";
+  if (applicationType === "press") return "Press Registration";
   if (applicationType === "chair") return "Chair Registration";
   if (applicationType === "organizer") return "Organising Committee Registration";
   if (applicationType === "other") return "Custom Registration";
@@ -28,6 +31,7 @@ export const getCategoryRegistrationLabel = (applicationType?: RegistrationCateg
 
 export const getCategoryTypeHint = (applicationType?: RegistrationCategory["applicationType"]) => {
   if (applicationType === "delegation") return "This category is intended for delegation-level applications.";
+  if (applicationType === "press") return "This category is intended for International Press / Press Corps.";
   if (applicationType === "chair") return "This category is intended for executive board and chair applications.";
   if (applicationType === "organizer") return "This category is intended for organizer team applications.";
   if (applicationType === "other") return "This category uses organizer-defined custom criteria.";
@@ -52,6 +56,7 @@ export const getDefaultCategoryForType = (
     chair: "Executive board and chair applications.",
     delegation: "Register an entire delegation.",
     organizer: "Internal organising team onboarding category.",
+    press: "International Press / Press Corps registration.",
     other: "Custom registration category with organizer-defined criteria.",
   };
 
@@ -70,6 +75,9 @@ export const getDefaultCategoryForType = (
 
   if (type === "delegation") {
     return { ...base, maxDelegatesPerDelegation: 10 };
+  }
+  if (type === "press") {
+    return { ...base, requiresCommitteeSelection: true };
   }
 
   return base;

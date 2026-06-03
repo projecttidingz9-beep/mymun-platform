@@ -8,6 +8,7 @@ import {
   loadOrganizerBlobsByEventIds,
   resolveRegistrationApplicationType,
 } from "@/lib/server/resolve-registration-application-type";
+import { registrationDocumentsAcknowledged } from "@/lib/server/registration-documents-acknowledged";
 
 export async function GET(request: NextRequest) {
   const actor = await getRequestActor(request);
@@ -59,14 +60,21 @@ export async function GET(request: NextRequest) {
           },
           passTokenExpiresAt(registration.event.endDate)
         );
-        const isReleased = pass.releaseAt <= now;
-        const qrImageDataUrl = isReleased ? await QRCode.toDataURL(token) : undefined;
         const applicationType = await resolveRegistrationApplicationType(
           registration.eventId,
           registration.categoryName,
           blobByEventId.get(registration.eventId)
         );
         const isAllotted = registration.status === RegistrationStatus.ALLOTTED;
+        const { acknowledged: docsAcknowledged, pendingCount: pendingDocumentCount } =
+          await registrationDocumentsAcknowledged({
+            registrationId: registration.id,
+            committeeName: isAllotted ? registration.committeeName : null,
+            eventId: registration.eventId,
+          });
+        const timeReleased = pass.releaseAt <= now;
+        const isReleased = timeReleased && docsAcknowledged;
+        const qrImageDataUrl = isReleased ? await QRCode.toDataURL(token) : undefined;
         return {
           id: pass.id,
           registrationId: registration.id,
@@ -82,6 +90,8 @@ export async function GET(request: NextRequest) {
           checkedInAt: registration.checkedInAt?.toISOString() ?? null,
           releaseAt: pass.releaseAt.toISOString(),
           released: isReleased,
+          documentsAcknowledged: docsAcknowledged,
+          pendingDocumentCount,
           issuedAt: pass.issuedAt.toISOString(),
           qrToken: isReleased ? token : null,
           qrImageDataUrl,

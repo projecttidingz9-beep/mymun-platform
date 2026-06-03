@@ -5,6 +5,7 @@ import type {
   OrganizerCommittee,
   OrganizerConference,
   OrganizerConferencePartnerLink,
+  OrganizerDocumentCategory,
   ConferenceReview,
   RegistrationCategory,
 } from "@/lib/types";
@@ -79,6 +80,9 @@ function committeeFromDbRow(
     name: string;
     agenda: string;
     type: string | null;
+    committeeFormat?: string | null;
+    metadataJson?: string | null;
+    positionPaperDeadline?: Date | null;
     chairName: string | null;
     chairEmail: string | null;
     seatCount: number;
@@ -86,6 +90,14 @@ function committeeFromDbRow(
     visibility: CommitteeVisibilityType;
     questions: Array<{ id: string; label: string; type: string; required: boolean; optionsJson: string | null }>;
     portfolios?: Array<{ id: string; name: string; seatCount: number }>;
+    documents?: Array<{
+      id: string;
+      title: string;
+      category: string;
+      fileUrl: string;
+      version: string | null;
+      publishedAt: Date;
+    }>;
   }
 ): OrganizerCommittee {
   const rawType = (c.type || "").trim();
@@ -107,6 +119,15 @@ function committeeFromDbRow(
     legacyType = "UN";
   }
 
+  let metadata: OrganizerCommittee["metadata"];
+  if (c.metadataJson) {
+    try {
+      metadata = JSON.parse(c.metadataJson) as OrganizerCommittee["metadata"];
+    } catch {
+      metadata = undefined;
+    }
+  }
+
   return {
     id: c.id,
     name: c.name,
@@ -118,9 +139,12 @@ function committeeFromDbRow(
     chairEmail: c.chairEmail ?? undefined,
     isPublic: c.visibility === "PUBLIC",
     committeeType,
+    committeeFormat: c.committeeFormat ?? undefined,
     customTypeLabel,
     type: legacyType,
     memberMode: committeeType === "UN" ? "UN_COUNTRY" : "CUSTOM_MEMBER",
+    metadata,
+    positionPaperDeadline: c.positionPaperDeadline?.toISOString(),
     customQuestions: c.questions.map((q) => ({
       id: q.id,
       question: q.label,
@@ -133,7 +157,14 @@ function committeeFromDbRow(
       assignedApplicantIds: [],
     })),
     chairs: [],
-    documents: [],
+    documents: (c.documents ?? []).map((doc) => ({
+      id: doc.id,
+      title: doc.title,
+      category: doc.category as OrganizerDocumentCategory,
+      sourceType: "url" as const,
+      url: doc.fileUrl,
+      uploadedAt: doc.publishedAt.toISOString(),
+    })),
   };
 }
 
@@ -171,7 +202,7 @@ export async function mapManagedEventToOrganizerConference(eventId: string): Pro
     include: {
       organizerConfig: {
         include: {
-          committees: { include: { questions: true, portfolios: true } },
+          committees: { include: { questions: true, portfolios: true, documents: true } },
           registrationCategories: true,
           pricingPhases: true,
         },
@@ -222,6 +253,9 @@ export async function mapManagedEventToOrganizerConference(eventId: string): Pro
         name: c.name,
         agenda: c.agenda,
         type: c.type,
+        committeeFormat: c.committeeFormat,
+        metadataJson: c.metadataJson,
+        positionPaperDeadline: c.positionPaperDeadline,
         chairName: c.chairName,
         chairEmail: c.chairEmail,
         seatCount: c.seatCount,
@@ -229,6 +263,7 @@ export async function mapManagedEventToOrganizerConference(eventId: string): Pro
         visibility: c.visibility,
         questions: c.questions,
         portfolios: c.portfolios,
+        documents: c.documents,
       })
     ) ?? [];
   const committees = mergeCommittees(dbCommittees, blobCommittees);
@@ -348,11 +383,22 @@ export async function mapManagedEventToOrganizerConference(eventId: string): Pro
       }
     }
 
+    let countryPreferences: string[] | undefined;
+    if (reg.countryPreferencesJson) {
+      try {
+        countryPreferences = JSON.parse(reg.countryPreferencesJson) as string[];
+      } catch {
+        countryPreferences = undefined;
+      }
+    }
+
     const base: OrganizerApplicant = {
       id: reg.id,
       name: reg.user.name,
       school: String(responses.school ?? responses.School ?? ""),
-      countryPreference: String(responses.country ?? responses.Country ?? ""),
+      countryPreference:
+        countryPreferences?.[0] ?? String(responses.country ?? responses.Country ?? ""),
+      countryPreferences,
       committeePreference: isAllotted ? "" : committeePreferences[0] ?? "",
       committeePreferences: isAllotted ? [] : committeePreferences,
       portfolioPreferencesByCommittee: isAllotted ? undefined : portfolioPreferencesByCommittee,
@@ -410,9 +456,15 @@ export async function mapManagedEventToOrganizerConference(eventId: string): Pro
   const awards: OrganizerAwardConfig[] = event.awards.map((a) => ({
     id: a.id,
     category: a.category,
+    presetKey: a.presetKey ?? undefined,
     prizeTitle: a.prizeTitle ?? undefined,
     sponsorLogoUrl: a.sponsorLogoUrl ?? undefined,
+    sponsorName: a.sponsorName ?? undefined,
     description: a.description ?? undefined,
+    participantId: a.recipientRegistrationId ?? undefined,
+    participantName: a.participantName ?? undefined,
+    participantUserId: a.recipientUserId ?? undefined,
+    recipientDelegationId: a.recipientDelegationId ?? undefined,
   }));
 
   const reviews: ConferenceReview[] = event.reviews.map((r) => ({
