@@ -1,6 +1,5 @@
 import type { PaymentIntentStatus, PaymentProvider } from "@/generated/prisma/enums";
 import { RegistrationStatus } from "@/generated/prisma/enums";
-import { issueDelegatePassForRegistration } from "@/lib/server/issue-delegate-pass";
 import { prisma } from "@/lib/server/prisma";
 import { getAppConfig } from "@/lib/app-config";
 
@@ -27,14 +26,19 @@ export type RegistrationCheckoutResult = {
 
 /**
  * Creates registration row + payment intent using FREE or MANUAL drivers (no live gateway).
+ * Payment does not imply allotment — status stays PENDING until organizer allots.
  */
 export async function createRegistrationAndPayment(params: {
   registrationId: string;
   userId: string;
   eventId: string;
   categoryName: string;
+  categoryId?: string;
   committeeName?: string | null;
   portfolioName?: string | null;
+  committeePreferencesJson?: string | null;
+  portfolioPreferencesJson?: string | null;
+  formAnswersJson?: string | null;
   amount: number;
   currency: string;
 }): Promise<RegistrationCheckoutResult> {
@@ -56,19 +60,27 @@ export async function createRegistrationAndPayment(params: {
   const isFreeAmount = amount <= 0;
   const useFreeDriver = isFreeAmount || paymentsMode === "free";
 
+  const registrationData = {
+    id: params.registrationId,
+    userId: params.userId,
+    eventId: params.eventId,
+    categoryName: params.categoryName,
+    categoryId: params.categoryId ?? null,
+    committeeName: params.committeeName ?? undefined,
+    portfolioName: params.portfolioName ?? undefined,
+    committeePreferencesJson: params.committeePreferencesJson ?? undefined,
+    portfolioPreferencesJson: params.portfolioPreferencesJson ?? undefined,
+    formAnswersJson: params.formAnswersJson ?? undefined,
+    amount,
+    status: RegistrationStatus.PENDING,
+    allottedAt: null as Date | null,
+  };
+
   if (useFreeDriver) {
     const registration = await prisma.registration.create({
       data: {
-        id: params.registrationId,
-        userId: params.userId,
-        eventId: params.eventId,
-        categoryName: params.categoryName,
-        committeeName: params.committeeName ?? undefined,
-        portfolioName: params.portfolioName ?? undefined,
-        amount,
+        ...registrationData,
         paid: true,
-        status: RegistrationStatus.ALLOTTED,
-        allottedAt: new Date(),
       },
     });
 
@@ -84,12 +96,6 @@ export async function createRegistrationAndPayment(params: {
       },
     });
 
-    try {
-      await issueDelegatePassForRegistration(registration.id, { immediateRelease: true });
-    } catch {
-      // Registration succeeded; pass issuance is best-effort.
-    }
-
     return {
       registrationId: registration.id,
       paymentIntentId: pi.id,
@@ -103,15 +109,8 @@ export async function createRegistrationAndPayment(params: {
 
   const registration = await prisma.registration.create({
     data: {
-      id: params.registrationId,
-      userId: params.userId,
-      eventId: params.eventId,
-      categoryName: params.categoryName,
-      committeeName: params.committeeName ?? undefined,
-      portfolioName: params.portfolioName ?? undefined,
-      amount,
+      ...registrationData,
       paid: false,
-      status: RegistrationStatus.PENDING,
     },
   });
 

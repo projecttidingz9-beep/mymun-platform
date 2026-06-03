@@ -1,5 +1,7 @@
+import type { OrganizerConference, RegistrationCategory } from "@/lib/types";
 import { moneyNumber } from "@/lib/server/decimal-money";
-import { prisma } from "./prisma";
+import { getOrganizerStoredBlob } from "@/lib/server/organizer-config-store";
+import { prisma } from "@/lib/server/prisma";
 
 const dayStart = (d: Date) => new Date(d).setHours(0, 0, 0, 0);
 
@@ -25,8 +27,63 @@ function getActivePhaseRow(phases: PhaseRow[], reference: Date): PhaseRow | null
   return sortedByEnd.find((phase) => dayStart(reference) > dayStart(phase.endDate)) ?? null;
 }
 
+function resolveFromCategoryPhases(
+  category: RegistrationCategory,
+  committeeConfigId: string | undefined,
+  ref: Date
+): { amount: number; phaseId?: string; phaseName?: string } | null {
+  const phases = category.pricingPhases ?? [];
+  const active = phases.length ? getActivePhaseRow(
+    phases.map((p) => ({
+      id: p.id,
+      name: p.name,
+      startDate: new Date(p.startDate),
+      endDate: new Date(p.endDate),
+      basePrice: p.basePrice,
+      committeePriceJson: JSON.stringify(
+        Object.fromEntries((p.committeePrices ?? []).map((cp) => [cp.committeeId, cp.price]))
+      ),
+    })),
+    ref
+  ) : null;
+
+  if (!active && phases.length === 0) {
+    return { amount: Math.max(0, Number(category.basePrice) || 0) };
+  }
+
+  if (!active) {
+    return null;
+  }
+
+  if (committeeConfigId && active.committeePriceJson) {
+    try {
+      const map = JSON.parse(active.committeePriceJson) as Record<string, number>;
+      const v = map[committeeConfigId];
+      if (typeof v === "number" && Number.isFinite(v)) {
+        return { amount: v, phaseId: active.id, phaseName: active.name };
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  return {
+    amount: moneyNumber(active.basePrice as never),
+    phaseId: active.id,
+    phaseName: active.name,
+  };
+}
+
+export class RegistrationPricingError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "RegistrationPricingError";
+  }
+}
+
 export async function resolveServerRegistrationAmount(params: {
   eventId: string;
+  categoryId?: string | null;
   committeeConfigId?: string | null;
   referenceDate?: Date;
 }): Promise<{ amount: number; currency: string; phaseId?: string; phaseName?: string }> {
@@ -37,6 +94,8 @@ export async function resolveServerRegistrationAmount(params: {
       currency: true,
       organizerConfig: {
         select: {
+          id: true,
+          registrationCategories: true,
           pricingPhases: true,
           committees: {
             select: { id: true, basePrice: true },
@@ -47,16 +106,87 @@ export async function resolveServerRegistrationAmount(params: {
   });
 
   const currency = event?.currency?.trim() || "INR";
+  const categoryId = params.categoryId?.trim();
+
+  let categoryFromDb = categoryId
+    ? event?.organizerConfig?.registrationCategories.find((c) => c.id === categoryId)
+    : undefined;
+
+  let categoryFromBlob: RegistrationCategory | undefined;
+  if (!categoryFromDb && categoryId) {
+    const blob = (await getOrganizerStoredBlob(params.eventId)) as unknown as OrganizerConference | null;
+    categoryFromBlob = blob?.registrationCategories?.find((c) => c.id === categoryId);
+  }
+
+  if (categoryFromDb) {
+    const catPhases = event?.organizerConfig?.pricingPhases ?? [];
+    const syntheticCategory: RegistrationCategory = {
+      id: categoryFromDb.id,
+      name: categoryFromDb.name,
+      description: categoryFromDb.description ?? "",
+      applicationType: categoryFromDb.applicationType as RegistrationCategory["applicationType"],
+      isOpen: categoryFromDb.isOpen,
+      basePrice: moneyNumber(categoryFromDb.basePrice),
+      requiresCommitteeSelection: categoryFromDb.requiresCommitteeSelection,
+      formFields: [],
+      pricingPhases: catPhases.map((phase) => {
+        let committeePrices: Array<{ committeeId: string; committeeName: string; price: number }> = [];
+        if (phase.committeePriceJson) {
+          try {
+            const map = JSON.parse(phase.committeePriceJson) as Record<string, number>;
+            committeePrices = Object.entries(map).map(([committeeId, price]) => ({
+              committeeId,
+              committeeName: committeeId,
+              price,
+            }));
+          } catch {
+            committeePrices = [];
+          }
+        }
+        return {
+          id: phase.id,
+          name: phase.name,
+          startDate: phase.startDate.toISOString(),
+          endDate: phase.endDate.toISOString(),
+          basePrice: moneyNumber(phase.basePrice),
+          committeePrices,
+        };
+      }),
+    };
+    const resolved = resolveFromCategoryPhases(
+      syntheticCategory,
+      params.committeeConfigId?.trim(),
+      ref
+    );
+    if (resolved) {
+      return { ...resolved, currency };
+    }
+  }
+
+  if (categoryFromBlob) {
+    const resolved = resolveFromCategoryPhases(
+      categoryFromBlob,
+      params.committeeConfigId?.trim(),
+      ref
+    );
+    if (resolved) {
+      return { ...resolved, currency };
+    }
+  }
 
   if (!event?.organizerConfig) {
-    return { amount: 0, currency };
+    throw new RegistrationPricingError(
+      "Conference pricing is not configured. Registration cannot be completed."
+    );
   }
 
   const phases = event.organizerConfig.pricingPhases;
   const active = phases.length ? getActivePhaseRow(phases, ref) : null;
 
   if (!active) {
-    return { amount: 0, currency };
+    throw new RegistrationPricingError(
+      "No active pricing phase is available for registration at this time."
+    );
   }
 
   const committeeId = params.committeeConfigId?.trim();
@@ -93,5 +223,67 @@ export async function resolveServerRegistrationAmount(params: {
     currency,
     phaseId: active.id,
     phaseName: active.name,
+  };
+}
+
+export async function loadRegistrationCategoryForValidation(
+  eventId: string,
+  categoryId: string
+): Promise<{
+  id: string;
+  name: string;
+  isOpen: boolean;
+  requiresCommitteeSelection: boolean;
+  registrationDeadline: Date | null;
+  applicationType: string;
+} | null> {
+  const event = await prisma.event.findUnique({
+    where: { id: eventId },
+    select: {
+      organizerConfig: {
+        select: {
+          registrationCategories: {
+            where: { id: categoryId },
+            select: {
+              id: true,
+              name: true,
+              isOpen: true,
+              requiresCommitteeSelection: true,
+              registrationDeadline: true,
+              applicationType: true,
+            },
+          },
+        },
+      },
+    },
+  });
+
+  const fromDb = event?.organizerConfig?.registrationCategories[0];
+  if (fromDb) {
+    return {
+      id: fromDb.id,
+      name: fromDb.name,
+      isOpen: fromDb.isOpen,
+      requiresCommitteeSelection: fromDb.requiresCommitteeSelection,
+      registrationDeadline: fromDb.registrationDeadline,
+      applicationType: fromDb.applicationType,
+    };
+  }
+
+  const blob = (await getOrganizerStoredBlob(eventId)) as unknown as OrganizerConference | null;
+  const fromBlob = blob?.registrationCategories?.find((c) => c.id === categoryId);
+  if (!fromBlob) return null;
+
+  return {
+    id: fromBlob.id,
+    name: fromBlob.name,
+    isOpen: fromBlob.isOpen !== false,
+    requiresCommitteeSelection: fromBlob.requiresCommitteeSelection !== false,
+    registrationDeadline: fromBlob.registrationDeadline
+      ? new Date(fromBlob.registrationDeadline)
+      : fromBlob.deadlineOverride
+        ? new Date(fromBlob.deadlineOverride)
+        : null,
+    applicationType: fromBlob.applicationType || "delegate",
   };
 }

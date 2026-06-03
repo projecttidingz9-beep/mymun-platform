@@ -1,5 +1,10 @@
-import { RegistrationStatus } from "@/generated/prisma/enums";
-import { hashToken, signPassToken } from "@/lib/server/pass-token";
+import { randomUUID } from "crypto";
+import { PassStatus, RegistrationStatus } from "@/generated/prisma/enums";
+import {
+  hashToken,
+  passTokenExpiresAt,
+  signPassToken,
+} from "@/lib/server/pass-token";
 import { prisma } from "@/lib/server/prisma";
 
 export function resolveReleaseAt(startDate: Date, requestedReleaseAt?: string) {
@@ -24,6 +29,31 @@ export type IssueDelegatePassResult = {
   skipReason?: string;
 };
 
+async function bindPassQrToken(params: {
+  passId: string;
+  registrationId: string;
+  eventId: string;
+  eventEndDate: Date;
+  qrNonce: string;
+}) {
+  const qrNonce = params.qrNonce;
+  const token = await signPassToken(
+    {
+      passId: params.passId,
+      registrationId: params.registrationId,
+      eventId: params.eventId,
+      nonce: qrNonce,
+    },
+    passTokenExpiresAt(params.eventEndDate)
+  );
+  const qrTokenHash = hashToken(token);
+  await prisma.delegatePass.update({
+    where: { id: params.passId },
+    data: { qrNonce, qrTokenHash },
+  });
+  return token;
+}
+
 export async function issueDelegatePassForRegistration(
   registrationId: string,
   options: IssueDelegatePassOptions = {}
@@ -45,12 +75,23 @@ export async function issueDelegatePassForRegistration(
     return { issued: false, alreadyIssued: false, skipReason: "not_allotted" };
   }
 
-  if (registration.pass && registration.pass.status === "ISSUED") {
+  const existingPass = registration.pass;
+  if (existingPass?.status === PassStatus.ISSUED && !existingPass.deletedAt) {
+    const token = await signPassToken(
+      {
+        passId: existingPass.id,
+        registrationId: registration.id,
+        eventId: registration.eventId,
+        nonce: existingPass.qrNonce,
+      },
+      passTokenExpiresAt(registration.event.endDate)
+    );
     return {
       issued: false,
       alreadyIssued: true,
-      passId: registration.pass.id,
-      releaseAt: registration.pass.releaseAt.toISOString(),
+      passId: existingPass.id,
+      releaseAt: existingPass.releaseAt.toISOString(),
+      qrToken: token,
     };
   }
 
@@ -58,25 +99,42 @@ export async function issueDelegatePassForRegistration(
     ? new Date()
     : options.releaseAt ?? resolveReleaseAt(registration.event.startDate);
 
-  const created = await prisma.delegatePass.create({
-    data: {
-      registrationId: registration.id,
-      eventId: registration.eventId,
-      releaseAt,
-      qrTokenHash: "pending",
-    },
-  });
+  let passId: string;
 
-  const token = await signPassToken({
-    passId: created.id,
+  const qrNonce = randomUUID();
+
+  if (existingPass) {
+    const updated = await prisma.delegatePass.update({
+      where: { id: existingPass.id },
+      data: {
+        releaseAt,
+        status: PassStatus.ISSUED,
+        deletedAt: null,
+        issuedAt: new Date(),
+        qrNonce,
+        qrTokenHash: "pending",
+      },
+    });
+    passId = updated.id;
+  } else {
+    const created = await prisma.delegatePass.create({
+      data: {
+        registrationId: registration.id,
+        eventId: registration.eventId,
+        releaseAt,
+        qrNonce,
+        qrTokenHash: "pending",
+      },
+    });
+    passId = created.id;
+  }
+
+  const token = await bindPassQrToken({
+    passId,
     registrationId: registration.id,
     eventId: registration.eventId,
-  });
-  const tokenHash = hashToken(token);
-
-  await prisma.delegatePass.update({
-    where: { id: created.id },
-    data: { qrTokenHash: tokenHash },
+    eventEndDate: registration.event.endDate,
+    qrNonce,
   });
 
   const shouldNotify = options.notify !== false;
@@ -96,7 +154,7 @@ export async function issueDelegatePassForRegistration(
   return {
     issued: true,
     alreadyIssued: false,
-    passId: created.id,
+    passId,
     releaseAt: releaseAt.toISOString(),
     qrToken: token,
   };

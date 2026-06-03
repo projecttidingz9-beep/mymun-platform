@@ -100,6 +100,7 @@ model User {
   eventTeamMemberships   EventTeamMember[]
   auditLogs              AuditLog[]
   confirmedPaymentIntents PaymentIntent[]        @relation("PaymentConfirmedBy")
+  issuedCertificates     ParticipationCertificate[] @relation("CertificateIssuedBy")
   delegationOwned        Delegation[]            @relation("DelegationOwner")
   delegationMembers      DelegationMember[]
   conferenceReviews      ConferenceReview[]
@@ -158,6 +159,7 @@ model Event {
   teamMembers             EventTeamMember[]
   auditLogs               AuditLog[]
   awards                  ConferenceAward[]
+  participationCertificates ParticipationCertificate[]
   reviews                 ConferenceReview[]
   delegations             Delegation[]
   owner                   User?                   @relation("EventOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
@@ -204,32 +206,41 @@ model EventPartnership {
 
 /// Partial unique in DB: at most one row per (userId, eventId) where deletedAt IS NULL — see migration `Registration_userId_eventId_active_key`.
 model Registration {
-  id                String             @id
-  userId            String
-  eventId           String
-  categoryName      String
-  committeeName     String?
-  portfolioName     String?
-  amount            Decimal            @db.Decimal(12, 2)
-  paid              Boolean            @default(false)
-  status            RegistrationStatus @default(PENDING)
-  allottedAt        DateTime?
-  checkedIn         Boolean            @default(false)
-  checkedInAt       DateTime?
-  deletedAt         DateTime?
-  user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  event             Event              @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  pass              DelegatePass?
-  checkins          Checkin[]
-  notifications     Notification[]
-  paymentIntent     PaymentIntent?
-  applicationAnswers ApplicationAnswer[]
-  createdAt         DateTime           @default(now())
-  updatedAt         DateTime           @updatedAt
+  id                       String             @id
+  userId                   String
+  eventId                  String
+  categoryId               String?
+  categoryName             String
+  committeeName            String?
+  portfolioName            String?
+  portfolioId              String?
+  committeePreferencesJson String?
+  portfolioPreferencesJson String?
+  formAnswersJson          String?
+  amount                   Decimal            @db.Decimal(12, 2)
+  paid                     Boolean            @default(false)
+  status                   RegistrationStatus @default(PENDING)
+  allottedAt               DateTime?
+  checkedIn                Boolean            @default(false)
+  checkedInAt              DateTime?
+  deletedAt                DateTime?
+  user                     User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  event                    Event              @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  portfolio                Portfolio?         @relation(fields: [portfolioId], references: [id], onDelete: SetNull)
+  pass                     DelegatePass?
+  checkins                 Checkin[]
+  notifications            Notification[]
+  paymentIntent            PaymentIntent?
+  applicationAnswers       ApplicationAnswer[]
+  participationCertificate ParticipationCertificate?
+  createdAt                DateTime           @default(now())
+  updatedAt                DateTime           @updatedAt
 
   @@index([eventId])
   @@index([userId])
   @@index([eventId, deletedAt])
+  @@index([portfolioId])
+  @@index([eventId, committeeName, portfolioName, status])
 }
 
 model PaymentIntent {
@@ -254,6 +265,7 @@ model DelegatePass {
   id             String       @id @default(cuid())
   registrationId String       @unique
   eventId        String
+  qrNonce        String
   qrTokenHash    String
   releaseAt      DateTime
   issuedAt       DateTime     @default(now())
@@ -329,11 +341,12 @@ model OrganizerConferenceConfig {
   paymentUpi           String?
   paymentBankHint      String?
   paymentNotesMarkdown String?
-  event                Event                @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  committees           CommitteeConfig[]
-  pricingPhases        PricingPhaseConfig[]
-  createdAt            DateTime             @default(now())
-  updatedAt            DateTime             @updatedAt
+  event                  Event                      @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  committees             CommitteeConfig[]
+  registrationCategories RegistrationCategoryConfig[]
+  pricingPhases          PricingPhaseConfig[]
+  createdAt              DateTime                   @default(now())
+  updatedAt              DateTime                   @updatedAt
 }
 
 model CommitteeConfig {
@@ -348,9 +361,56 @@ model CommitteeConfig {
   basePrice         Decimal?                  @db.Decimal(12, 2)
   visibility        CommitteeVisibility       @default(PUBLIC)
   organizerConfig   OrganizerConferenceConfig @relation(fields: [organizerConfigId], references: [id], onDelete: Cascade)
+  portfolios        Portfolio[]
   questions         ApplicationQuestion[]
   createdAt         DateTime                  @default(now())
   updatedAt         DateTime                  @updatedAt
+}
+
+model Portfolio {
+  id          String          @id @default(cuid())
+  committeeId String
+  name        String
+  seatCount   Int             @default(1)
+  committee   CommitteeConfig @relation(fields: [committeeId], references: [id], onDelete: Cascade)
+  registrations Registration[]
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@unique([committeeId, name])
+  @@index([committeeId])
+}
+
+model RegistrationCategoryConfig {
+  id                         String                    @id
+  organizerConfigId          String
+  name                       String
+  applicationType            String                    @default("delegate")
+  description                String?
+  isOpen                     Boolean                   @default(true)
+  basePrice                  Decimal                   @default(0) @db.Decimal(12, 2)
+  requiresCommitteeSelection Boolean                   @default(true)
+  registrationDeadline       DateTime?
+  maxDelegatesPerDelegation  Int?
+  organizerConfig            OrganizerConferenceConfig @relation(fields: [organizerConfigId], references: [id], onDelete: Cascade)
+  createdAt                  DateTime                  @default(now())
+  updatedAt                  DateTime                  @updatedAt
+
+  @@unique([organizerConfigId, id])
+  @@index([organizerConfigId])
+}
+
+model ParticipationCertificate {
+  id             String       @id @default(cuid())
+  registrationId String       @unique
+  eventId        String
+  issuedByUserId String?
+  issuedAt       DateTime     @default(now())
+  registration   Registration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+  event          Event        @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  issuedBy       User?        @relation("CertificateIssuedBy", fields: [issuedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([eventId])
 }
 
 model ApplicationQuestion {
@@ -421,16 +481,21 @@ model RateLimitBucket {
 }
 
 model ConferenceAward {
-  id             String   @id @default(cuid())
-  eventId        String
-  category       String
-  prizeTitle     String?
-  sponsorLogoUrl String?
-  description    String?
-  createdAt      DateTime @default(now())
-  event          Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  id                       String   @id @default(cuid())
+  eventId                  String
+  category                 String
+  prizeTitle               String?
+  sponsorLogoUrl           String?
+  sponsorName              String?
+  description              String?
+  recipientRegistrationId  String?
+  recipientUserId          String?
+  participantName          String?
+  createdAt                DateTime @default(now())
+  event                    Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
 
   @@index([eventId])
+  @@index([recipientRegistrationId])
 }
 
 model ConferenceReview {

@@ -1,6 +1,7 @@
-import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@/generated/prisma/client";
+import { NextRequest, NextResponse } from "next/server";
 import { getRequestActor } from "@/lib/server/auth";
+import { requireVerifiedEmail } from "@/lib/server/require-verified-email";
 import { consumeRateLimitBucket } from "@/lib/server/rate-limit-db";
 import { prisma } from "@/lib/server/prisma";
 import {
@@ -16,6 +17,9 @@ export async function POST(request: NextRequest) {
   if (!actor) {
     return NextResponse.json({ error: "Unauthorized actor." }, { status: 401 });
   }
+
+  const verifyBlock = await requireVerifiedEmail(actor);
+  if (verifyBlock) return verifyBlock;
 
   const rateKey = `checkins:${actor.email}`;
   const rateOk = await consumeRateLimitBucket({
@@ -58,17 +62,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const organizer = actor.email
-      ? await prisma.user.upsert({
-          where: { email: actor.email },
-          update: {},
-          create: {
-            email: actor.email,
-            name: actor.email.split("@")[0],
-            role: actor.role === "admin" ? "ADMIN" : "ORGANIZER",
-          },
-        })
-      : null;
+    const organizer = await prisma.user.findUnique({
+      where: { email: actor.email },
+      select: { id: true },
+    });
 
     try {
       const created = await prisma.$transaction(async (tx) => {
@@ -136,10 +133,7 @@ export async function POST(request: NextRequest) {
       }
       throw error;
     }
-  } catch (error) {
-    if (error instanceof Prisma.PrismaClientKnownRequestError) {
-      return NextResponse.json({ error: PASS_ALREADY_USED_ERROR }, { status: 409 });
-    }
-    return NextResponse.json({ error: "Check-in failed." }, { status: 400 });
+  } catch {
+    return NextResponse.json({ error: PASS_ALREADY_USED_ERROR }, { status: 409 });
   }
 }

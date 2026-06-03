@@ -4,6 +4,8 @@ export const SEED_EVENT_SLUG = "global-summit-mun-2026";
 export const SEED_ORGANIZER_EMAIL = "organizer1@tidingz.demo";
 export const SEED_DELEGATE_EMAIL = "delegate1@tidingz.demo";
 export const SEED_PASSWORD = "TidingzDemo1";
+export const SEED_REGISTRATION_ALLOTTED = "reg-seed-001";
+export const SEED_REGISTRATION_PENDING = "reg-seed-002";
 
 export async function isSeedCatalogLoaded(
   request: { get: (url: string) => Promise<{ ok: () => boolean; json: () => Promise<unknown> }> }

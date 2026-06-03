@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { RegistrationStatus } from "@/generated/prisma/enums";
 import { getRequestActor } from "@/lib/server/auth";
+import { requireVerifiedEmail } from "@/lib/server/require-verified-email";
 import { consumeRateLimitBucket } from "@/lib/server/rate-limit-db";
 import {
   alreadyUsedResponse,
@@ -14,6 +15,9 @@ export async function POST(request: NextRequest) {
   if (!actor) {
     return NextResponse.json({ error: "Unauthorized actor." }, { status: 401 });
   }
+
+  const verifyBlock = await requireVerifiedEmail(actor);
+  if (verifyBlock) return verifyBlock;
 
   const rateKey = `passes:verify:${actor.email}`;
   const rateOk = await consumeRateLimitBucket({

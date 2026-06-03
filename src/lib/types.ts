@@ -100,6 +100,7 @@ export interface RegistrationCategory {
   maxDelegatesPerDelegation?: number;
   isOpen?: boolean;
   deadlineOverride?: string;
+  registrationDeadline?: string;
   basePrice: number;
   requiresCommitteeSelection: boolean;
   formFields: DynamicFormField[];
@@ -265,6 +266,7 @@ export interface OrganizerApplicant {
   responses?: Record<string, string | number | boolean | string[]>;
   paid: boolean;
   amount?: number;
+  paymentIntentStatus?: "PENDING" | "CONFIRMED" | "REFUNDED" | "CANCELLED";
   registrationId?: string;
   registeredAt?: string;
   userId?: string;

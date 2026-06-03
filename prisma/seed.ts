@@ -5,8 +5,10 @@
 import "dotenv/config";
 import { prisma } from "../src/lib/server/prisma";
 import { hashPassword } from "../src/lib/server/password";
+import { issueDelegatePassForRegistration } from "../src/lib/server/issue-delegate-pass";
 
 async function main() {
+  await prisma.participationCertificate.deleteMany();
   await prisma.applicationAnswer.deleteMany();
   await prisma.paymentIntent.deleteMany();
   await prisma.checkin.deleteMany();
@@ -15,6 +17,8 @@ async function main() {
   await prisma.userNotificationPreference.deleteMany();
   await prisma.registration.deleteMany();
   await prisma.pricingPhaseConfig.deleteMany();
+  await prisma.portfolio.deleteMany();
+  await prisma.registrationCategoryConfig.deleteMany();
   await prisma.applicationQuestion.deleteMany();
   await prisma.committeeConfig.deleteMany();
   await prisma.organizerConferenceConfig.deleteMany();
@@ -81,11 +85,36 @@ async function main() {
   const end = new Date("2026-09-03T18:00:00.000Z");
   const PREVIEW_JSON_PREFIX = "__preview_json__:";
   const previewBlob = {
-    title: "Global Summit MUN 2026",
+    title: "Tidingz MUN 2026",
     city: "Bengaluru",
     country: "India",
     organizerName: "Priya Organizer",
-    description: "Premier Model UN hosted on Tidingz (seed data).",
+    description: "Premier Model UN on Tidingz — seed data for full lifecycle E2E.",
+    registrationDeadline: "2026-08-25",
+    registrationCategories: [
+      {
+        id: "cat-delegate",
+        name: "Delegate",
+        description: "Individual delegate registration",
+        applicationType: "delegate",
+        isOpen: true,
+        basePrice: 2199,
+        requiresCommitteeSelection: true,
+        formFields: [],
+        pricingPhases: [],
+      },
+      {
+        id: "cat-chair",
+        name: "Chair",
+        description: "Committee chair application",
+        applicationType: "chair",
+        isOpen: true,
+        basePrice: 0,
+        requiresCommitteeSelection: false,
+        formFields: [],
+        pricingPhases: [],
+      },
+    ],
     whatIsIncluded: ["Committee materials", "Opening & closing ceremonies", "Delegate kit"],
     conferenceSchedule: [
       {
@@ -114,7 +143,7 @@ async function main() {
   await prisma.event.create({
     data: {
       id: eventId,
-      title: "Global Summit MUN 2026",
+      title: "Tidingz MUN 2026",
       startDate: start,
       endDate: end,
       slug: "global-summit-mun-2026",
@@ -174,6 +203,54 @@ async function main() {
   const unsc = committees.find((c) => c.name.includes("Security"))!;
   const unhcr = committees.find((c) => c.name.includes("UNHCR"))!;
 
+  const organizerConfig = await prisma.organizerConferenceConfig.findFirst({
+    where: { eventId },
+    select: { id: true },
+  });
+  if (!organizerConfig) throw new Error("Missing organizer config after seed.");
+
+  await prisma.registrationCategoryConfig.createMany({
+    data: [
+      {
+        id: "cat-delegate",
+        organizerConfigId: organizerConfig.id,
+        name: "Delegate",
+        applicationType: "delegate",
+        description: "Individual delegate",
+        isOpen: true,
+        basePrice: 2199,
+        requiresCommitteeSelection: true,
+        registrationDeadline: new Date("2026-08-25T23:59:59.000Z"),
+      },
+      {
+        id: "cat-chair",
+        organizerConfigId: organizerConfig.id,
+        name: "Chair",
+        applicationType: "chair",
+        description: "Committee chair",
+        isOpen: true,
+        basePrice: 0,
+        requiresCommitteeSelection: false,
+      },
+    ],
+  });
+
+  const unscCountries = [
+    "United States of America",
+    "United Kingdom",
+    "France",
+    "China",
+    "Russian Federation",
+  ];
+  const portfolioRows = await Promise.all(
+    unscCountries.map((name) =>
+      prisma.portfolio.create({
+        data: { committeeId: unsc.id, name, seatCount: 1 },
+      })
+    )
+  );
+  const usaPortfolio = portfolioRows[0]!;
+
   await prisma.applicationQuestion.createMany({
     data: [
       {
@@ -215,12 +292,19 @@ async function main() {
       id: "reg-seed-001",
       userId: delegates[0].id,
       eventId,
+      categoryId: "cat-delegate",
       categoryName: "Delegate",
       committeeName: unsc.name,
+      portfolioId: usaPortfolio.id,
+      portfolioName: usaPortfolio.name,
       amount: 2199,
       paid: true,
       status: "ALLOTTED",
       allottedAt: new Date(),
+      committeePreferencesJson: JSON.stringify([unsc.name, unhcr.name]),
+      portfolioPreferencesJson: JSON.stringify({
+        [unsc.id]: [usaPortfolio.name, "France"],
+      }),
     },
   });
 
@@ -234,6 +318,19 @@ async function main() {
       confirmedAt: new Date(),
       confirmedByUserId: org1.id,
       reference: "UPI-SEED-001",
+    },
+  });
+
+  const passIssue = await issueDelegatePassForRegistration(reg1.id, { immediateRelease: true });
+  if (!passIssue.issued && !passIssue.alreadyIssued) {
+    console.warn("Seed pass issue:", passIssue.skipReason);
+  }
+
+  await prisma.participationCertificate.create({
+    data: {
+      registrationId: reg1.id,
+      eventId,
+      issuedByUserId: org1.id,
     },
   });
 

@@ -10,6 +10,7 @@ import AppRouteSkeleton from "@/components/AppRouteSkeleton";
 import { ensureServerSession } from "@/lib/client/session";
 import { downloadRegistrationInvoicePdf } from "@/lib/client/invoice-pdf";
 import { downloadPassTicketPdf } from "@/lib/client/pass-ticket-pdf";
+import { downloadParticipationCertificatePdf } from "@/lib/client/participation-certificate-pdf";
 import { useAuth } from "@/lib/auth-context";
 import {
   DelegateMunAward,
@@ -794,6 +795,35 @@ export default function DashboardPage() {
                             <p className="text-xs" style={{ color: "var(--fg-muted)" }}>
                               Pass will be issued once allotment is complete.
                             </p>
+                          )}
+                          {reg.organizerStatus === "Allotted" && (
+                            <button
+                              type="button"
+                              className="btn btn-ghost text-xs w-full sm:w-auto"
+                              onClick={() => {
+                                void (async () => {
+                                  const res = await fetch(
+                                    `/api/registrations/${reg.id}/participation-certificate`,
+                                    { credentials: "include" }
+                                  );
+                                  if (!res.ok) {
+                                    alert("Participation certificate not issued yet.");
+                                    return;
+                                  }
+                                  const data = (await res.json()) as {
+                                    delegateName: string;
+                                    eventName: string;
+                                    committeeName?: string;
+                                    portfolioName?: string;
+                                    categoryName?: string;
+                                    issuedAt: string;
+                                  };
+                                  downloadParticipationCertificatePdf(data);
+                                })();
+                              }}
+                            >
+                              Download Participation Certificate (PDF)
+                            </button>
                           )}
                         </div>
                       </div>

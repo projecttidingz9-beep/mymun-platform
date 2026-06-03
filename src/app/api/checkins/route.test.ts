@@ -9,7 +9,7 @@ const {
   assertOrganizerCanAccessPass,
   isPassAlreadyUsed,
   transaction,
-  userUpsert,
+  userFindUnique,
   notificationCreate,
   checkinFindUnique,
 } = vi.hoisted(() => ({
@@ -18,7 +18,7 @@ const {
   assertOrganizerCanAccessPass: vi.fn(),
   isPassAlreadyUsed: vi.fn(),
   transaction: vi.fn(),
-  userUpsert: vi.fn(),
+  userFindUnique: vi.fn(),
   notificationCreate: vi.fn(),
   checkinFindUnique: vi.fn(),
 }));
@@ -43,9 +43,13 @@ vi.mock("@/lib/server/verify-delegate-pass", () => ({
   PASS_ALREADY_USED_ERROR: "Pass already used for check-in.",
 }));
 
+vi.mock("@/lib/server/require-verified-email", () => ({
+  requireVerifiedEmail: vi.fn(() => Promise.resolve(null)),
+}));
+
 vi.mock("@/lib/server/prisma", () => ({
   prisma: {
-    user: { upsert: userUpsert },
+    user: { findUnique: userFindUnique },
     notification: { create: notificationCreate },
     checkin: { findUnique: checkinFindUnique },
     $transaction: transaction,
@@ -73,7 +77,7 @@ describe("POST /api/checkins", () => {
     loadPassFromQrToken.mockResolvedValue({ ok: true, pass: passPayload, tokenHash: "hash" });
     assertOrganizerCanAccessPass.mockResolvedValue({ ok: true });
     isPassAlreadyUsed.mockReturnValue(false);
-    userUpsert.mockResolvedValue({ id: "org-1" });
+    userFindUnique.mockResolvedValue({ id: "org-1" });
     notificationCreate.mockResolvedValue({});
     transaction.mockImplementation(async (fn: (tx: unknown) => Promise<unknown>) => {
       const tx = {

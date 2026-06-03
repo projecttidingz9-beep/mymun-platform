@@ -1,4 +1,5 @@
 import type { DelegatePass, Registration, User, Event, Checkin } from "@/generated/prisma/client";
+import { PassStatus } from "@/generated/prisma/enums";
 import { hashToken, verifyPassToken } from "@/lib/server/pass-token";
 import {
   requireEventOrganizerAccess,
@@ -25,16 +26,24 @@ export async function loadPassFromQrToken(qrToken: string): Promise<LoadPassResu
     return { ok: false, status: 400, error: "QR token is required." };
   }
 
-  let payload: { passId: string; registrationId: string; eventId: string };
+  let payload: { passId: string; registrationId: string; eventId: string; nonce?: string };
   try {
     payload = await verifyPassToken(qrToken);
   } catch {
     return { ok: false, status: 400, error: "Invalid delegate pass." };
   }
 
+  if (!payload.nonce) {
+    return { ok: false, status: 400, error: "Invalid delegate pass." };
+  }
+
   const tokenHash = hashToken(qrToken);
-  const pass = await prisma.delegatePass.findUnique({
-    where: { id: payload.passId },
+  const pass = await prisma.delegatePass.findFirst({
+    where: {
+      id: payload.passId,
+      deletedAt: null,
+      status: PassStatus.ISSUED,
+    },
     include: {
       registration: {
         include: { user: true, event: true },
@@ -43,7 +52,11 @@ export async function loadPassFromQrToken(qrToken: string): Promise<LoadPassResu
     },
   });
 
-  if (!pass || pass.qrTokenHash !== tokenHash || pass.status !== "ISSUED") {
+  if (
+    !pass ||
+    pass.qrTokenHash !== tokenHash ||
+    pass.qrNonce !== payload.nonce
+  ) {
     return { ok: false, status: 400, error: "Invalid delegate pass." };
   }
 

@@ -22,6 +22,7 @@ import {
   OrganizerAnnouncement,
   UserNotification,
 } from "./types";
+import { allotApplicantOnConference } from "./allot-applicant";
 import {
   hasOrganizerConferenceAccess,
   isOrganizerUser,
@@ -921,6 +922,7 @@ interface AuthContextType {
     portfolioId?: string;
     allowOverride?: boolean;
   }) => { ok: boolean; message: string };
+  commitOrganizerConferences: (next: OrganizerConference[], syncConferenceId: string) => void;
   moveApplicant: (payload: {
     conferenceId: string;
     applicantId: string;
@@ -1006,6 +1008,7 @@ const AuthContext = createContext<AuthContextType>({
     ok: false,
     message: "Use the Applications tab in your organizer dashboard to move applicants.",
   }),
+  commitOrganizerConferences: () => {},
   unassignApplicant: () => ({
     ok: false,
     message: "Use the Applications tab in your organizer dashboard to unassign applicants.",
@@ -1700,6 +1703,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     persistOrganizerConferences(next, conferenceId);
   };
 
+  const commitOrganizerConferences: AuthContextType["commitOrganizerConferences"] = (
+    next,
+    syncConferenceId
+  ) => {
+    persistOrganizerConferences(next, syncConferenceId);
+  };
+
   const assignApplicant: AuthContextType["assignApplicant"] = ({
     conferenceId,
     applicantId,
@@ -1708,138 +1718,72 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     allowOverride = false,
   }) => {
     const current = organizerConferences;
-    const conference = current.find((entry) => entry.id === conferenceId);
-    if (!conference) return { ok: false, message: "Conference not found." };
-
-    const applicant = conference.applicants.find((entry) => entry.id === applicantId);
-    if (!applicant) return { ok: false, message: "Applicant not found." };
-
-    const committee = conference.committees.find((entry) => entry.id === committeeId);
-    if (!committee) return { ok: false, message: "Committee not found." };
-
-    const filledSeats = conference.applicants.filter(
-      (entry) => entry.status === "Allotted" && entry.assignedCommitteeId === committeeId
-    ).length;
-    if (filledSeats >= committee.seatCount && !allowOverride) {
-      return { ok: false, message: "Committee is full. Enable override to continue." };
-    }
-
-    let portfolioName: string | undefined;
-    if (portfolioId) {
-      const portfolio = (committee.portfolios ?? []).find((entry) => entry.id === portfolioId);
-      if (!portfolio) return { ok: false, message: "Portfolio not found." };
-      if (
-        portfolio.assignedApplicantIds.length >= portfolio.seatCount &&
-        !portfolio.assignedApplicantIds.includes(applicantId)
-      ) {
-        return { ok: false, message: "Portfolio is full." };
-      }
-      portfolioName = portfolio.name;
-    }
-
-    const next: OrganizerConference[] = current.map((entry) => {
-      if (entry.id !== conferenceId) return entry;
-
-      return {
-        ...entry,
-        committees: entry.committees.map((item) => {
-          let assignedApplicantIds = (item.portfolios ?? []).map((portfolio) => ({
-            ...portfolio,
-            assignedApplicantIds: portfolio.assignedApplicantIds.filter((id) => id !== applicantId),
-          }));
-
-          if (item.id === committeeId && portfolioId) {
-            assignedApplicantIds = assignedApplicantIds.map((portfolio) =>
-              portfolio.id === portfolioId
-                ? { ...portfolio, assignedApplicantIds: [...portfolio.assignedApplicantIds, applicantId] }
-                : portfolio
-            );
-          }
-
-          return { ...item, portfolios: assignedApplicantIds };
-        }),
-        applicants: entry.applicants.map((item) => {
-          if (item.id !== applicantId) return item;
-          const updatedApplicant: OrganizerApplicant = {
-            ...item,
-            status: "Allotted",
-            assignmentStatus: "Allotted",
-            assignedCommitteeId: committee.id,
-            assignedCommitteeName: committee.name,
-            assignedPortfolioId: portfolioId,
-            assignedPortfolioName: portfolioName,
-            assignedAt: new Date().toISOString(),
-            overrideUsed: allowOverride,
-            assignmentHistory: [
-              ...(item.assignmentHistory ?? []),
-              {
-                id: `asg-${Date.now()}`,
-                action: item.assignedCommitteeId ? "moved" : "allotted",
-                committeeId: committee.id,
-                committeeName: committee.name,
-                portfolioId,
-                portfolioName,
-                overrideUsed: allowOverride,
-                createdAt: new Date().toISOString(),
-              },
-            ],
-          };
-          return updatedApplicant;
-        }),
-      };
+    const priorApplicant = current
+      .find((c) => c.id === conferenceId)
+      ?.applicants.find((a) => a.id === applicantId);
+    const { next, result } = allotApplicantOnConference(current, {
+      conferenceId,
+      applicantId,
+      committeeId,
+      portfolioId,
+      allowOverride,
     });
+    if (!result.ok) return { ok: false, message: result.message ?? "Allotment failed." };
 
     persistOrganizerConferences(next, conferenceId);
 
     void (async () => {
-      if (applicant.registrationId) {
-        await fetch(`/api/organizers/registrations/${applicant.registrationId}`, {
+      if (priorApplicant?.registrationId) {
+        await fetch(`/api/organizers/registrations/${priorApplicant.registrationId}`, {
           method: "PATCH",
           credentials: "include",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             organizerStatus: "Allotted",
-            committeeName: committee.name,
-            portfolioName: portfolioName ?? null,
+            committeeName: result.committeeName,
+            portfolioName: result.portfolioName ?? null,
+            portfolioId: portfolioId ?? null,
             allottedAt: new Date().toISOString(),
+            allowOverride,
           }),
         });
       }
 
-      updateUserRegistrationAssignment(applicant.registrationId, {
+      updateUserRegistrationAssignment(priorApplicant?.registrationId, {
         status: "Confirmed",
         organizerStatus: "Allotted",
-        assignedCommitteeId: committee.id,
-        assignedCommitteeName: committee.name,
+        assignedCommitteeId: committeeId,
+        assignedCommitteeName: result.committeeName,
         assignedPortfolioId: portfolioId,
-        assignedPortfolioName: portfolioName,
+        assignedPortfolioName: result.portfolioName,
         assignedAt: new Date().toISOString(),
         overrideUsed: allowOverride,
       });
 
-      addNotification({
-        id: `ntf-${Date.now()}`,
-        conferenceId,
-        registrationId: applicant.registrationId,
-        userId: applicant.userId,
-        userEmail: applicant.userEmail,
-        title: "Committee Allocation Confirmed",
-        message: `You have been allotted to ${committee.name}${portfolioName ? ` (${portfolioName})` : ""}.`,
-        type: "assignment",
-        createdAt: new Date().toISOString(),
-        read: false,
-      });
-
-      const updatedConference = next.find((entry) => entry.id === conferenceId);
-      const updatedApplicant = updatedConference?.applicants.find((entry) => entry.id === applicantId);
-      if (updatedConference && updatedApplicant) {
-        triggerStatusEmail({
-          conference: updatedConference,
-          applicant: updatedApplicant,
-          status: "Allotted",
-          assignedCommitteeName: committee.name,
-          assignedPortfolioName: portfolioName,
+      if (priorApplicant) {
+        addNotification({
+          id: `ntf-${Date.now()}`,
+          conferenceId,
+          registrationId: priorApplicant.registrationId,
+          userId: priorApplicant.userId,
+          userEmail: priorApplicant.userEmail,
+          title: "Committee Allocation Confirmed",
+          message: `You have been allotted to ${result.committeeName}${result.portfolioName ? ` (${result.portfolioName})` : ""}.`,
+          type: "assignment",
+          createdAt: new Date().toISOString(),
+          read: false,
         });
+        const updatedConference = next.find((entry) => entry.id === conferenceId);
+        const updatedApplicant = updatedConference?.applicants.find((entry) => entry.id === applicantId);
+        if (updatedConference && updatedApplicant) {
+          triggerStatusEmail({
+            conference: updatedConference,
+            applicant: updatedApplicant,
+            status: "Allotted",
+            assignedCommitteeName: result.committeeName,
+            assignedPortfolioName: result.portfolioName,
+          });
+        }
       }
     })();
 
@@ -2119,6 +2063,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         toggleApplicantPayment,
         addAnnouncement,
         assignApplicant,
+        commitOrganizerConferences,
         moveApplicant,
         unassignApplicant,
         waitlistApplicant,

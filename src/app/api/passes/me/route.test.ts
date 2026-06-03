@@ -8,6 +8,7 @@ vi.mock("@/lib/server/auth", () => ({
 
 vi.mock("@/lib/server/pass-token", () => ({
   signPassToken: vi.fn(() => Promise.resolve("signed.stub.token")),
+  passTokenExpiresAt: vi.fn(() => new Date("2027-01-01")),
 }));
 
 vi.mock("@/lib/server/prisma", () => ({
@@ -56,11 +57,16 @@ describe("GET /api/passes/me", () => {
           checkedInAt: null,
           createdAt: new Date(),
           updatedAt: new Date(),
-          event: { id: "evt-1", title: "Test Conference" },
+          event: {
+            id: "evt-1",
+            title: "Test Conference",
+            endDate: new Date("2026-12-01"),
+          },
           pass: {
             id: "pass-1",
             registrationId: "reg-1",
             eventId: "evt-1",
+            qrNonce: "nonce-1",
             qrTokenHash: "hash",
             releaseAt,
             issuedAt: new Date(),
@@ -105,11 +111,12 @@ describe("GET /api/passes/me", () => {
           checkedInAt: null,
           createdAt: new Date(),
           updatedAt: new Date(),
-          event: { id: "evt-1", title: "Test Conference" },
+          event: { id: "evt-1", title: "Test Conference", endDate: new Date("2026-12-01") },
           pass: {
             id: "pass-pending",
             registrationId: "reg-pending",
             eventId: "evt-1",
+            qrNonce: "nonce-p",
             qrTokenHash: "hash",
             releaseAt,
             issuedAt: new Date(),
@@ -148,11 +155,12 @@ describe("GET /api/passes/me", () => {
           checkedInAt: null,
           createdAt: new Date(),
           updatedAt: new Date(),
-          event: { id: "evt-1", title: "Test Conference" },
+          event: { id: "evt-1", title: "Test Conference", endDate: new Date("2026-12-01") },
           pass: {
             id: "pass-allotted",
             registrationId: "reg-allotted",
             eventId: "evt-1",
+            qrNonce: "nonce-a",
             qrTokenHash: "hash",
             releaseAt,
             issuedAt: new Date(),

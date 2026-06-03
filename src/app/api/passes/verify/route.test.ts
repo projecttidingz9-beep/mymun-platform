@@ -18,6 +18,14 @@ vi.mock("@/lib/server/auth", () => ({
   getRequestActor,
 }));
 
+vi.mock("@/lib/server/require-verified-email", () => ({
+  requireVerifiedEmail: vi.fn(() => Promise.resolve(null)),
+}));
+
+vi.mock("@/lib/server/prisma", () => ({
+  prisma: {},
+}));
+
 vi.mock("@/lib/server/rate-limit-db", () => ({
   consumeRateLimitBucket: vi.fn(() => Promise.resolve(true)),
 }));

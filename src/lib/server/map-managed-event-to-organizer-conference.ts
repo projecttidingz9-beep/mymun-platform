@@ -45,23 +45,29 @@ function parseJsonValue(raw: string): unknown {
 }
 
 function recomputeCommitteeAllotments(conference: OrganizerConference): OrganizerConference {
-  const allotments = new Map<string, number>();
+  const portfolioAssignments = new Map<string, string[]>();
+
   for (const applicant of conference.applicants) {
     if (applicant.status !== "Allotted" || !applicant.assignedCommitteeId) continue;
-    allotments.set(
-      applicant.assignedCommitteeId,
-      (allotments.get(applicant.assignedCommitteeId) ?? 0) + 1
-    );
+    if (applicant.assignedPortfolioId) {
+      portfolioAssignments.set(applicant.assignedPortfolioId, [
+        ...(portfolioAssignments.get(applicant.assignedPortfolioId) ?? []),
+        applicant.id,
+      ]);
+    }
   }
 
   return {
     ...conference,
     committees: conference.committees.map((committee) => ({
       ...committee,
-      allottedCount: allotments.get(committee.id) ?? 0,
+      allottedCount: conference.applicants.filter(
+        (applicant) =>
+          applicant.status === "Allotted" && applicant.assignedCommitteeId === committee.id
+      ).length,
       portfolios: (committee.portfolios ?? []).map((portfolio) => ({
         ...portfolio,
-        assignedApplicantIds: portfolio.assignedApplicantIds ?? [],
+        assignedApplicantIds: portfolioAssignments.get(portfolio.id) ?? [],
       })),
     })),
   };
@@ -79,6 +85,7 @@ function committeeFromDbRow(
     basePrice: unknown;
     visibility: CommitteeVisibilityType;
     questions: Array<{ id: string; label: string; type: string; required: boolean; optionsJson: string | null }>;
+    portfolios?: Array<{ id: string; name: string; seatCount: number }>;
   }
 ): OrganizerCommittee {
   const rawType = (c.type || "").trim();
@@ -119,7 +126,12 @@ function committeeFromDbRow(
       question: q.label,
       required: q.required,
     })),
-    portfolios: [],
+    portfolios: (c.portfolios ?? []).map((p) => ({
+      id: p.id,
+      name: p.name,
+      seatCount: p.seatCount,
+      assignedApplicantIds: [],
+    })),
     chairs: [],
     documents: [],
   };
@@ -159,7 +171,8 @@ export async function mapManagedEventToOrganizerConference(eventId: string): Pro
     include: {
       organizerConfig: {
         include: {
-          committees: { include: { questions: true } },
+          committees: { include: { questions: true, portfolios: true } },
+          registrationCategories: true,
           pricingPhases: true,
         },
       },
@@ -167,6 +180,7 @@ export async function mapManagedEventToOrganizerConference(eventId: string): Pro
         where: { deletedAt: null },
         include: {
           user: true,
+          paymentIntent: { select: { status: true } },
           applicationAnswers: { include: { question: true } },
         },
       },
@@ -214,6 +228,7 @@ export async function mapManagedEventToOrganizerConference(eventId: string): Pro
         basePrice: c.basePrice,
         visibility: c.visibility,
         questions: c.questions,
+        portfolios: c.portfolios,
       })
     ) ?? [];
   const committees = mergeCommittees(dbCommittees, blobCommittees);
@@ -295,21 +310,62 @@ export async function mapManagedEventToOrganizerConference(eventId: string): Pro
         ? committeeNameToId.get(reg.committeeName.toLowerCase())
         : undefined;
 
+    if (reg.formAnswersJson) {
+      try {
+        const parsed = JSON.parse(reg.formAnswersJson) as Record<string, unknown>;
+        for (const [key, value] of Object.entries(parsed)) {
+          if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+            responses[key] = value;
+          } else if (Array.isArray(value)) {
+            responses[key] = value.map(String);
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    let committeePreferences: string[] = [];
+    if (reg.committeePreferencesJson) {
+      try {
+        committeePreferences = JSON.parse(reg.committeePreferencesJson) as string[];
+      } catch {
+        committeePreferences = [];
+      }
+    } else if (!isAllotted && reg.committeeName) {
+      committeePreferences = [reg.committeeName];
+    }
+
+    let portfolioPreferencesByCommittee: Record<string, string[]> | undefined;
+    if (reg.portfolioPreferencesJson) {
+      try {
+        portfolioPreferencesByCommittee = JSON.parse(reg.portfolioPreferencesJson) as Record<
+          string,
+          string[]
+        >;
+      } catch {
+        portfolioPreferencesByCommittee = undefined;
+      }
+    }
+
     const base: OrganizerApplicant = {
       id: reg.id,
       name: reg.user.name,
       school: String(responses.school ?? responses.School ?? ""),
       countryPreference: String(responses.country ?? responses.Country ?? ""),
-      committeePreference: isAllotted ? "" : reg.committeeName ?? "",
-      committeePreferences: isAllotted ? [] : reg.committeeName ? [reg.committeeName] : [],
+      committeePreference: isAllotted ? "" : committeePreferences[0] ?? "",
+      committeePreferences: isAllotted ? [] : committeePreferences,
+      portfolioPreferencesByCommittee: isAllotted ? undefined : portfolioPreferencesByCommittee,
       categoryName: reg.categoryName,
+      categoryId: reg.categoryId ?? undefined,
       assignmentStatus: mapRegistrationStatus(reg.status),
       assignedCommitteeId,
       assignedCommitteeName: isAllotted ? reg.committeeName ?? undefined : undefined,
-      assignedPortfolioId: undefined,
+      assignedPortfolioId: isAllotted ? reg.portfolioId ?? undefined : undefined,
       assignedPortfolioName: isAllotted ? reg.portfolioName ?? undefined : undefined,
       assignedAt: reg.allottedAt?.toISOString(),
       paid: reg.paid,
+      paymentIntentStatus: reg.paymentIntent?.status,
       amount: moneyNumber(reg.amount),
       responses,
       registrationId: reg.id,

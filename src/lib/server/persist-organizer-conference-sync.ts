@@ -191,6 +191,60 @@ export async function persistOrganizerConferenceSync(
       if (questionRows.length > 0) {
         await tx.applicationQuestion.createMany({ data: questionRows });
       }
+
+      const portfolioRows = conference.committees.flatMap((c) =>
+        (c.portfolios ?? []).map((p) => ({
+          id: p.id,
+          committeeId: c.id,
+          name: p.name,
+          seatCount: p.seatCount > 0 ? p.seatCount : 1,
+        }))
+      );
+      if (portfolioRows.length > 0) {
+        await tx.portfolio.createMany({ data: portfolioRows });
+      }
+    }
+
+    await tx.registrationCategoryConfig.deleteMany({
+      where: { organizerConfigId: configRow.id },
+    });
+
+    if ((conference.registrationCategories || []).length > 0) {
+      await tx.registrationCategoryConfig.createMany({
+        data: conference.registrationCategories.map((cat) => ({
+          id: cat.id,
+          organizerConfigId: configRow.id,
+          name: cat.name,
+          applicationType: cat.applicationType || "delegate",
+          description: cat.description ?? null,
+          isOpen: cat.isOpen !== false,
+          basePrice: cat.basePrice ?? 0,
+          requiresCommitteeSelection: cat.requiresCommitteeSelection !== false,
+          registrationDeadline: cat.registrationDeadline
+            ? new Date(cat.registrationDeadline)
+            : cat.deadlineOverride
+              ? new Date(cat.deadlineOverride)
+              : null,
+          maxDelegatesPerDelegation: cat.maxDelegatesPerDelegation ?? null,
+        })),
+      });
+    }
+
+    await tx.conferenceAward.deleteMany({ where: { eventId } });
+    if ((conference.awards ?? []).length > 0) {
+      await tx.conferenceAward.createMany({
+        data: (conference.awards ?? []).map((award) => ({
+          eventId,
+          category: award.category || "General",
+          prizeTitle: award.prizeTitle || null,
+          sponsorLogoUrl: award.sponsorLogoUrl ?? null,
+          sponsorName: award.sponsorName ?? null,
+          description: award.description ?? null,
+          recipientRegistrationId: award.participantId ?? null,
+          recipientUserId: award.participantUserId ?? null,
+          participantName: award.participantName ?? null,
+        })),
+      });
     }
 
     const phaseMap = new Map<string, (typeof conference.registrationCategories)[number]["pricingPhases"][number]>();

@@ -18,9 +18,12 @@ const QrScannerPanel = dynamic(() => import("@/components/QrScannerPanel"), {
   ),
 });
 import { ensureServerSession } from "@/lib/client/session";
+import { allotApplicantOnConference } from "@/lib/allot-applicant";
+import { netAfterPlatformFee } from "@/lib/platform-finance";
 import { useAuth } from "@/lib/auth-context";
 import { hasOrganizerConferenceAccess } from "@/lib/organizer-access";
 import {
+  OrganizerApplicant,
   OrganizerBankingDetails,
   OrganizerConference,
   OrganizerDocument,
@@ -365,8 +368,10 @@ export default function OrganizerDashboardPage() {
     updateApplicantStatus,
     addAnnouncement,
     assignApplicant,
+    commitOrganizerConferences,
     unassignApplicant,
     updateOrganizerConferenceConfig,
+    toggleApplicantPayment,
     syncOrganizerConferenceById,
     updateOrganizerCommitteeConfig,
     addOrganizerCommittee,
@@ -404,6 +409,7 @@ export default function OrganizerDashboardPage() {
   >("delegate");
   const [autoAssigning, setAutoAssigning] = useState(false);
   const [autoAssignProgress, setAutoAssignProgress] = useState("");
+  const [overrideSeatLimit, setOverrideSeatLimit] = useState(false);
   const [pricingCategoryTypeTab, setPricingCategoryTypeTab] = useState<RegistrationCategoryType>("delegate");
   const [applicantProfileDrawerOpen, setApplicantProfileDrawerOpen] = useState(false);
   const [participantSearchQuery, setParticipantSearchQuery] = useState("");
@@ -418,7 +424,6 @@ export default function OrganizerDashboardPage() {
   const [countryMatrixSearch, setCountryMatrixSearch] = useState("");
   const [matrixOnlyAvailable, setMatrixOnlyAvailable] = useState(false);
   const [matrixCommitteeType, setMatrixCommitteeType] = useState("all");
-  const [refundedApplicantIds, setRefundedApplicantIds] = useState<Record<string, boolean>>({});
   const [transactionSearchQuery, setTransactionSearchQuery] = useState("");
   const [transactionPaymentFilter, setTransactionPaymentFilter] = useState<"all" | "paid" | "pending">("all");
   const [transactionRefundFilter, setTransactionRefundFilter] = useState<"all" | "active" | "refunded">("all");
@@ -1546,13 +1551,24 @@ export default function OrganizerDashboardPage() {
     setAutoAssigning(true);
     let assigned = 0;
     let failed = 0;
+    let workingConferences = organizerConferences;
+    const patchQueue: Array<{
+      registrationId: string;
+      committeeName: string;
+      portfolioName?: string;
+      portfolioId?: string;
+    }> = [];
+
     try {
       for (let index = 0; index < pending.length; index += 1) {
         const applicant = pending[index]!;
         setAutoAssignProgress(`${index + 1}/${pending.length}`);
+        const liveConference = workingConferences.find((entry) => entry.id === selectedConference.id);
+        if (!liveConference) break;
+
         const preferenceIds = applicant.committeePreferences?.filter(Boolean) ?? [];
         const preferenceNames = applicant.committeePreference ? [applicant.committeePreference] : [];
-        const committees = selectedConference.committees;
+        const committees = liveConference.committees;
 
         const pickCommittee = (preferMatches: boolean) => {
           const ordered: typeof committees = [];
@@ -1582,10 +1598,10 @@ export default function OrganizerDashboardPage() {
             }
           }
           return ordered.find((committee) => {
-            const filled = selectedConference.applicants.filter(
+            const filled = liveConference.applicants.filter(
               (entry) => entry.status === "Allotted" && entry.assignedCommitteeId === committee.id
             ).length;
-            return filled < committee.seatCount;
+            return filled < committee.seatCount || overrideSeatLimit;
           });
         };
 
@@ -1597,8 +1613,7 @@ export default function OrganizerDashboardPage() {
 
         let portfolioId: string | undefined;
         if (applicationTypeTab !== "chair" && (committee.portfolios?.length ?? 0) > 0) {
-          const prefNames =
-            applicant.portfolioPreferencesByCommittee?.[committee.id] ?? [];
+          const prefNames = applicant.portfolioPreferencesByCommittee?.[committee.id] ?? [];
           const portfolioCandidates = [
             ...prefNames
               .map((name) => committee.portfolios?.find((entry) => entry.name === name))
@@ -1609,24 +1624,57 @@ export default function OrganizerDashboardPage() {
           for (const portfolio of portfolioCandidates) {
             if (seenPortfolio.has(portfolio.id)) continue;
             seenPortfolio.add(portfolio.id);
-            if (portfolio.assignedApplicantIds.length < portfolio.seatCount) {
+            if (portfolio.assignedApplicantIds.length < portfolio.seatCount || overrideSeatLimit) {
               portfolioId = portfolio.id;
               break;
             }
           }
         }
 
-        const result = assignApplicant({
+        const { next, result } = allotApplicantOnConference(workingConferences, {
           conferenceId: selectedConference.id,
           applicantId: applicant.id,
           committeeId: committee.id,
           portfolioId,
-          allowOverride: false,
+          allowOverride: overrideSeatLimit,
         });
-        if (result.ok) assigned += 1;
-        else failed += 1;
-        await new Promise((resolve) => setTimeout(resolve, 80));
+        if (!result.ok) {
+          failed += 1;
+          continue;
+        }
+        workingConferences = next;
+        if (applicant.registrationId) {
+          patchQueue.push({
+            registrationId: applicant.registrationId,
+            committeeName: result.committeeName ?? committee.name,
+            portfolioName: result.portfolioName,
+            portfolioId,
+          });
+        }
+        assigned += 1;
       }
+
+      if (assigned > 0) {
+        commitOrganizerConferences(workingConferences, selectedConference.id);
+        await Promise.all(
+          patchQueue.map((job) =>
+            fetch(`/api/organizers/registrations/${job.registrationId}`, {
+              method: "PATCH",
+              credentials: "include",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                organizerStatus: "Allotted",
+                committeeName: job.committeeName,
+                portfolioName: job.portfolioName ?? null,
+                portfolioId: job.portfolioId ?? null,
+                allottedAt: new Date().toISOString(),
+                allowOverride: overrideSeatLimit,
+              }),
+            })
+          )
+        );
+      }
+
       alert(`Auto-assign complete: ${assigned} allotted, ${failed} skipped or failed.`);
     } finally {
       setAutoAssigning(false);
@@ -1900,13 +1948,16 @@ export default function OrganizerDashboardPage() {
     return selectedConference.committees.find((entry) => entry.id === detailsEditorCommitteeId) || null;
   }, [selectedConference, detailsEditorCommitteeId]);
 
+  const isApplicantRefunded = (applicant: OrganizerApplicant) =>
+    applicant.paymentIntentStatus === "REFUNDED" || applicant.status === "Rejected";
+
   const financeSummary = useMemo(() => {
     if (!selectedConference) return null;
     const entries = selectedConference.applicants;
     const gross = entries.reduce((sum, entry) => sum + (entry.amount || 0), 0);
-    const successful = entries.filter((entry) => entry.paid && !refundedApplicantIds[entry.id]);
+    const successful = entries.filter((entry) => entry.paid && !isApplicantRefunded(entry));
     const pending = entries.filter((entry) => !entry.paid).length;
-    const refunds = entries.filter((entry) => refundedApplicantIds[entry.id]);
+    const refunds = entries.filter((entry) => isApplicantRefunded(entry));
     const refundAmount = refunds.reduce((sum, entry) => sum + (entry.amount || 0), 0);
     return {
       gross,
@@ -1915,18 +1966,19 @@ export default function OrganizerDashboardPage() {
       pending,
       refundCount: refunds.length,
       refundAmount,
-      netAfterFees: Math.round((gross - refundAmount) * 0.94),
+      netAfterFees: netAfterPlatformFee(gross - refundAmount),
     };
-  }, [selectedConference, refundedApplicantIds]);
+  }, [selectedConference]);
   const transactionRows = useMemo(() => {
     if (!selectedConference) return [];
     const query = transactionSearchQuery.trim().toLowerCase();
     return selectedConference.applicants
       .map((applicant) => {
         const paymentStatus = applicant.paid ? "Paid" : "Pending";
-        const refundStatus = refundedApplicantIds[applicant.id] ? "Refunded" : "Active";
+        const refundStatus = isApplicantRefunded(applicant) ? "Refunded" : "Active";
         return {
           id: applicant.id,
+          registrationId: applicant.registrationId,
           name: applicant.name || "Unnamed Applicant",
           amount: applicant.amount || 0,
           paymentStatus,
@@ -1953,7 +2005,6 @@ export default function OrganizerDashboardPage() {
       });
   }, [
     selectedConference,
-    refundedApplicantIds,
     transactionSearchQuery,
     transactionPaymentFilter,
     transactionRefundFilter,
@@ -3013,7 +3064,15 @@ export default function OrganizerDashboardPage() {
                         );
                       })}
                     </div>
-                    <div className="mb-4">
+                    <div className="mb-4 flex flex-wrap items-center gap-3">
+                      <label className="flex items-center gap-2 text-xs" style={{ color: "var(--fg-muted)" }}>
+                        <input
+                          type="checkbox"
+                          checked={overrideSeatLimit}
+                          onChange={(event) => setOverrideSeatLimit(event.target.checked)}
+                        />
+                        Allow seat override when allotting
+                      </label>
                       <button
                         type="button"
                         className="btn btn-outline-blue text-xs"
@@ -3130,7 +3189,7 @@ export default function OrganizerDashboardPage() {
                                       committeeId: selectedCommitteeId,
                                       portfolioId:
                                         applicationTypeTab === "chair" ? undefined : selectedPortfolioId || undefined,
-                                      allowOverride: false,
+                                      allowOverride: overrideSeatLimit,
                                     });
                                     if (!result.ok) alert(result.message);
                                   }}
@@ -3159,6 +3218,30 @@ export default function OrganizerDashboardPage() {
                                   className="btn btn-outline-blue text-xs"
                                 >
                                   Issue Pass
+                                </button>
+                                <button
+                                  type="button"
+                                  className="btn btn-ghost text-xs"
+                                  disabled={applicant.status !== "Allotted" || !applicant.registrationId}
+                                  onClick={() => {
+                                    if (!applicant.registrationId || !selectedConference) return;
+                                    void (async () => {
+                                      const res = await fetch(
+                                        `/api/organizers/registrations/${applicant.registrationId}/certificate`,
+                                        { method: "POST", credentials: "include" }
+                                      );
+                                      if (!res.ok) {
+                                        const payload = (await res.json().catch(() => ({}))) as {
+                                          error?: string;
+                                        };
+                                        alert(payload.error || "Could not issue certificate.");
+                                        return;
+                                      }
+                                      alert("Participation certificate issued. The delegate can download it from their dashboard.");
+                                    })();
+                                  }}
+                                >
+                                  Issue Certificate
                                 </button>
                               </div>
                             </div>
@@ -3828,18 +3911,44 @@ export default function OrganizerDashboardPage() {
                                       </div>
                                     </div>
                                   </div>
-                                  <div className="flex justify-end mt-2">
+                                  <div className="flex justify-end gap-2 mt-2">
+                                    {!row.paid && selectedConference && (
+                                      <button
+                                        type="button"
+                                        className="btn btn-primary text-xs"
+                                        onClick={() =>
+                                          toggleApplicantPayment(selectedConference.id, row.id)
+                                        }
+                                      >
+                                        Mark as paid
+                                      </button>
+                                    )}
                                     <button
                                       className="btn btn-ghost text-xs"
-                                      disabled={!row.paid}
-                                      onClick={() =>
-                                        setRefundedApplicantIds((prev) => ({
-                                          ...prev,
-                                          [row.id]: !prev[row.id],
-                                        }))
-                                      }
+                                      disabled={!row.paid || row.refundStatus === "Refunded"}
+                                      onClick={() => {
+                                        if (!row.registrationId || !selectedConference) return;
+                                        void (async () => {
+                                          const confirmed = confirm(
+                                            `Refund registration for ${row.name}? This cannot be undone.`
+                                          );
+                                          if (!confirmed) return;
+                                          const res = await fetch(
+                                            `/api/organizers/registrations/${row.registrationId}/refund`,
+                                            { method: "POST", credentials: "include" }
+                                          );
+                                          if (!res.ok) {
+                                            const payload = (await res.json().catch(() => ({}))) as {
+                                              error?: string;
+                                            };
+                                            alert(payload.error || "Refund failed.");
+                                            return;
+                                          }
+                                          await syncOrganizerConferenceById(selectedConference.id);
+                                        })();
+                                      }}
                                     >
-                                      {refundedApplicantIds[row.id] ? "Undo Refund" : "Refund"}
+                                      Refund
                                     </button>
                                   </div>
                                 </div>

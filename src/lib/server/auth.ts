@@ -103,6 +103,13 @@ export async function requireEventOrganizerAccess(
   });
   if (actorUserId && event?.ownerUserId && event.ownerUserId === actorUserId) return true;
 
+  const dbTeamCount = await prisma.eventTeamMember.count({
+    where: { eventId, acceptedAt: { not: null } },
+  });
+  if (dbTeamCount > 0) {
+    return false;
+  }
+
   const config = await getOrganizerPreviewConfig(eventId);
   if (!config) return false;
 

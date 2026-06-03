@@ -3,11 +3,15 @@ import { randomUUID } from "crypto";
 import { prisma } from "@/lib/server/prisma";
 import { getRequestActor } from "@/lib/server/auth";
 import { requireVerifiedEmail } from "@/lib/server/require-verified-email";
-import { resolveServerRegistrationAmount } from "@/lib/server/resolve-registration-price";
 import {
   createRegistrationAndPayment,
   DuplicateActiveRegistrationError,
 } from "@/lib/server/payments";
+import {
+  RegistrationValidationError,
+  serializeRegistrationPreferences,
+  validateRegistrationRequest,
+} from "@/lib/server/validate-registration";
 
 export async function POST(request: NextRequest) {
   const actor = await getRequestActor(request);
@@ -22,22 +26,14 @@ export async function POST(request: NextRequest) {
   if (verifyBlock) return verifyBlock;
 
   try {
-    const body = await request.json();
-    const eventId = String(body.eventId || "").trim();
+    const body = (await request.json()) as Record<string, unknown>;
     const registrationId = String(body.registrationId || "").trim() || `reg-${randomUUID()}`;
-    const categoryName = String(body.categoryName || "").trim();
-    const committeeConfigId =
-      typeof body.committeeConfigId === "string" && body.committeeConfigId.trim()
-        ? body.committeeConfigId.trim()
-        : undefined;
 
-    if (!eventId || !categoryName) {
-      return NextResponse.json({ error: "eventId and categoryName are required." }, { status: 400 });
-    }
+    const validated = await validateRegistrationRequest(body);
 
     const event = await prisma.event.findFirst({
       where: {
-        id: eventId,
+        id: validated.eventId,
         deletedAt: null,
         status: "PUBLISHED",
       },
@@ -62,30 +58,32 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "User profile not found. Sign in again." }, { status: 400 });
     }
 
-    const pricing = await resolveServerRegistrationAmount({
-      eventId,
-      committeeConfigId,
-    });
-
     const committeeName =
       typeof body.committeeName === "string" && body.committeeName.trim()
         ? body.committeeName.trim()
         : undefined;
-    const portfolioName =
-      typeof body.portfolioName === "string" && body.portfolioName.trim()
-        ? body.portfolioName.trim()
-        : undefined;
+
+    const prefs = serializeRegistrationPreferences(body);
 
     const result = await createRegistrationAndPayment({
       registrationId,
       userId: user.id,
-      eventId,
-      categoryName,
+      eventId: validated.eventId,
+      categoryName: validated.categoryName,
+      categoryId: validated.categoryId,
       committeeName,
-      portfolioName,
-      amount: pricing.amount,
-      currency: pricing.currency,
+      committeePreferencesJson: prefs.committeePreferencesJson,
+      portfolioPreferencesJson: prefs.portfolioPreferencesJson,
+      amount: validated.pricing.amount,
+      currency: validated.pricing.currency,
     });
+
+    if (prefs.formAnswersJson) {
+      await prisma.registration.update({
+        where: { id: result.registrationId },
+        data: { formAnswersJson: prefs.formAnswersJson },
+      });
+    }
 
     const registeredAt = new Date().toLocaleDateString("en-IN", {
       month: "long",
@@ -95,28 +93,25 @@ export async function POST(request: NextRequest) {
 
     const clientRegistration = {
       id: result.registrationId,
-      conferenceId: eventId,
+      conferenceId: validated.eventId,
       conferenceTitle: event.title,
       categoryId: String(body.categoryId || "delegate"),
-      categoryName,
-      committeeId: committeeConfigId,
+      categoryName: validated.categoryName,
+      committeeId: validated.committeeConfigId,
       committeeName,
-      committeePreferences: Array.isArray(body.committeePreferences)
-        ? body.committeePreferences
-        : undefined,
+      committeePreferences: validated.committeePreferences,
       portfolioPreferencesByCommittee: body.portfolioPreferencesByCommittee as
         | Record<string, string[]>
         | undefined,
       formAnswers: (body.formAnswers || {}) as Record<string, string | number | boolean | string[]>,
-      pricingPhaseId: pricing.phaseId,
-      pricingPhaseName: pricing.phaseName,
-      status: (result.paid ? "Confirmed" : "Pending") as "Confirmed" | "Pending",
+      pricingPhaseId: validated.pricing.phaseId,
+      pricingPhaseName: validated.pricing.phaseName,
+      status: "Pending" as const,
       registeredAt,
       paid: result.paid,
       amount: result.amount,
       userEmail: actor.email,
-      organizerStatus:
-        result.paid ? ("Allotted" as const) : ("Pending" as const),
+      organizerStatus: "Pending" as const,
     };
 
     return NextResponse.json({
@@ -133,6 +128,9 @@ export async function POST(request: NextRequest) {
         },
         { status: 409 }
       );
+    }
+    if (error instanceof RegistrationValidationError) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
     }
     const message = error instanceof Error ? error.message : "Registration failed.";
     return NextResponse.json({ error: message }, { status: 400 });

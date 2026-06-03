@@ -170,9 +170,12 @@ export default function CheckoutPage() {
     setLoading(true);
     try {
       const registrationId = createConfirmationId();
-      const formAnswers = Object.fromEntries(
-        Object.entries(answers).filter(([key]) => !key.startsWith("cq-"))
-      );
+      const formAnswers = {
+        fullName: fullName.trim(),
+        school: school.trim(),
+        phone: phone.trim(),
+        ...answers,
+      };
       const res = await fetch("/api/registrations", {
         method: "POST",
         credentials: "include",
@@ -182,6 +185,8 @@ export default function CheckoutPage() {
           eventId: String(params.id),
           categoryId: selectedCategory.id,
           categoryName: selectedCategory.name,
+          fullName: fullName.trim(),
+          school: school.trim(),
           committeeConfigId: selectedCommitteeId || undefined,
           committeeName: selectedCommittee?.name,
           committeePreferences: [selectedCommitteeId, secondPreferenceCommitteeId, thirdPreferenceCommitteeId].filter(
@@ -212,11 +217,11 @@ export default function CheckoutPage() {
   };
 
   const isStep1Valid = !!selectedCategoryId;
-  const isStep2Valid = !!selectedCategory && phone.trim().length > 0 && selectedCategory.formFields.every(
+  const isStep2Valid = !!selectedCategory && fullName.trim().length > 0 && school.trim().length > 0 && phone.trim().length > 0 && selectedCategory.formFields.every(
     (field) => !field.required || answers[field.id] !== undefined
   ) && delegationSizeValid;
   const isStep3Valid = (!selectedCategory?.requiresCommitteeSelection || !!selectedCommitteeId) && committeeQuestionsValid;
-  const isStep4Valid = true;
+  const isStep4Valid = isStep1Valid && isStep2Valid && isStep3Valid;
 
   if (!authReady) {
     return <AppRouteSkeleton />;

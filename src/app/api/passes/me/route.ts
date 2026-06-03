@@ -1,8 +1,8 @@
 import QRCode from "qrcode";
 import { NextRequest, NextResponse } from "next/server";
-import { RegistrationStatus } from "@/generated/prisma/enums";
+import { PassStatus, RegistrationStatus } from "@/generated/prisma/enums";
 import { getRequestActor } from "@/lib/server/auth";
-import { signPassToken } from "@/lib/server/pass-token";
+import { passTokenExpiresAt, signPassToken } from "@/lib/server/pass-token";
 import { prisma } from "@/lib/server/prisma";
 import { resolveRegistrationApplicationType } from "@/lib/server/resolve-registration-application-type";
 
@@ -17,6 +17,7 @@ export async function GET(request: NextRequest) {
       where: { email: actor.email },
       include: {
         registrations: {
+          where: { deletedAt: null },
           include: {
             event: true,
             pass: true,
@@ -33,14 +34,24 @@ export async function GET(request: NextRequest) {
     const now = new Date();
     const passes = await Promise.all(
       user.registrations
-        .filter((registration) => registration.pass)
+        .filter(
+          (registration) =>
+            registration.pass &&
+            registration.pass.status === PassStatus.ISSUED &&
+            !registration.pass.deletedAt &&
+            !registration.checkedIn
+        )
         .map(async (registration) => {
           const pass = registration.pass!;
-          const token = await signPassToken({
-            passId: pass.id,
-            registrationId: registration.id,
-            eventId: registration.eventId,
-          });
+          const token = await signPassToken(
+            {
+              passId: pass.id,
+              registrationId: registration.id,
+              eventId: registration.eventId,
+              nonce: pass.qrNonce,
+            },
+            passTokenExpiresAt(registration.event.endDate)
+          );
           const isReleased = pass.releaseAt <= now;
           const qrImageDataUrl = isReleased ? await QRCode.toDataURL(token) : undefined;
           const applicationType = await resolveRegistrationApplicationType(

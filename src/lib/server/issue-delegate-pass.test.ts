@@ -11,6 +11,7 @@ const { findUnique, delegatePassCreate, delegatePassUpdate, notificationCreate }
 vi.mock("@/lib/server/pass-token", () => ({
   signPassToken: vi.fn(() => Promise.resolve("signed.stub.token")),
   hashToken: vi.fn(() => "hashed-token"),
+  passTokenExpiresAt: vi.fn(() => new Date("2027-01-01")),
 }));
 
 vi.mock("@/lib/server/prisma", () => ({
@@ -42,7 +43,12 @@ function baseRegistration(overrides: Record<string, unknown> = {}) {
     deletedAt: null,
     createdAt: new Date(),
     updatedAt: new Date(),
-    event: { id: "evt-1", title: "Test Conference", startDate: eventStart },
+    event: {
+      id: "evt-1",
+      title: "Test Conference",
+      startDate: eventStart,
+      endDate: new Date("2026-09-05T00:00:00.000Z"),
+    },
     pass: null,
     ...overrides,
   };
@@ -108,6 +114,7 @@ describe("issueDelegatePassForRegistration", () => {
           id: "pass-existing",
           registrationId: "reg-1",
           eventId: "evt-1",
+          qrNonce: "nonce-existing",
           qrTokenHash: "hash",
           releaseAt: existingRelease,
           issuedAt: new Date(),
