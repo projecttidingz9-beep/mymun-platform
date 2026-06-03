@@ -31,6 +31,34 @@ test.describe("organiser updates propagate to delegates", () => {
     expect(conference.termsAndConditions).toContain("Seed terms");
   });
 
+  test("organiser schedule patch appears on marketplace detail", async ({ request }) => {
+    const login = await loginWithCredentials(request, SEED_ORGANIZER_EMAIL, SEED_PASSWORD);
+    expect(login.ok()).toBeTruthy();
+
+    const scheduleTitle = `E2E Schedule ${Date.now()}`;
+    const patch = await request.patch(`/api/organizers/conference-config/${SEED_EVENT_ID}`, {
+      data: {
+        conferenceSchedule: [
+          {
+            id: `e2e-schedule-${Date.now()}`,
+            day: "Day 1",
+            fromTime: "09:00",
+            toTime: "10:00",
+            title: scheduleTitle,
+          },
+        ],
+      },
+    });
+    expect(patch.ok()).toBeTruthy();
+
+    const detail = await request.get(`/api/marketplace/${SEED_EVENT_ID}`);
+    expect(detail.ok()).toBeTruthy();
+    const detailBody = (await detail.json()) as {
+      conference: { conferenceSchedule?: Array<{ title: string }> };
+    };
+    expect(detailBody.conference.conferenceSchedule?.some((e) => e.title === scheduleTitle)).toBe(true);
+  });
+
   test("organiser title patch appears on marketplace and conference page", async ({ request, page }) => {
     const updatedTitle = `Global Summit E2E ${Date.now()}`;
 

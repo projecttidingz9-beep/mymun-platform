@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { normalizeConferenceScheduleEntries } from "@/lib/conference-schedule";
 import { getRequestActor, requireEventOrganizerAccess, requireOrganizer, resolveActorUserId } from "@/lib/server/auth";
 import { getOrganizerPreviewConfig, mergeOrganizerStoredBlob } from "@/lib/server/organizer-config-store";
 import { prisma } from "@/lib/server/prisma";
@@ -94,18 +95,7 @@ export async function PATCH(
       ? body.whatIsIncluded.map((entry) => String(entry)).filter(Boolean)
       : undefined,
     conferenceSchedule: Array.isArray(body.conferenceSchedule)
-      ? body.conferenceSchedule
-          .map((entry) => {
-            const item = entry as Record<string, unknown>;
-            return {
-              id: String(item.id || `schedule-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`),
-              day: String(item.day || ""),
-              fromTime: String(item.fromTime || ""),
-              toTime: String(item.toTime || ""),
-              title: String(item.title || ""),
-            };
-          })
-          .filter((entry) => entry.day && entry.fromTime && entry.toTime && entry.title)
+      ? normalizeConferenceScheduleEntries(body.conferenceSchedule)
       : undefined,
   };
 

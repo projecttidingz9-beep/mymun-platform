@@ -1,5 +1,6 @@
 import type { PaymentIntentStatus, PaymentProvider } from "@/generated/prisma/enums";
 import { RegistrationStatus } from "@/generated/prisma/enums";
+import { issueDelegatePassForRegistration } from "@/lib/server/issue-delegate-pass";
 import { prisma } from "@/lib/server/prisma";
 import { getAppConfig } from "@/lib/app-config";
 
@@ -82,6 +83,12 @@ export async function createRegistrationAndPayment(params: {
         notes: "Free registration",
       },
     });
+
+    try {
+      await issueDelegatePassForRegistration(registration.id, { immediateRelease: true });
+    } catch {
+      // Registration succeeded; pass issuance is best-effort.
+    }
 
     return {
       registrationId: registration.id,

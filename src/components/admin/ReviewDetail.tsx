@@ -19,6 +19,7 @@ export default function ReviewDetail({ eventId, onModerated, onClose }: ReviewDe
   const [busy, setBusy] = useState(false);
   const [approveOpen, setApproveOpen] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const [rejectNote, setRejectNote] = useState("");
 
   const loadDetail = useCallback(async () => {
@@ -70,7 +71,38 @@ export default function ReviewDetail({ eventId, onModerated, onClose }: ReviewDe
       setApproveOpen(false);
       setRejectOpen(false);
       setRejectNote("");
-      setToast(action === "approve" ? "Conference published to marketplace." : "Returned to organizer as Draft.");
+      if (action === "approve") {
+        setToast("Conference published to marketplace. You can delete it below if this was a mistake.");
+        onModerated();
+        await loadDetail();
+      } else {
+        setToast("Returned to organizer as Draft.");
+        onModerated();
+        onClose();
+      }
+    } catch {
+      setToast("Could not reach server.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const deleteConference = async () => {
+    if (!eventId) return;
+    setBusy(true);
+    setToast(null);
+    try {
+      const res = await fetch(`/api/admin/events/${encodeURIComponent(eventId)}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      const payload = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        setToast(payload.error || "Delete failed.");
+        return;
+      }
+      setDeleteOpen(false);
+      setToast("Conference removed from marketplace.");
       onModerated();
       onClose();
     } catch {
@@ -199,6 +231,16 @@ export default function ReviewDetail({ eventId, onModerated, onClose }: ReviewDe
                 </button>
               </>
             )}
+            {detail.event.status === "PUBLISHED" && (
+              <button
+                type="button"
+                className="btn btn-danger-ghost text-sm min-h-[44px] touch-manipulation"
+                disabled={busy}
+                onClick={() => setDeleteOpen(true)}
+              >
+                Delete conference
+              </button>
+            )}
           </div>
 
           {toast && (
@@ -220,6 +262,17 @@ export default function ReviewDetail({ eventId, onModerated, onClose }: ReviewDe
         busy={busy}
         onClose={() => setApproveOpen(false)}
         onConfirm={() => void moderate("approve")}
+      />
+
+      <ModerationModal
+        open={deleteOpen}
+        title="Remove from marketplace?"
+        description={`"${detail?.event.title ?? "This conference"}" will be soft-deleted and hidden from the marketplace. This cannot be undone from the dashboard.`}
+        confirmLabel="Delete conference"
+        confirmVariant="danger"
+        busy={busy}
+        onClose={() => setDeleteOpen(false)}
+        onConfirm={() => void deleteConference()}
       />
 
       <ModerationModal

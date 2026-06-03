@@ -5,6 +5,7 @@ import { useEffect, useId, useRef, useState } from "react";
 
 type VerifiedPayload = {
   valid?: boolean;
+  alreadyUsed?: boolean;
   passId: string;
   registrationId: string;
   eventId: string;
@@ -37,6 +38,11 @@ export default function QrScannerPanel() {
     };
   }, []);
 
+  const handleAlreadyUsed = (detail?: string) => {
+    setVerified(null);
+    setError(detail || "This pass was already used for check-in and cannot be scanned again.");
+  };
+
   const verifyToken = async (qrToken: string) => {
     setError("");
     setMessage("");
@@ -47,7 +53,16 @@ export default function QrScannerPanel() {
       body: JSON.stringify({ qrToken }),
     });
     const data = await response.json();
+    if (response.status === 409 && data.alreadyUsed) {
+      handleAlreadyUsed(data.error);
+      return;
+    }
     if (!response.ok) {
+      setVerified(null);
+      setError(data.error || "Verification failed.");
+      return;
+    }
+    if (!data.valid) {
       setVerified(null);
       setError(data.error || "Verification failed.");
       return;
@@ -57,6 +72,7 @@ export default function QrScannerPanel() {
 
   const handleCheckin = async () => {
     if (!rawToken) return;
+    setError("");
     const response = await fetch("/api/checkins", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -64,16 +80,20 @@ export default function QrScannerPanel() {
       body: JSON.stringify({ qrToken: rawToken, deviceMeta: "webcam-scanner" }),
     });
     const data = await response.json();
+    if (response.status === 409 && data.alreadyUsed) {
+      handleAlreadyUsed(data.error);
+      if (data.checkedInAt) {
+        setMessage(`Already checked in at ${new Date(data.checkedInAt).toLocaleString()}.`);
+      }
+      return;
+    }
     if (!response.ok) {
       setError(data.error || "Check-in failed.");
       return;
     }
-    if (data.duplicate) {
-      setMessage(`Already checked in at ${new Date(data.checkedInAt).toLocaleString()}.`);
-    } else {
-      setMessage(`Checked in successfully at ${new Date(data.checkedInAt).toLocaleString()}.`);
-    }
-    await verifyToken(rawToken);
+    setMessage(`Checked in successfully at ${new Date(data.checkedInAt).toLocaleString()}. Pass cannot be reused.`);
+    setVerified(null);
+    setError("");
   };
 
   const startScanner = async () => {
@@ -144,7 +164,7 @@ export default function QrScannerPanel() {
       {error && <p className="text-xs mt-3" style={{ color: "#dc2626" }}>{error}</p>}
       {message && <p className="text-xs mt-3" style={{ color: "var(--blue)" }}>{message}</p>}
 
-      {verified && (
+      {verified?.valid && (
         <div className="mt-4 p-4 rounded-xl" style={{ background: "var(--bg-subtle)" }}>
           <p className="text-sm font-semibold" style={{ color: "var(--fg)" }}>{verified.delegateName}</p>
           <p className="text-xs mt-1" style={{ color: "var(--fg-muted)" }}>
@@ -153,15 +173,12 @@ export default function QrScannerPanel() {
           <p className="text-xs mt-1" style={{ color: "var(--fg-muted)" }}>
             Committee: {verified.committeeName || "N/A"} · Portfolio: {verified.portfolioName || "N/A"}
           </p>
-          <p className="text-xs mt-1" style={{ color: verified.checkedIn ? "#d97706" : "#16a34a" }}>
-            {verified.checkedIn
-              ? `Already checked in${verified.checkedInAt ? ` (${new Date(verified.checkedInAt).toLocaleString()})` : ""}`
-              : "Not checked in yet"}
+          <p className="text-xs mt-1" style={{ color: "#16a34a" }}>
+            Valid pass — ready for one-time check-in
           </p>
           <button
             className="btn btn-primary text-xs mt-3"
             onClick={() => void handleCheckin()}
-            disabled={verified.checkedIn}
           >
             Confirm Check-in
           </button>

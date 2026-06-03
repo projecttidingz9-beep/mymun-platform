@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { moderateConference } from "./admin-conference-moderation";
+import { deleteConferenceAsAdmin, moderateConference } from "./admin-conference-moderation";
 import { prisma } from "./prisma";
 import { mergeOrganizerStoredBlob } from "./organizer-config-store";
 
@@ -89,5 +89,70 @@ describe("moderateConference", () => {
         adminRejectionNote: "Missing committee details",
       })
     );
+  });
+});
+
+describe("deleteConferenceAsAdmin", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(prisma.$transaction).mockImplementation(async (callback) => {
+      const tx = {
+        event: { update: vi.fn().mockResolvedValue({}) },
+        auditLog: { create: vi.fn().mockResolvedValue({}) },
+      };
+      await callback(tx as never);
+    });
+  });
+
+  it("soft-deletes a published conference", async () => {
+    vi.mocked(prisma.event.findFirst).mockResolvedValue({
+      id: "evt-1",
+      title: "Test MUN",
+      status: "PUBLISHED",
+      owner: { email: "org@example.com" },
+    } as never);
+
+    const result = await deleteConferenceAsAdmin({
+      eventId: "evt-1",
+      actorUserId: "admin-1",
+      actorEmail: "admin@example.com",
+    });
+
+    expect(result.eventId).toBe("evt-1");
+    expect(result.title).toBe("Test MUN");
+    expect(mergeOrganizerStoredBlob).toHaveBeenCalledWith(
+      "evt-1",
+      expect.objectContaining({ status: "Draft" })
+    );
+    expect(prisma.$transaction).toHaveBeenCalled();
+  });
+
+  it("rejects delete for non-published events", async () => {
+    vi.mocked(prisma.event.findFirst).mockResolvedValue({
+      id: "evt-1",
+      title: "Test MUN",
+      status: "REVIEW",
+      owner: { email: "org@example.com" },
+    } as never);
+
+    await expect(
+      deleteConferenceAsAdmin({
+        eventId: "evt-1",
+        actorUserId: "admin-1",
+        actorEmail: "admin@example.com",
+      })
+    ).rejects.toThrow("Only published conferences");
+  });
+
+  it("throws when event is not found", async () => {
+    vi.mocked(prisma.event.findFirst).mockResolvedValue(null);
+
+    await expect(
+      deleteConferenceAsAdmin({
+        eventId: "missing",
+        actorUserId: "admin-1",
+        actorEmail: "admin@example.com",
+      })
+    ).rejects.toThrow("Event not found.");
   });
 });

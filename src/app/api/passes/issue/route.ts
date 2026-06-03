@@ -1,17 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { RegistrationStatus } from "@/generated/prisma/enums";
-import { hashToken, signPassToken } from "@/lib/server/pass-token";
+import {
+  issueDelegatePassForRegistration,
+  resolveReleaseAt,
+} from "@/lib/server/issue-delegate-pass";
 import { prisma } from "@/lib/server/prisma";
 import { upsertRegistrationFromClient } from "@/lib/server/registration-sync";
 import { getRequestActor, requireEventOrganizerAccess, requireOrganizer } from "@/lib/server/auth";
 import { requireVerifiedEmail } from "@/lib/server/require-verified-email";
-
-function resolveReleaseAt(startDate: Date, requestedReleaseAt?: string) {
-  if (requestedReleaseAt) return new Date(requestedReleaseAt);
-  const release = new Date(startDate);
-  release.setDate(release.getDate() - 3);
-  return release;
-}
 
 export async function POST(request: NextRequest) {
   try {
@@ -54,52 +50,32 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (registration.pass && registration.pass.status === "ISSUED") {
-      return NextResponse.json({ passId: registration.pass.id, alreadyIssued: true });
-    }
-
     const releaseAt = resolveReleaseAt(
       registration.event.startDate,
       body.releaseAt ? String(body.releaseAt) : undefined
     );
 
-    const created = await prisma.delegatePass.create({
-      data: {
-        registrationId: registration.id,
-        eventId: registration.eventId,
-        releaseAt,
-        qrTokenHash: "pending",
-      },
+    const result = await issueDelegatePassForRegistration(registration.id, {
+      releaseAt,
+      notify: true,
     });
 
-    const token = await signPassToken({
-      passId: created.id,
-      registrationId: registration.id,
-      eventId: registration.eventId,
-    });
-    const tokenHash = hashToken(token);
+    if (result.alreadyIssued) {
+      return NextResponse.json({ passId: result.passId, alreadyIssued: true });
+    }
 
-    await prisma.delegatePass.update({
-      where: { id: created.id },
-      data: { qrTokenHash: tokenHash },
-    });
-
-    await prisma.notification.create({
-      data: {
-        userId: registration.userId,
-        eventId: registration.eventId,
-        registrationId: registration.id,
-        title: "Digital pass issued",
-        message: `Your digital delegate pass for ${registration.event.title} is now available.`,
-        type: "PASS_RELEASED",
-      },
-    });
+    if (!result.issued) {
+      return NextResponse.json(
+        { error: result.skipReason || "Failed to issue delegate pass." },
+        { status: 400 }
+      );
+    }
 
     return NextResponse.json({
-      passId: created.id,
+      passId: result.passId,
       registrationId: registration.id,
-      releaseAt: releaseAt.toISOString(),
-      qrToken: token,
+      releaseAt: result.releaseAt,
+      qrToken: result.qrToken,
       alreadyIssued: false,
     });
   } catch (error) {

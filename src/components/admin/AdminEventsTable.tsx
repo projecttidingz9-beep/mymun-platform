@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import ModerationModal from "./ModerationModal";
 import type { AdminEventListRow } from "./types";
 
 function statusBadgeClass(status: string) {
@@ -24,6 +25,9 @@ export default function AdminEventsTable() {
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState<AdminEventListRow | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [actionMessage, setActionMessage] = useState<string | null>(null);
 
   const loadEvents = useCallback(async () => {
     setLoading(true);
@@ -54,6 +58,30 @@ export default function AdminEventsTable() {
   useEffect(() => {
     void loadEvents();
   }, [loadEvents]);
+
+  const deleteConference = async () => {
+    if (!deleteTarget) return;
+    setDeleteBusy(true);
+    setActionMessage(null);
+    try {
+      const res = await fetch(`/api/admin/events/${encodeURIComponent(deleteTarget.id)}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      const payload = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        setActionMessage(payload.error || "Delete failed.");
+        return;
+      }
+      setDeleteTarget(null);
+      setActionMessage(`"${deleteTarget.title}" removed from marketplace.`);
+      await loadEvents();
+    } catch {
+      setActionMessage("Could not reach server.");
+    } finally {
+      setDeleteBusy(false);
+    }
+  };
 
   return (
     <section className="space-y-4" aria-label="All conferences">
@@ -100,8 +128,16 @@ export default function AdminEventsTable() {
       </div>
       {loading && <p className="text-[var(--fg-muted)]">Loading…</p>}
       {error && <p className="text-rose-600 dark:text-rose-400">{error}</p>}
+      {actionMessage && (
+        <p
+          className={`text-sm ${actionMessage.includes("failed") || actionMessage.includes("Could not") ? "text-rose-600 dark:text-rose-400" : "text-emerald-700 dark:text-emerald-300"}`}
+          role="status"
+        >
+          {actionMessage}
+        </p>
+      )}
       <div className="overflow-x-auto rounded-2xl border border-[var(--border)]">
-        <table className="min-w-[900px] w-full text-sm">
+        <table className="min-w-[980px] w-full text-sm">
           <thead className="bg-[var(--bg-subtle)] text-left text-xs uppercase tracking-wide text-[var(--fg-muted)]">
             <tr>
               <th className="px-4 py-3 font-medium">Conference</th>
@@ -110,6 +146,7 @@ export default function AdminEventsTable() {
               <th className="px-4 py-3 font-medium">Organizer</th>
               <th className="px-4 py-3 font-medium">Regs</th>
               <th className="px-4 py-3 font-medium">Updated</th>
+              <th className="px-4 py-3 font-medium">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-[var(--border)]">
@@ -131,11 +168,24 @@ export default function AdminEventsTable() {
                 <td className="px-4 py-3 text-[var(--fg-muted)] whitespace-nowrap text-xs">
                   {new Date(row.updatedAt).toLocaleString()}
                 </td>
+                <td className="px-4 py-3">
+                  {row.status === "PUBLISHED" ? (
+                    <button
+                      type="button"
+                      className="btn btn-danger-ghost text-xs min-h-[36px] touch-manipulation"
+                      onClick={() => setDeleteTarget(row)}
+                    >
+                      Delete
+                    </button>
+                  ) : (
+                    <span className="text-xs text-[var(--fg-muted)]">—</span>
+                  )}
+                </td>
               </tr>
             ))}
             {!loading && events.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-[var(--fg-muted)]">
+                <td colSpan={7} className="px-4 py-8 text-center text-[var(--fg-muted)]">
                   No conferences match your filters.
                 </td>
               </tr>
@@ -143,6 +193,21 @@ export default function AdminEventsTable() {
           </tbody>
         </table>
       </div>
+
+      <ModerationModal
+        open={!!deleteTarget}
+        title="Remove from marketplace?"
+        description={
+          deleteTarget
+            ? `"${deleteTarget.title}" will be soft-deleted and hidden from the marketplace. Registrations are preserved in the database.`
+            : ""
+        }
+        confirmLabel="Delete conference"
+        confirmVariant="danger"
+        busy={deleteBusy}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={() => void deleteConference()}
+      />
     </section>
   );
 }

@@ -14,6 +14,7 @@ import {
   mapOrganizerConferenceToMarketplaceConference,
 } from "@/lib/marketplace-conferences";
 import { resolveConferenceBannerImage } from "@/lib/conference-media";
+import { resolveConferenceScheduleDisplayDays } from "@/lib/conference-schedule";
 import { hasOrganizerConferenceAccess } from "@/lib/organizer-access";
 import AppRouteSkeleton from "@/components/AppRouteSkeleton";
 
@@ -388,28 +389,11 @@ export default function ConferenceDetailPage() {
     organizerConference && (organizerConference.whatIsIncluded || []).length > 0
       ? organizerConference.whatIsIncluded || []
       : delegateWhatsIncluded;
-  const delegateSchedule =
-    publicDetail?.conferenceSchedule && publicDetail.conferenceSchedule.length > 0
-      ? Object.entries(
-          publicDetail.conferenceSchedule.reduce<Record<string, string[]>>((acc, entry) => {
-            const day = entry.day || "Day";
-            const line = `${entry.fromTime} — ${entry.title}${entry.toTime ? ` (${entry.toTime})` : ""}`;
-            acc[day] = [...(acc[day] || []), line];
-            return acc;
-          }, {})
-        ).map(([day, events]) => ({ day, events }))
-      : SCHEDULE;
-  const scheduleGroups =
-    organizerConference && (organizerConference.conferenceSchedule || []).length > 0
-      ? Object.entries(
-          (organizerConference.conferenceSchedule || []).reduce<Record<string, string[]>>((acc, entry) => {
-            const day = entry.day || "Day";
-            const line = `${entry.fromTime} — ${entry.title}${entry.toTime ? ` (${entry.toTime})` : ""}`;
-            acc[day] = [...(acc[day] || []), line];
-            return acc;
-          }, {})
-        ).map(([day, events]) => ({ day, events }))
-      : delegateSchedule;
+  const scheduleGroups = resolveConferenceScheduleDisplayDays({
+    publicSchedule: publicDetail?.conferenceSchedule,
+    organizerSchedule: organizerConference?.conferenceSchedule,
+    fallback: SCHEDULE,
+  });
 
   const defaultStats: Record<string, string | number> = {
     Committees: organizerConference ? mergedCommittees.length : c.committees.length,

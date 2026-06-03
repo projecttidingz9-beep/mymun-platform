@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { RegistrationStatus } from "@/generated/prisma/enums";
 import { getRequestActor, requireEventOrganizerAccess, requireOrganizer } from "@/lib/server/auth";
+import { issueDelegatePassForRegistration } from "@/lib/server/issue-delegate-pass";
 import { prisma } from "@/lib/server/prisma";
 
 function mapOrganizerStatusToDb(
@@ -84,6 +85,19 @@ export async function PATCH(
       ...(nextAllottedAt !== undefined ? { allottedAt: nextAllottedAt } : {}),
     },
   });
+
+  const updated = await prisma.registration.findUnique({
+    where: { id: registrationId },
+    select: { paid: true, status: true },
+  });
+
+  if (updated?.paid && updated.status === RegistrationStatus.ALLOTTED) {
+    try {
+      await issueDelegatePassForRegistration(registrationId, { immediateRelease: true });
+    } catch {
+      // PATCH succeeded; pass issuance is best-effort.
+    }
+  }
 
   return NextResponse.json({ ok: true });
 }

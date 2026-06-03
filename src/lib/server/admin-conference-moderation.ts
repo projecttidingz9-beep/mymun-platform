@@ -25,6 +25,20 @@ export type ModerateConferenceResult = {
   organizerEmail: string | null;
 };
 
+export type DeleteConferenceAsAdminInput = {
+  eventId: string;
+  actorUserId: string;
+  actorEmail: string;
+  ip?: string;
+  userAgent?: string;
+};
+
+export type DeleteConferenceAsAdminResult = {
+  eventId: string;
+  title: string;
+  organizerEmail: string | null;
+};
+
 const toSimpleHtml = (text: string) => {
   const escaped = text
     .replace(/&/g, "&amp;")
@@ -167,6 +181,111 @@ export async function moderateConference(
     eventId,
     status: nextStatus,
     title: conference?.title || existing.title,
+    organizerEmail,
+  };
+}
+
+async function notifyOrganizerDeletion(params: { to: string; title: string }) {
+  const apiKey = env.resendApiKey();
+  const fromEmail = env.resendFromEmail();
+  if (!apiKey || !fromEmail) return;
+
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL?.trim().replace(/\/$/, "") || "https://tidingz.com";
+  const dashboardUrl = `${appUrl}/organizers/dashboard`;
+  const text = [
+    `Your conference "${params.title}" has been removed from the Tidingz marketplace by the platform team.`,
+    "",
+    "If you believe this was a mistake, contact support or recreate your event from the organizer dashboard.",
+    "",
+    `Organizer dashboard: ${dashboardUrl}`,
+  ].join("\n");
+
+  try {
+    const resend = new Resend(apiKey);
+    await resend.emails.send({
+      from: fromEmail,
+      to: params.to,
+      subject: `"${params.title}" removed from Tidingz marketplace`,
+      text,
+      html: toSimpleHtml(text),
+    });
+  } catch (err) {
+    logger.error("admin_delete_email_failed", {
+      error: err instanceof Error ? err.message : String(err),
+      to: params.to,
+    });
+  }
+}
+
+export async function deleteConferenceAsAdmin(
+  input: DeleteConferenceAsAdminInput
+): Promise<DeleteConferenceAsAdminResult> {
+  const eventId = input.eventId.trim();
+  if (!eventId) {
+    throw new Error("eventId is required.");
+  }
+
+  const existing = await prisma.event.findFirst({
+    where: { id: eventId, deletedAt: null },
+    select: {
+      id: true,
+      title: true,
+      status: true,
+      owner: { select: { email: true } },
+    },
+  });
+
+  if (!existing) {
+    throw new Error("Event not found.");
+  }
+
+  if (existing.status !== "PUBLISHED") {
+    throw new Error("Only published conferences can be deleted from the marketplace.");
+  }
+
+  const deletedAt = new Date();
+
+  await prisma.$transaction(async (tx) => {
+    await tx.event.update({
+      where: { id: eventId },
+      data: { deletedAt },
+    });
+
+    await mergeOrganizerStoredBlob(eventId, {
+      status: "Draft",
+      adminModeratedAt: deletedAt.toISOString(),
+      adminModeratedBy: input.actorEmail,
+    });
+
+    await tx.auditLog.create({
+      data: {
+        actorUserId: input.actorUserId,
+        eventId,
+        action: "admin.conference.delete",
+        entity: "Event",
+        entityId: eventId,
+        before: { status: existing.status, deletedAt: null },
+        after: { status: existing.status, deletedAt: deletedAt.toISOString() },
+        ip: input.ip,
+        userAgent: input.userAgent,
+      },
+    });
+  });
+
+  const conference = await mapManagedEventToOrganizerConference(eventId);
+  const title = conference?.title || existing.title;
+  const organizerEmail =
+    conference?.ownerEmail?.trim().toLowerCase() ||
+    existing.owner?.email?.trim().toLowerCase() ||
+    null;
+
+  if (organizerEmail) {
+    await notifyOrganizerDeletion({ to: organizerEmail, title });
+  }
+
+  return {
+    eventId,
+    title,
     organizerEmail,
   };
 }
