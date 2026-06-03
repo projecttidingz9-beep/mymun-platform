@@ -1,33 +1,33 @@
 "use client";
 
 import { Html5Qrcode } from "html5-qrcode";
-import { useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
+import ScanSuccessModal, { type ScanSuccessDetails } from "@/components/ScanSuccessModal";
 
-type VerifiedPayload = {
-  valid?: boolean;
+const TOKEN_DEBOUNCE_MS = 3000;
+
+type CheckinResponse = {
+  checkedIn?: boolean;
+  checkedInAt?: string;
+  delegateName?: string;
   alreadyUsed?: boolean;
-  passId: string;
-  registrationId: string;
-  eventId: string;
-  delegateName: string;
-  delegateEmail: string;
-  eventName: string;
-  committeeName?: string;
-  portfolioName?: string;
-  categoryName: string;
-  checkedIn: boolean;
-  checkedInAt?: string | null;
+  error?: string;
 };
 
 export default function QrScannerPanel() {
   const reactId = useId();
   const elementId = `qr-reader-${reactId.replace(/[:]/g, "")}`;
   const scannerRef = useRef<Html5Qrcode | null>(null);
+  const processingRef = useRef(false);
+  const blockScanRef = useRef(false);
+  const lastAttemptRef = useRef<{ token: string; at: number } | null>(null);
+
   const [running, setRunning] = useState(false);
+  const [isCheckingIn, setIsCheckingIn] = useState(false);
   const [error, setError] = useState("");
   const [rawToken, setRawToken] = useState("");
-  const [verified, setVerified] = useState<VerifiedPayload | null>(null);
-  const [message, setMessage] = useState("");
+  const [successOpen, setSuccessOpen] = useState(false);
+  const [successDetails, setSuccessDetails] = useState<ScanSuccessDetails | null>(null);
 
   useEffect(() => {
     return () => {
@@ -38,67 +38,92 @@ export default function QrScannerPanel() {
     };
   }, []);
 
-  const handleAlreadyUsed = (detail?: string) => {
-    setVerified(null);
-    setError(detail || "This pass was already used for check-in and cannot be scanned again.");
-  };
+  const shouldSkipToken = useCallback((qrToken: string) => {
+    const trimmed = qrToken.trim();
+    if (!trimmed) return true;
+    const last = lastAttemptRef.current;
+    if (last && last.token === trimmed && Date.now() - last.at < TOKEN_DEBOUNCE_MS) {
+      return true;
+    }
+    return false;
+  }, []);
 
-  const verifyToken = async (qrToken: string) => {
-    setError("");
-    setMessage("");
-    const response = await fetch("/api/passes/verify", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify({ qrToken }),
-    });
-    const data = await response.json();
-    if (response.status === 409 && data.alreadyUsed) {
-      handleAlreadyUsed(data.error);
-      return;
-    }
-    if (!response.ok) {
-      setVerified(null);
-      setError(data.error || "Verification failed.");
-      return;
-    }
-    if (!data.valid) {
-      setVerified(null);
-      setError(data.error || "Verification failed.");
-      return;
-    }
-    setVerified(data as VerifiedPayload);
-  };
+  const markTokenAttempt = useCallback((qrToken: string) => {
+    lastAttemptRef.current = { token: qrToken.trim(), at: Date.now() };
+  }, []);
 
-  const handleCheckin = async () => {
-    if (!rawToken) return;
+  const handleAlreadyUsed = useCallback((detail?: string, checkedInAt?: string | null) => {
+    const base =
+      detail || "This pass was already used for check-in and cannot be scanned again.";
+    setError(
+      checkedInAt ? `${base} (${new Date(checkedInAt).toLocaleString()})` : base
+    );
+  }, []);
+
+  const closeSuccessModal = useCallback(() => {
+    setSuccessOpen(false);
+    setSuccessDetails(null);
     setError("");
-    const response = await fetch("/api/checkins", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify({ qrToken: rawToken, deviceMeta: "webcam-scanner" }),
-    });
-    const data = await response.json();
-    if (response.status === 409 && data.alreadyUsed) {
-      handleAlreadyUsed(data.error);
-      if (data.checkedInAt) {
-        setMessage(`Already checked in at ${new Date(data.checkedInAt).toLocaleString()}.`);
+    blockScanRef.current = false;
+  }, []);
+
+  useEffect(() => {
+    blockScanRef.current = successOpen || isCheckingIn;
+  }, [successOpen, isCheckingIn]);
+
+  const performCheckin = useCallback(
+    async (qrToken: string) => {
+      const trimmed = qrToken.trim();
+      if (!trimmed || processingRef.current || shouldSkipToken(trimmed)) return;
+
+      processingRef.current = true;
+      setIsCheckingIn(true);
+      setError("");
+      markTokenAttempt(trimmed);
+      setRawToken(trimmed);
+
+      try {
+        const response = await fetch("/api/checkins", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ qrToken: trimmed, deviceMeta: "webcam-scanner" }),
+        });
+        const data = (await response.json()) as CheckinResponse;
+
+        if (response.status === 409 && data.alreadyUsed) {
+          handleAlreadyUsed(data.error, data.checkedInAt);
+          return;
+        }
+
+        if (!response.ok) {
+          setError(data.error || "Check-in failed.");
+          return;
+        }
+
+        if (!data.checkedInAt || !data.delegateName) {
+          setError("Check-in succeeded but response was incomplete.");
+          return;
+        }
+
+        blockScanRef.current = true;
+        setSuccessDetails({
+          delegateName: data.delegateName,
+          checkedInAt: data.checkedInAt,
+        });
+        setSuccessOpen(true);
+      } catch {
+        setError("Could not reach server. Check your connection and try again.");
+      } finally {
+        processingRef.current = false;
+        setIsCheckingIn(false);
       }
-      return;
-    }
-    if (!response.ok) {
-      setError(data.error || "Check-in failed.");
-      return;
-    }
-    setMessage(`Checked in successfully at ${new Date(data.checkedInAt).toLocaleString()}. Pass cannot be reused.`);
-    setVerified(null);
-    setError("");
-  };
+    },
+    [handleAlreadyUsed, markTokenAttempt, shouldSkipToken]
+  );
 
   const startScanner = async () => {
     setError("");
-    setMessage("");
     if (!scannerRef.current) {
       scannerRef.current = new Html5Qrcode(elementId);
     }
@@ -107,8 +132,8 @@ export default function QrScannerPanel() {
         { facingMode: "environment" },
         { fps: 10, qrbox: 220 },
         (decodedText) => {
-          setRawToken(decodedText);
-          void verifyToken(decodedText);
+          if (blockScanRef.current || processingRef.current) return;
+          void performCheckin(decodedText);
         },
         () => {}
       );
@@ -126,64 +151,62 @@ export default function QrScannerPanel() {
   };
 
   return (
-    <div className="card p-6 rounded-2xl">
-      <h3 className="text-lg font-bold mb-3" style={{ color: "var(--fg)" }}>Camera Check-in Scanner</h3>
-      <div className="flex gap-2 mb-3">
-        {!running ? (
-          <button className="btn btn-primary text-xs" onClick={() => void startScanner()}>
-            Start Camera
-          </button>
-        ) : (
-          <button className="btn btn-ghost text-xs" onClick={() => void stopScanner()}>
-            Stop Camera
-          </button>
-        )}
-        <button
-          className="btn btn-outline-blue text-xs"
-          onClick={() => void verifyToken(rawToken)}
-          disabled={!rawToken}
-        >
-          Re-verify
-        </button>
-      </div>
-
-      <div id={elementId} className="rounded-xl overflow-hidden" />
-
-      <div className="mt-3 space-y-2">
-        <input
-          className="input-base text-xs"
-          placeholder="Paste QR token manually"
-          value={rawToken}
-          onChange={(event) => setRawToken(event.target.value)}
-        />
-        <button className="btn btn-ghost text-xs" onClick={() => void verifyToken(rawToken)} disabled={!rawToken}>
-          Verify Pasted Token
-        </button>
-      </div>
-
-      {error && <p className="text-xs mt-3" style={{ color: "#dc2626" }}>{error}</p>}
-      {message && <p className="text-xs mt-3" style={{ color: "var(--blue)" }}>{message}</p>}
-
-      {verified?.valid && (
-        <div className="mt-4 p-4 rounded-xl" style={{ background: "var(--bg-subtle)" }}>
-          <p className="text-sm font-semibold" style={{ color: "var(--fg)" }}>{verified.delegateName}</p>
-          <p className="text-xs mt-1" style={{ color: "var(--fg-muted)" }}>
-            {verified.eventName} · {verified.categoryName}
-          </p>
-          <p className="text-xs mt-1" style={{ color: "var(--fg-muted)" }}>
-            Committee: {verified.committeeName || "N/A"} · Portfolio: {verified.portfolioName || "N/A"}
-          </p>
-          <p className="text-xs mt-1" style={{ color: "#16a34a" }}>
-            Valid pass — ready for one-time check-in
-          </p>
+    <>
+      <div className="card p-6 rounded-2xl">
+        <h3 className="text-lg font-bold mb-3" style={{ color: "var(--fg)" }}>
+          Camera Check-in Scanner
+        </h3>
+        <div className="flex gap-2 mb-3 flex-wrap">
+          {!running ? (
+            <button className="btn btn-primary text-xs" onClick={() => void startScanner()}>
+              Start Camera
+            </button>
+          ) : (
+            <button className="btn btn-ghost text-xs" onClick={() => void stopScanner()}>
+              Stop Camera
+            </button>
+          )}
           <button
-            className="btn btn-primary text-xs mt-3"
-            onClick={() => void handleCheckin()}
+            className="btn btn-outline-blue text-xs"
+            onClick={() => void performCheckin(rawToken)}
+            disabled={!rawToken || isCheckingIn}
           >
-            Confirm Check-in
+            Check in pasted token
           </button>
         </div>
-      )}
-    </div>
+
+        {isCheckingIn && (
+          <p className="text-xs mb-3" style={{ color: "var(--fg-muted)" }}>
+            Checking in…
+          </p>
+        )}
+
+        <div id={elementId} className="rounded-xl overflow-hidden" />
+
+        <div className="mt-3 space-y-2">
+          <input
+            className="input-base text-xs"
+            placeholder="Paste QR token manually"
+            value={rawToken}
+            onChange={(event) => setRawToken(event.target.value)}
+          />
+          <button
+            className="btn btn-primary text-xs"
+            onClick={() => void performCheckin(rawToken)}
+            disabled={!rawToken || isCheckingIn}
+          >
+            Check in
+          </button>
+        </div>
+
+        {error && (
+          <p className="text-xs mt-3" style={{ color: "#dc2626" }}>
+            {error}
+          </p>
+        )}
+      </div>
+
+      <ScanSuccessModal open={successOpen} details={successDetails} onClose={closeSuccessModal} />
+    </>
   );
 }
