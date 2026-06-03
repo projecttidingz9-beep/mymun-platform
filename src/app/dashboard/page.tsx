@@ -9,6 +9,7 @@ import Footer from "@/components/Footer";
 import AppRouteSkeleton from "@/components/AppRouteSkeleton";
 import { ensureServerSession } from "@/lib/client/session";
 import { downloadRegistrationInvoicePdf } from "@/lib/client/invoice-pdf";
+import { downloadPassTicketPdf } from "@/lib/client/pass-ticket-pdf";
 import { useAuth } from "@/lib/auth-context";
 import { DelegateMunAward, DelegateMunParticipation, Registration } from "@/lib/types";
 
@@ -61,6 +62,7 @@ export default function DashboardPage() {
     categoryName: string;
     registrationId: string;
     releaseAt: string;
+    issuedAt: string;
     released: boolean;
     checkedIn: boolean;
     checkedInAt?: string | null;
@@ -636,7 +638,7 @@ export default function DashboardPage() {
                             )}
                           </div>
                           {pass.released && pass.qrImageDataUrl ? (
-                            <div className="text-center">
+                            <div className="text-center flex flex-col items-center gap-2">
                               <Image
                                 src={pass.qrImageDataUrl}
                                 alt="Delegate QR code"
@@ -647,10 +649,29 @@ export default function DashboardPage() {
                               <a
                                 href={pass.qrImageDataUrl}
                                 download={`delegate-pass-${pass.registrationId}.png`}
-                                className="btn btn-ghost text-xs mt-2"
+                                className="btn btn-ghost text-xs w-full"
                               >
-                                Download Pass
+                                Download QR (PNG)
                               </a>
+                              <button
+                                type="button"
+                                className="btn btn-primary text-xs w-full"
+                                onClick={() =>
+                                  void downloadPassTicketPdf({
+                                    eventName: pass.eventName,
+                                    delegateName: user?.name ?? "Delegate",
+                                    categoryName: pass.categoryName,
+                                    committeeName: pass.committeeName,
+                                    portfolioName: pass.portfolioName,
+                                    registrationId: pass.registrationId,
+                                    passId: pass.id,
+                                    issuedAt: pass.issuedAt,
+                                    qrImageDataUrl: pass.qrImageDataUrl!,
+                                  })
+                                }
+                              >
+                                Download Ticket (PDF)
+                              </button>
                             </div>
                           ) : (
                             <span className="badge badge-gold">Locked</span>
