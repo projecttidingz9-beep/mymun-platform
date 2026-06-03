@@ -1,9 +1,81 @@
-import { OrganizerCommittee, PricingPhase, RegistrationCategory } from "./types";
+import {
+  CommitteePricingInfo,
+  OrganizerCommittee,
+  PricingPhase,
+  RegistrationCategory,
+} from "./types";
 
 const dateToDayNumber = (value: string) => {
   if (!value) return Number.NaN;
   return new Date(value).setHours(0, 0, 0, 0);
 };
+
+export function buildDefaultCommitteePrices(
+  committees: Pick<OrganizerCommittee, "id" | "name">[],
+  defaultPrice: number
+): CommitteePricingInfo[] {
+  const price = Math.max(0, Number(defaultPrice) || 0);
+  return committees.map((committee) => ({
+    committeeId: committee.id,
+    committeeName: committee.name,
+    price,
+  }));
+}
+
+export function upsertPhaseCommitteePrice(
+  phase: PricingPhase,
+  committeeId: string,
+  committeeName: string,
+  price: number
+): PricingPhase {
+  const normalizedPrice = Math.max(0, Number(price) || 0);
+  const existing = phase.committeePrices.find((entry) => entry.committeeId === committeeId);
+  if (existing) {
+    return {
+      ...phase,
+      committeePrices: phase.committeePrices.map((entry) =>
+        entry.committeeId === committeeId
+          ? { ...entry, committeeName, price: normalizedPrice }
+          : entry
+      ),
+    };
+  }
+  return {
+    ...phase,
+    committeePrices: [
+      ...phase.committeePrices,
+      { committeeId, committeeName, price: normalizedPrice },
+    ],
+  };
+}
+
+export function applyPhaseBasePriceToAllCommittees(
+  phase: PricingPhase,
+  committees: Pick<OrganizerCommittee, "id" | "name">[]
+): PricingPhase {
+  return {
+    ...phase,
+    committeePrices: buildDefaultCommitteePrices(committees, phase.basePrice),
+  };
+}
+
+export function mergeNewCommitteesIntoPhases(
+  phases: PricingPhase[],
+  committees: Pick<OrganizerCommittee, "id" | "name">[],
+  fallbackPrice?: number
+): PricingPhase[] {
+  return phases.map((phase) => {
+    const defaultForPhase = fallbackPrice ?? phase.basePrice;
+    let next = phase;
+    for (const committee of committees) {
+      const hasEntry = next.committeePrices.some((entry) => entry.committeeId === committee.id);
+      if (!hasEntry) {
+        next = upsertPhaseCommitteePrice(next, committee.id, committee.name, defaultForPhase);
+      }
+    }
+    return next;
+  });
+}
 
 export function getActivePhase(phases: PricingPhase[], referenceDate = new Date()): PricingPhase | null {
   const current = new Date(referenceDate).setHours(0, 0, 0, 0);

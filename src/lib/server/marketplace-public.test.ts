@@ -103,4 +103,20 @@ describe("mapPublishedEventToPublicDetail", () => {
     expect(detail.commonDocuments?.[0]?.title).toBe("Rules");
     expect(detail.reviews?.[0]?.userName).toBe("Alex");
   });
+
+  it("exposes awards and previous editions from blob", () => {
+    const event = makeEvent();
+    const blob = JSON.parse(
+      String(event.organizerConfig?.description).slice("__preview_json__:".length)
+    ) as Record<string, unknown>;
+    blob.awards = [{ id: "a1", category: "Best Delegate", prizeTitle: "Gold Medal" }];
+    blob.previousEditions = [
+      { id: "pe1", year: "2024", title: "First Edition", delegates: 80, highlights: "Strong debates" },
+    ];
+    event.organizerConfig!.description = `__preview_json__:${JSON.stringify(blob)}`;
+
+    const detail = mapPublishedEventToPublicDetail(event);
+    expect(detail.awards?.[0]?.prizeTitle).toBe("Gold Medal");
+    expect(detail.previousEditions?.[0]?.title).toBe("First Edition");
+  });
 });

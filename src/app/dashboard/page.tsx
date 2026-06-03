@@ -116,11 +116,12 @@ export default function DashboardPage() {
   const [invoicePreviewRegistrationId, setInvoicePreviewRegistrationId] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!authReady) return;
     if (!isLoggedIn) router.push("/");
     if (isLoggedIn && user?.role === "organizer") {
       router.push("/organizers/dashboard");
     }
-  }, [isLoggedIn, router, user?.role]);
+  }, [authReady, isLoggedIn, router, user?.role]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;

@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useCallback, useEffect, useState } from "react";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import Navbar from "@/components/Navbar";
@@ -10,11 +10,10 @@ import AuthModal from "@/components/AuthModal";
 import type { Conference, PublicConferenceDetail } from "@/lib/types";
 import { useAuth } from "@/lib/auth-context";
 import { getCategoryStartingPrice, getActivePhase, getPhaseStatus } from "@/lib/pricing";
-import {
-  mapOrganizerConferenceToMarketplaceConference,
-} from "@/lib/marketplace-conferences";
 import { resolveConferenceBannerImage } from "@/lib/conference-media";
-import { resolveConferenceScheduleDisplayDays } from "@/lib/conference-schedule";
+import {
+  resolvePublishedConferenceDisplay,
+} from "@/lib/public-conference-view";
 import { hasOrganizerConferenceAccess } from "@/lib/organizer-access";
 import AppRouteSkeleton from "@/components/AppRouteSkeleton";
 
@@ -44,30 +43,19 @@ const DEFAULT_OVERVIEW_AWARDS = [
 
 const DEFAULT_OVERVIEW_DOCUMENTS: { title: string; category: string; url: string }[] = [];
 
-const PREVIEW_JSON_PREFIX = "__preview_json__:";
-
-function sanitizeConferenceDescription(value: string | undefined): string {
-  if (!value) return "";
-  const trimmed = value.trim();
-  if (!trimmed.startsWith(PREVIEW_JSON_PREFIX)) return trimmed;
-  try {
-    const parsed = JSON.parse(trimmed.slice(PREVIEW_JSON_PREFIX.length)) as Record<string, unknown>;
-    return typeof parsed.description === "string" ? parsed.description.trim() : "";
-  } catch {
-    return "";
-  }
-}
-
 export default function ConferenceDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const {
     isLoggedIn,
     user,
     organizerConferences,
     addConferenceReview,
     updateOrganizerConferenceConfig,
+    syncOrganizerConferenceById,
     removeConferenceReview,
+    lastOrganizerSyncError,
   } = useAuth();
   const [tab, setTab] = useState<Tab>("overview");
   const [authOpen, setAuthOpen] = useState(false);
@@ -89,51 +77,52 @@ export default function ConferenceDetailPage() {
   >([]);
 
   const eventKey = String(params.id ?? "");
+  const refreshNonce = searchParams.get("refresh") === "1" ? 1 : 0;
   const [catalogConference, setCatalogConference] = useState<Conference | null>(null);
   const [publicDetail, setPublicDetail] = useState<PublicConferenceDetail | null>(null);
   const [catalogLoading, setCatalogLoading] = useState(true);
+  const [publicFetchGeneration, setPublicFetchGeneration] = useState(0);
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      setCatalogLoading(true);
-      try {
-        const [listRes, detailRes] = await Promise.all([
-          fetch("/api/marketplace", { cache: "no-store" }),
-          fetch(`/api/marketplace/${encodeURIComponent(eventKey)}`, { cache: "no-store" }),
-        ]);
-        const listData = (await listRes.json()) as { conferences?: Conference[] };
-        const list = Array.isArray(listData.conferences) ? listData.conferences : [];
-        const match =
-          list.find((c) => c.id === eventKey || c.slug === eventKey) ?? null;
-        let detail: PublicConferenceDetail | null = null;
-        if (detailRes.ok) {
-          const detailData = (await detailRes.json()) as { conference?: PublicConferenceDetail };
-          detail = detailData.conference ?? null;
-        }
-        if (!cancelled) {
-          setPublicDetail(detail);
-          setCatalogConference(match ?? detail);
-        }
-      } catch {
-        if (!cancelled) {
-          setCatalogConference(null);
-          setPublicDetail(null);
-        }
-      } finally {
-        if (!cancelled) setCatalogLoading(false);
+  const loadPublicConference = useCallback(async () => {
+    setCatalogLoading(true);
+    try {
+      const [listRes, detailRes] = await Promise.all([
+        fetch("/api/marketplace", { cache: "no-store" }),
+        fetch(`/api/marketplace/${encodeURIComponent(eventKey)}`, { cache: "no-store" }),
+      ]);
+      const listData = (await listRes.json()) as { conferences?: Conference[] };
+      const list = Array.isArray(listData.conferences) ? listData.conferences : [];
+      const match = list.find((c) => c.id === eventKey || c.slug === eventKey) ?? null;
+      let detail: PublicConferenceDetail | null = null;
+      if (detailRes.ok) {
+        const detailData = (await detailRes.json()) as { conference?: PublicConferenceDetail };
+        detail = detailData.conference ?? null;
       }
-    })();
-    return () => {
-      cancelled = true;
-    };
+      setPublicDetail(detail);
+      setCatalogConference(match ?? detail);
+    } catch {
+      setCatalogConference(null);
+      setPublicDetail(null);
+    } finally {
+      setCatalogLoading(false);
+    }
   }, [eventKey]);
 
+  useEffect(() => {
+    void loadPublicConference();
+  }, [eventKey, refreshNonce, publicFetchGeneration, loadPublicConference]);
+
+  useEffect(() => {
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") {
+        setPublicFetchGeneration((value) => value + 1);
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
+  }, []);
+
   const organizerConference = organizerConferences.find((event) => event.id === eventKey);
-  const conferenceFromOrganizer = organizerConference
-    ? mapOrganizerConferenceToMarketplaceConference(organizerConference)
-    : undefined;
-  const conference = conferenceFromOrganizer ?? catalogConference ?? undefined;
   const canPreviewUnpublishedConference = Boolean(
     organizerConference &&
       isLoggedIn &&
@@ -163,6 +152,17 @@ export default function ConferenceDetailPage() {
     ? [organizerConference, ...acceptedPartnerConferences]
     : [];
 
+  const publicView = resolvePublishedConferenceDisplay({
+    catalog: catalogConference,
+    publicDetail,
+    organizerConference,
+    mergedOrganizerConferences,
+    scheduleFallback: SCHEDULE,
+  });
+  const conference = publicView?.conference;
+  const useServerPublicContent = publicView?.useServerPublicContent ?? false;
+  const showOperationalOverlay = publicView?.hasOrganizerOperationalOverlay ?? false;
+
   if (organizerConference && organizerConference.status !== "Published" && !canPreviewUnpublishedConference) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ background: "var(--bg)" }}>
@@ -191,11 +191,14 @@ export default function ConferenceDetailPage() {
     );
   }
 
-  if (!organizerConference && catalogLoading) {
+  const waitingForPublishedCatalog =
+    (organizerConference?.status === "Published" || Boolean(publicDetail)) && catalogLoading && !conference;
+
+  if ((!organizerConference && catalogLoading) || waitingForPublishedCatalog) {
     return <AppRouteSkeleton />;
   }
 
-  if (!conference) {
+  if (!conference || !publicView) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ background: "var(--bg)" }}>
         <div className="relative text-center">
@@ -250,7 +253,7 @@ export default function ConferenceDetailPage() {
           }))
       )
     : [];
-  const mergedReviews = organizerConference
+  const mergedReviews = showOperationalOverlay
     ? mergedOrganizerConferences.flatMap((entry) =>
         (entry.reviews || [])
           .filter((review) => review.status === "approved")
@@ -260,7 +263,7 @@ export default function ConferenceDetailPage() {
         ...review,
         sourceConferenceTitle: c.title,
       }));
-  const dynamicStartingPrice = organizerConference
+  const dynamicStartingPrice = showOperationalOverlay
     ? mergedRegistrationCategories.length > 0
       ? Math.min(
           ...mergedRegistrationCategories.map((category) =>
@@ -272,12 +275,12 @@ export default function ConferenceDetailPage() {
         )
       : c.price
     : c.price;
-  const activeCategoryPhase = organizerConference
+  const activeCategoryPhase = showOperationalOverlay
     ? mergedRegistrationCategories
         .map((category) => getActivePhase(category.pricingPhases))
         .find(Boolean)
     : null;
-  const phaseStatusChips = organizerConference
+  const phaseStatusChips = showOperationalOverlay
     ? mergedRegistrationCategories.flatMap((category) =>
         category.pricingPhases.map((phase) => ({
           id: `${category.id}-${phase.id}`,
@@ -286,40 +289,21 @@ export default function ConferenceDetailPage() {
         }))
       )
     : [];
-  const displayTitle = organizerConference
-    ? mergedOrganizerConferences.map((entry) => entry.title).join(" x ")
-    : c.title;
-  const displayOrganizerName = organizerConference
-    ? organizerConference.organizerName
-    : publicDetail?.organizerName || c.organizer;
-  const displayDescription = organizerConference
-    ? mergedOrganizerConferences
-        .map((entry) => entry.description)
-        .filter(Boolean)
-        .join("\n\n")
-    : c.description;
-  const safeDisplayDescription =
-    sanitizeConferenceDescription(displayDescription) ||
-    "Conference details will be updated soon.";
-  const displayLocation = organizerConference
-    ? mergedOrganizerConferences
-        .map((entry) => entry.venue || `${entry.city}, ${entry.country}`)
-        .join(" | ")
-    : c.location;
+  const displayTitle = publicView.displayTitle;
+  const displayOrganizerName = publicView.displayOrganizerName;
+  const safeDisplayDescription = publicView.safeDisplayDescription;
+  const displayLocation = publicView.displayLocation;
   const displayOrganizerEmail = c.organizerEmail;
-  const displayWebsite =
-    organizerConference?.socialLinks?.website ||
-    publicDetail?.socialLinks?.website ||
-    c.website;
-  const displayInstagram =
-    organizerConference?.socialLinks?.instagram || publicDetail?.socialLinks?.instagram;
-  const displayLinkedin =
-    organizerConference?.socialLinks?.linkedin || publicDetail?.socialLinks?.linkedin;
-  const displayTwitter =
-    organizerConference?.socialLinks?.twitter || publicDetail?.socialLinks?.twitter;
-  const editableTags = Array.from(new Set([...c.tags, ...addedTags]));
-  const heroBannerImage = resolveConferenceBannerImage({ conference: c, organizerConference });
-  const heroLogoImage = organizerConference?.logoImageUrl || c.logoImageUrl;
+  const displayWebsite = publicView.displayWebsite;
+  const displayInstagram = publicView.displayInstagram;
+  const displayLinkedin = publicView.displayLinkedin;
+  const displayTwitter = publicView.displayTwitter;
+  const editableTags = Array.from(new Set([...publicView.displayTags, ...addedTags]));
+  const heroBannerImage = resolveConferenceBannerImage({
+    conference: c,
+    organizerConference: useServerPublicContent ? undefined : organizerConference,
+  });
+  const heroLogoImage = publicView.heroLogoImage;
   const heroLogoFallback = displayTitle
     .split(" ")
     .filter(Boolean)
@@ -327,31 +311,9 @@ export default function ConferenceDetailPage() {
     .map((part) => part[0]?.toUpperCase() || "")
     .join("") || "MUN";
   const isOrganizerUser = isLoggedIn && user?.role === "organizer";
-  const policySections = organizerConference
-    ? [
-        { key: "terms", label: "Terms and Conditions", value: organizerConference.termsAndConditions || "" },
-        { key: "refund", label: "Refund / Cancellation Policy", value: organizerConference.refundPolicy || "" },
-        { key: "conduct", label: "Code of Conduct", value: organizerConference.codeOfConduct || "" },
-        { key: "faq", label: "FAQ / Additional Notes", value: organizerConference.faqNotes || "" },
-      ].filter((entry) => entry.value.trim().length > 0)
-    : [
-        { key: "terms", label: "Terms and Conditions", value: publicDetail?.termsAndConditions || "" },
-        { key: "refund", label: "Refund / Cancellation Policy", value: publicDetail?.refundPolicy || "" },
-        { key: "conduct", label: "Code of Conduct", value: publicDetail?.codeOfConduct || "" },
-        { key: "faq", label: "FAQ / Additional Notes", value: publicDetail?.faqNotes || "" },
-      ].filter((entry) => entry.value.trim().length > 0);
-  const commonDocuments = organizerConference
-    ? mergedOrganizerConferences.flatMap((entry) =>
-        (entry.commonDocuments || []).map((document) => ({
-          ...document,
-          sourceConferenceTitle: entry.title,
-        }))
-      )
-    : (publicDetail?.commonDocuments || []).map((document) => ({
-        ...document,
-        sourceConferenceTitle: c.title,
-      }));
-  const committeeDocumentGroups = organizerConference
+  const policySections = publicView.policySections;
+  const commonDocuments = publicView.commonDocuments;
+  const committeeDocumentGroups = showOperationalOverlay
     ? mergedOrganizerConferences.flatMap((entry) =>
         entry.committees
           .filter((committee) => (committee.documents || []).length > 0)
@@ -364,11 +326,10 @@ export default function ConferenceDetailPage() {
       )
     : [];
   const fallbackOverviewAwards =
-    organizerConference && (organizerConference.awards ?? []).length > 0
-      ? (organizerConference.awards ?? []).map(
-          (award) => `${award.category}: ${award.prizeTitle || "Award"}`
-        )
+    publicView.overviewAwardLines.length > 0
+      ? publicView.overviewAwardLines
       : DEFAULT_OVERVIEW_AWARDS;
+  const displayPreviousEditions = publicView.previousEditions;
   const fallbackOverviewDocuments = (
     commonDocuments.length > 0
       ? commonDocuments
@@ -381,29 +342,20 @@ export default function ConferenceDetailPage() {
     const url = "url" in document ? String(document.url || "").trim() : "";
     return url.length > 0 && url !== "#";
   });
-  const delegateWhatsIncluded =
-    publicDetail?.whatIsIncluded && publicDetail.whatIsIncluded.length > 0
-      ? publicDetail.whatIsIncluded
-      : DEFAULT_WHATS_INCLUDED;
   const displayWhatsIncluded =
-    organizerConference && (organizerConference.whatIsIncluded || []).length > 0
-      ? organizerConference.whatIsIncluded || []
-      : delegateWhatsIncluded;
-  const scheduleGroups = resolveConferenceScheduleDisplayDays({
-    publicSchedule: publicDetail?.conferenceSchedule,
-    organizerSchedule: organizerConference?.conferenceSchedule,
-    fallback: SCHEDULE,
-  });
+    publicView.displayWhatsIncluded.length > 0 ? publicView.displayWhatsIncluded : DEFAULT_WHATS_INCLUDED;
+  const scheduleGroups =
+    publicView.scheduleGroups.length > 0 ? publicView.scheduleGroups : SCHEDULE;
 
   const defaultStats: Record<string, string | number> = {
-    Committees: organizerConference ? mergedCommittees.length : c.committees.length,
+    Committees: showOperationalOverlay ? mergedCommittees.length : c.committees.length,
     Capacity: `${derivedCapacity} delegates`,
     Registered: derivedRegistered,
     Days: "3-4 days",
     Level: c.level,
   };
 
-  const displayCommittees = organizerConference
+  const displayCommittees = showOperationalOverlay
     ? mergedCommittees.map((cm) => ({
         id: cm.id,
         abbreviation: (cm.type || "Committee").slice(0, 8).toUpperCase(),
@@ -429,10 +381,10 @@ export default function ConferenceDetailPage() {
         sourceConferenceTitle: c.title,
         documents: [],
       }));
-  const localPendingReviews = organizerConference
-    ? (organizerConference.reviews || []).filter((review) => review.status === "pending")
+  const localPendingReviews = showOperationalOverlay
+    ? (organizerConference?.reviews || []).filter((review) => review.status === "pending")
     : [];
-  const reviewsToShow = organizerConference
+  const reviewsToShow = showOperationalOverlay
     ? [...instantReviews, ...localPendingReviews, ...mergedReviews]
     : [...mergedReviews, ...instantReviews];
   const averageRating = reviewsToShow.length
@@ -505,7 +457,7 @@ export default function ConferenceDetailPage() {
 
   const tabs: { key: Tab; label: string }[] = [
     { key: "overview", label: "Overview" },
-    { key: "committees", label: `Committees (${organizerConference ? mergedCommittees.length : c.committees.length})` },
+    { key: "committees", label: `Committees (${showOperationalOverlay ? mergedCommittees.length : c.committees.length})` },
     { key: "schedule", label: "Schedule" },
     { key: "organizer", label: "Organizer" },
     { key: "reviews", label: `Reviews (${reviewsToShow.length})` },
@@ -516,6 +468,24 @@ export default function ConferenceDetailPage() {
 
       <Navbar openAuthModal={() => setAuthOpen(true)} />
       <AuthModal isOpen={authOpen} onClose={() => setAuthOpen(false)} />
+
+      {isOrganizerUser && lastOrganizerSyncError && (
+        <div
+          className="mx-auto max-w-5xl px-4 pt-4"
+          role="status"
+        >
+          <p
+            className="text-sm rounded-xl px-4 py-3"
+            style={{
+              color: "var(--danger-fg)",
+              background: "var(--danger-bg)",
+              border: "1px solid var(--danger-border)",
+            }}
+          >
+            Your latest dashboard edits may not be on the public page yet: {lastOrganizerSyncError}
+          </p>
+        </div>
+      )}
 
       <div className="conference-banner-shell pt-[calc(6rem+env(safe-area-inset-top,0px))]">
         <div className="max-w-7xl 2xl:max-w-[1320px] mx-auto px-4 sm:px-6 2xl:px-8 pt-4">
@@ -978,16 +948,14 @@ export default function ConferenceDetailPage() {
               <div className="lux-card p-6 sm:p-7">
                 <h2 className="text-2xl font-bold mb-4" style={{ color: "var(--fg)" }}>Previous Editions</h2>
                 <div className="grid md:grid-cols-2 gap-4">
-                  {((organizerConference?.previousEditions ?? []).length > 0
-                    ? organizerConference?.previousEditions ?? []
-                    : []).map((edition) => (
+                  {(displayPreviousEditions.length > 0 ? displayPreviousEditions : []).map((edition) => (
                     <div key={edition.id} className="conference-surface rounded-2xl p-4">
                       <p className="text-sm font-semibold" style={{ color: "var(--fg)" }}>{edition.year} - {edition.title}</p>
                       <p className="text-xs mt-1" style={{ color: "var(--fg-muted)" }}>{edition.delegates} delegates</p>
                       {edition.highlights && <p className="text-xs mt-1" style={{ color: "var(--fg-muted)" }}>{edition.highlights}</p>}
                     </div>
                   ))}
-                  {(organizerConference?.previousEditions ?? []).length === 0 && (
+                  {displayPreviousEditions.length === 0 && (
                     <p className="text-sm" style={{ color: "var(--fg-muted)" }}>No previous editions added yet.</p>
                   )}
                 </div>

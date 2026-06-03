@@ -97,6 +97,12 @@ export async function PATCH(
     conferenceSchedule: Array.isArray(body.conferenceSchedule)
       ? normalizeConferenceScheduleEntries(body.conferenceSchedule)
       : undefined,
+    awards: Array.isArray(body.awards) ? body.awards : undefined,
+    previousEditions: Array.isArray(body.previousEditions) ? body.previousEditions : undefined,
+    commonDocuments: Array.isArray(body.commonDocuments) ? body.commonDocuments : undefined,
+    registrationCategories: Array.isArray(body.registrationCategories)
+      ? body.registrationCategories
+      : undefined,
   };
 
   await mergeOrganizerStoredBlob(eventId, previewPatch);

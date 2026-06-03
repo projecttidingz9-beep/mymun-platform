@@ -13,8 +13,9 @@ export default function NotificationsPage() {
   const { user, isLoggedIn, authReady, notifications, markNotificationRead } = useAuth();
 
   useEffect(() => {
+    if (!authReady) return;
     if (!isLoggedIn) router.push("/");
-  }, [isLoggedIn, router]);
+  }, [authReady, isLoggedIn, router]);
 
   useEffect(() => {
     if (!isLoggedIn || !user) return;

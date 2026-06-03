@@ -18,7 +18,13 @@ import {
   OrganizerDocumentCategory,
   OrganizerStatusEmailTemplateKey,
 } from "@/lib/types";
-import { getActivePhase } from "@/lib/pricing";
+import {
+  applyPhaseBasePriceToAllCommittees,
+  buildDefaultCommitteePrices,
+  getActivePhase,
+  mergeNewCommitteesIntoPhases,
+  upsertPhaseCommitteePrice,
+} from "@/lib/pricing";
 import {
   getCategoryRegistrationLabel,
   getCategoryTypeLabel,
@@ -337,6 +343,7 @@ export default function OrganizerDashboardPage() {
     assignApplicant,
     unassignApplicant,
     updateOrganizerConferenceConfig,
+    syncOrganizerConferenceById,
     updateOrganizerCommitteeConfig,
     addOrganizerCommittee,
     removeOrganizerCommittee,
@@ -845,6 +852,7 @@ export default function OrganizerDashboardPage() {
   };
 
   useEffect(() => {
+    if (!authReady) return;
     if (!isLoggedIn) {
       router.push("/organizers");
       return;
@@ -852,7 +860,7 @@ export default function OrganizerDashboardPage() {
     if (user?.role === "delegate") {
       router.push("/dashboard");
     }
-  }, [isLoggedIn, user, router]);
+  }, [authReady, isLoggedIn, user, router]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -1057,7 +1065,11 @@ export default function OrganizerDashboardPage() {
           .filter(Boolean),
         conferenceSchedule: savedSchedule,
       });
-      setPreviewSaveStatus("Preview and policy changes saved.");
+      const syncResult = await syncOrganizerConferenceById(selectedConference.id);
+      if (!syncResult.ok) {
+        throw new Error(syncResult.error || "Saved locally but could not sync to the public MUN page.");
+      }
+      setPreviewSaveStatus("Changes saved and are live on the public MUN page.");
       window.setTimeout(() => setPreviewSaveStatus(""), 3500);
     } catch (error) {
       setPreviewSaveStatus(error instanceof Error ? error.message : "Unable to save preview settings. Please try again.");
@@ -1591,7 +1603,24 @@ export default function OrganizerDashboardPage() {
       basePrice: Number.isFinite(parsed) && parsed >= 0 ? parsed : 0,
     });
   };
+  const syncDelegatePhasesForNewCommittee = (
+    conferenceId: string,
+    committee: Pick<OrganizerConference["committees"][number], "id" | "name">
+  ) => {
+    if (!selectedConference) return;
+    const delegateCategory = selectedConference.registrationCategories.find(
+      (entry) => (entry.applicationType || "delegate") === "delegate"
+    );
+    if (!delegateCategory || (delegateCategory.pricingPhases || []).length === 0) return;
+    const nextPhases = mergeNewCommitteesIntoPhases(
+      delegateCategory.pricingPhases,
+      [committee]
+    );
+    updateRegistrationCategoryConfig(conferenceId, delegateCategory.id, { pricingPhases: nextPhases });
+  };
   const addCategoryPricingPhase = (conferenceId: string, category: OrganizerConference["registrationCategories"][number]) => {
+    const phaseBase = category.basePrice || 0;
+    const committees = selectedConference?.committees ?? [];
     const nextPhases = [
       ...(category.pricingPhases || []),
       {
@@ -1599,11 +1628,44 @@ export default function OrganizerDashboardPage() {
         name: "New Phase",
         startDate: "",
         endDate: "",
-        basePrice: category.basePrice || 0,
-        committeePrices: [],
+        basePrice: phaseBase,
+        committeePrices: buildDefaultCommitteePrices(committees, phaseBase),
       },
     ];
     updateRegistrationCategoryConfig(conferenceId, category.id, { pricingPhases: nextPhases });
+  };
+  const updatePhaseCommitteePrice = (
+    conferenceId: string,
+    category: OrganizerConference["registrationCategories"][number],
+    phaseId: string,
+    committeeId: string,
+    committeeName: string,
+    priceInput: string
+  ) => {
+    const phase = (category.pricingPhases || []).find((entry) => entry.id === phaseId);
+    if (!phase) return;
+    const parsed = Number(priceInput);
+    const nextPhase = upsertPhaseCommitteePrice(
+      phase,
+      committeeId,
+      committeeName,
+      Number.isFinite(parsed) && parsed >= 0 ? parsed : 0
+    );
+    updateCategoryPricingPhase(conferenceId, category, phaseId, {
+      committeePrices: nextPhase.committeePrices,
+    });
+  };
+  const applyPhaseBasePriceToCommittees = (
+    conferenceId: string,
+    category: OrganizerConference["registrationCategories"][number],
+    phaseId: string
+  ) => {
+    const phase = (category.pricingPhases || []).find((entry) => entry.id === phaseId);
+    if (!phase || !selectedConference) return;
+    const nextPhase = applyPhaseBasePriceToAllCommittees(phase, selectedConference.committees);
+    updateCategoryPricingPhase(conferenceId, category, phaseId, {
+      committeePrices: nextPhase.committeePrices,
+    });
   };
   const updateCategoryPricingPhase = (
     conferenceId: string,
@@ -2270,6 +2332,14 @@ export default function OrganizerDashboardPage() {
                         {selectedConference.title}
                       </h2>
                       <div className="flex items-center gap-2 flex-wrap">
+                        <Link
+                          href={`/conference/${selectedConference.id}?refresh=1`}
+                          className="btn btn-ghost text-xs"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          View public MUN page
+                        </Link>
                         <span className={`badge ${STATUS_STYLES[selectedConference.status]}`}>
                           {selectedConference.status}
                         </span>
@@ -2364,11 +2434,19 @@ export default function OrganizerDashboardPage() {
                           rows={5}
                           placeholder={"What's Included (one item per line)\nDelegate kit\nSocial events\nCertificate"}
                         />
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                          <input value={previewDraft.website} onChange={(event) => setPreviewDraft((prev) => ({ ...prev, website: event.target.value }))} className="input-base text-sm" placeholder="Website URL" />
-                          <input value={previewDraft.instagram} onChange={(event) => setPreviewDraft((prev) => ({ ...prev, instagram: event.target.value }))} className="input-base text-sm" placeholder="Instagram URL" />
-                          <input value={previewDraft.linkedin} onChange={(event) => setPreviewDraft((prev) => ({ ...prev, linkedin: event.target.value }))} className="input-base text-sm" placeholder="LinkedIn URL" />
-                          <input value={previewDraft.twitter} onChange={(event) => setPreviewDraft((prev) => ({ ...prev, twitter: event.target.value }))} className="input-base text-sm" placeholder="X/Twitter URL" />
+                        <div
+                          className="mt-4 pt-4 space-y-3"
+                          style={{ borderTop: "1px solid var(--border)" }}
+                        >
+                          <p className="text-xs font-semibold" style={{ color: "var(--fg-muted)" }}>
+                            Social links
+                          </p>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <input value={previewDraft.website} onChange={(event) => setPreviewDraft((prev) => ({ ...prev, website: event.target.value }))} className="input-base text-sm" placeholder="Website URL" />
+                            <input value={previewDraft.instagram} onChange={(event) => setPreviewDraft((prev) => ({ ...prev, instagram: event.target.value }))} className="input-base text-sm" placeholder="Instagram URL" />
+                            <input value={previewDraft.linkedin} onChange={(event) => setPreviewDraft((prev) => ({ ...prev, linkedin: event.target.value }))} className="input-base text-sm" placeholder="LinkedIn URL" />
+                            <input value={previewDraft.twitter} onChange={(event) => setPreviewDraft((prev) => ({ ...prev, twitter: event.target.value }))} className="input-base text-sm" placeholder="X/Twitter URL" />
+                          </div>
                         </div>
                       </div>
                       <div className="rounded-2xl overflow-hidden" style={{ border: "1.5px solid var(--border)" }}>
@@ -2403,201 +2481,201 @@ export default function OrganizerDashboardPage() {
                         </div>
                       </div>
                     </div>
-                    <div
-                      className="mt-6 rounded-xl p-4 sm:p-5 space-y-4 w-full"
-                      style={{ border: "1px solid var(--border)" }}
-                    >
-                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                        <div>
-                          <p className="text-sm font-semibold" style={{ color: "var(--fg)" }}>
-                            Conference Schedule
-                          </p>
-                          <p className="text-xs mt-1" style={{ color: "var(--fg-muted)" }}>
-                            Shown on the public MUN page Schedule tab after you save.
-                          </p>
-                        </div>
-                        <button
-                          type="button"
-                          className="btn btn-primary text-xs shrink-0 self-start sm:self-auto"
-                          onClick={() =>
-                            setPreviewScheduleDraft((prev) => {
-                              const nextDay = `Day ${new Set(prev.map((entry) => entry.day)).size + 1}`;
-                              return [
-                                ...prev,
-                                {
-                                  id: `schedule-${Date.now()}`,
-                                  day: nextDay,
-                                  fromTime: "",
-                                  toTime: "",
-                                  title: "",
-                                },
-                              ];
-                            })
-                          }
-                        >
-                          + Add Day
-                        </button>
-                      </div>
-                      {previewScheduleDraft.length === 0 && (
-                        <p className="text-sm" style={{ color: "var(--fg-muted)" }}>
-                          No schedule events yet. Add a day, then add events with from, to, and title.
+                  </div>
+                  )}
+
+                  {activeSection === "preview" && (
+                  <div className="card p-6 rounded-2xl mt-6">
+                    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-6">
+                      <div>
+                        <h3 className="text-lg font-bold" style={{ color: "var(--fg)" }}>
+                          Conference Schedule
+                        </h3>
+                        <p className="text-sm mt-1" style={{ color: "var(--fg-muted)" }}>
+                          Shown on the public MUN page Schedule tab after you save Preview Settings.
                         </p>
-                      )}
-                      <div className="space-y-4">
-                        {previewScheduleByDay.map((dayGroup) => (
-                          <div
-                            key={dayGroup.dayName}
-                            className="rounded-lg p-4 space-y-4"
-                            style={{ border: "1px solid var(--border)", background: "var(--bg-subtle)" }}
-                          >
-                            <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-                              <div className="flex-1 min-w-0">
-                                <label className="text-xs font-semibold block mb-1" style={{ color: "var(--fg-muted)" }}>
-                                  Day
-                                </label>
-                                <input
-                                  className="input-base text-sm w-full"
-                                  value={dayGroup.dayName}
-                                  onChange={(event) =>
-                                    setPreviewScheduleDraft((prev) =>
-                                      prev.map((item) =>
-                                        item.day === dayGroup.dayName ? { ...item, day: event.target.value } : item
-                                      )
+                      </div>
+                      <button
+                        type="button"
+                        className="btn btn-primary text-xs shrink-0 self-start sm:self-auto"
+                        onClick={() =>
+                          setPreviewScheduleDraft((prev) => {
+                            const nextDay = `Day ${new Set(prev.map((entry) => entry.day)).size + 1}`;
+                            return [
+                              ...prev,
+                              {
+                                id: `schedule-${Date.now()}`,
+                                day: nextDay,
+                                fromTime: "",
+                                toTime: "",
+                                title: "",
+                              },
+                            ];
+                          })
+                        }
+                      >
+                        + Add Day
+                      </button>
+                    </div>
+                    {previewScheduleDraft.length === 0 && (
+                      <p className="text-sm text-center py-6" style={{ color: "var(--fg-muted)" }}>
+                        No schedule events yet. Add a day, then add events with from, to, and title.
+                      </p>
+                    )}
+                    <div className="space-y-6">
+                      {previewScheduleByDay.map((dayGroup) => (
+                        <div
+                          key={dayGroup.dayName}
+                          className="rounded-xl p-4 sm:p-5 space-y-5"
+                          style={{ border: "1px solid var(--border)", background: "var(--bg-subtle)" }}
+                        >
+                          <div className="space-y-3">
+                            <div className="min-w-0">
+                              <label className="text-xs font-semibold block mb-1" style={{ color: "var(--fg-muted)" }}>
+                                Day
+                              </label>
+                              <input
+                                className="input-base text-sm w-full"
+                                value={dayGroup.dayName}
+                                onChange={(event) =>
+                                  setPreviewScheduleDraft((prev) =>
+                                    prev.map((item) =>
+                                      item.day === dayGroup.dayName ? { ...item, day: event.target.value } : item
                                     )
-                                  }
-                                  placeholder="Day name"
-                                />
-                              </div>
-                              <div className="flex flex-wrap items-center gap-2 shrink-0">
-                                <button
-                                  type="button"
-                                  className="btn btn-ghost text-xs"
-                                  onClick={() =>
-                                    setPreviewScheduleDraft((prev) => [
-                                      ...prev,
-                                      {
-                                        id: `schedule-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-                                        day: dayGroup.dayName,
-                                        fromTime: "",
-                                        toTime: "",
-                                        title: "",
-                                      },
-                                    ])
-                                  }
-                                >
-                                  + Add Event
-                                </button>
-                                <button
-                                  type="button"
-                                  className="btn btn-danger-ghost text-xs"
-                                  onClick={() =>
-                                    setPreviewScheduleDraft((prev) =>
-                                      prev.filter((item) => item.day !== dayGroup.dayName)
-                                    )
-                                  }
-                                >
-                                  Remove Day
-                                </button>
-                              </div>
+                                  )
+                                }
+                                placeholder="Day name"
+                              />
                             </div>
-                            <div className="space-y-3">
-                              {dayGroup.events.length > 0 && (
-                                <div
-                                  className="hidden xl:grid gap-3 text-xs font-semibold px-1"
-                                  style={{
-                                    color: "var(--fg-muted)",
-                                    gridTemplateColumns:
-                                      "minmax(7rem, 1fr) minmax(7rem, 1fr) minmax(0, 2fr) auto",
-                                  }}
-                                >
-                                  <span>From</span>
-                                  <span>To</span>
-                                  <span>Event</span>
-                                  <span className="sr-only">Actions</span>
-                                </div>
-                              )}
-                              {dayGroup.events.map((entry) => (
-                                <div
-                                  key={entry.id}
-                                  className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-[minmax(7rem,1fr)_minmax(7rem,1fr)_minmax(0,2fr)_auto] gap-3 items-end"
-                                >
-                                  <div>
-                                    <label
-                                      className="text-xs font-semibold block mb-1 xl:hidden"
-                                      style={{ color: "var(--fg-muted)" }}
-                                    >
-                                      From
-                                    </label>
-                                    <input
-                                      className="input-base text-sm w-full"
-                                      value={entry.fromTime}
-                                      onChange={(event) =>
-                                        setPreviewScheduleDraft((prev) =>
-                                          prev.map((item) =>
-                                            item.id === entry.id
-                                              ? { ...item, fromTime: event.target.value }
-                                              : item
-                                          )
-                                        )
-                                      }
-                                      placeholder="09:00"
-                                    />
-                                  </div>
-                                  <div>
-                                    <label
-                                      className="text-xs font-semibold block mb-1 xl:hidden"
-                                      style={{ color: "var(--fg-muted)" }}
-                                    >
-                                      To
-                                    </label>
-                                    <input
-                                      className="input-base text-sm w-full"
-                                      value={entry.toTime}
-                                      onChange={(event) =>
-                                        setPreviewScheduleDraft((prev) =>
-                                          prev.map((item) =>
-                                            item.id === entry.id ? { ...item, toTime: event.target.value } : item
-                                          )
-                                        )
-                                      }
-                                      placeholder="10:30"
-                                    />
-                                  </div>
-                                  <div className="sm:col-span-2 xl:col-span-1">
-                                    <label
-                                      className="text-xs font-semibold block mb-1 xl:hidden"
-                                      style={{ color: "var(--fg-muted)" }}
-                                    >
-                                      Event
-                                    </label>
-                                    <input
-                                      className="input-base text-sm w-full"
-                                      value={entry.title}
-                                      onChange={(event) =>
-                                        setPreviewScheduleDraft((prev) =>
-                                          prev.map((item) =>
-                                            item.id === entry.id ? { ...item, title: event.target.value } : item
-                                          )
-                                        )
-                                      }
-                                      placeholder="Opening ceremony"
-                                    />
-                                  </div>
-                                  <button
-                                    type="button"
-                                    className="btn btn-danger-ghost text-xs w-full sm:w-auto xl:justify-self-end"
-                                    onClick={() =>
-                                      setPreviewScheduleDraft((prev) => prev.filter((item) => item.id !== entry.id))
-                                    }
-                                  >
-                                    Remove
-                                  </button>
-                                </div>
-                              ))}
+                            <div className="flex flex-wrap items-center gap-2">
+                              <button
+                                type="button"
+                                className="btn btn-ghost text-xs"
+                                onClick={() =>
+                                  setPreviewScheduleDraft((prev) => [
+                                    ...prev,
+                                    {
+                                      id: `schedule-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                                      day: dayGroup.dayName,
+                                      fromTime: "",
+                                      toTime: "",
+                                      title: "",
+                                    },
+                                  ])
+                                }
+                              >
+                                + Add Event
+                              </button>
+                              <button
+                                type="button"
+                                className="btn btn-danger-ghost text-xs"
+                                onClick={() =>
+                                  setPreviewScheduleDraft((prev) =>
+                                    prev.filter((item) => item.day !== dayGroup.dayName)
+                                  )
+                                }
+                              >
+                                Remove Day
+                              </button>
                             </div>
                           </div>
-                        ))}
-                      </div>
+                          <div className="space-y-4">
+                            {dayGroup.events.length > 0 && (
+                              <div
+                                className="hidden lg:grid gap-4 text-xs font-semibold px-1"
+                                style={{
+                                  color: "var(--fg-muted)",
+                                  gridTemplateColumns:
+                                    "minmax(7rem, 1fr) minmax(7rem, 1fr) minmax(0, 2fr) auto",
+                                }}
+                              >
+                                <span>From</span>
+                                <span>To</span>
+                                <span>Event</span>
+                                <span className="sr-only">Actions</span>
+                              </div>
+                            )}
+                            {dayGroup.events.map((entry) => (
+                              <div
+                                key={entry.id}
+                                className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[minmax(7rem,1fr)_minmax(7rem,1fr)_minmax(0,2fr)_auto] gap-4 items-end"
+                              >
+                                <div>
+                                  <label
+                                    className="text-xs font-semibold block mb-1 lg:hidden"
+                                    style={{ color: "var(--fg-muted)" }}
+                                  >
+                                    From
+                                  </label>
+                                  <input
+                                    className="input-base text-sm w-full"
+                                    value={entry.fromTime}
+                                    onChange={(event) =>
+                                      setPreviewScheduleDraft((prev) =>
+                                        prev.map((item) =>
+                                          item.id === entry.id
+                                            ? { ...item, fromTime: event.target.value }
+                                            : item
+                                        )
+                                      )
+                                    }
+                                    placeholder="09:00"
+                                  />
+                                </div>
+                                <div>
+                                  <label
+                                    className="text-xs font-semibold block mb-1 lg:hidden"
+                                    style={{ color: "var(--fg-muted)" }}
+                                  >
+                                    To
+                                  </label>
+                                  <input
+                                    className="input-base text-sm w-full"
+                                    value={entry.toTime}
+                                    onChange={(event) =>
+                                      setPreviewScheduleDraft((prev) =>
+                                        prev.map((item) =>
+                                          item.id === entry.id ? { ...item, toTime: event.target.value } : item
+                                        )
+                                      )
+                                    }
+                                    placeholder="10:30"
+                                  />
+                                </div>
+                                <div className="sm:col-span-2 lg:col-span-1">
+                                  <label
+                                    className="text-xs font-semibold block mb-1 lg:hidden"
+                                    style={{ color: "var(--fg-muted)" }}
+                                  >
+                                    Event
+                                  </label>
+                                  <input
+                                    className="input-base text-sm w-full"
+                                    value={entry.title}
+                                    onChange={(event) =>
+                                      setPreviewScheduleDraft((prev) =>
+                                        prev.map((item) =>
+                                          item.id === entry.id ? { ...item, title: event.target.value } : item
+                                        )
+                                      )
+                                    }
+                                    placeholder="Opening ceremony"
+                                  />
+                                </div>
+                                <button
+                                  type="button"
+                                  className="btn btn-danger-ghost text-xs w-full sm:w-auto lg:justify-self-end"
+                                  onClick={() =>
+                                    setPreviewScheduleDraft((prev) => prev.filter((item) => item.id !== entry.id))
+                                  }
+                                >
+                                  Remove
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
                   )}
@@ -2710,7 +2788,9 @@ export default function OrganizerDashboardPage() {
                     <div className="app-sticky-bar">
                       <div>
                         <p className="app-sticky-bar-copy">You have unsaved preview edits.</p>
-                        <p className="app-sticky-bar-copy-muted">Save to publish changes to your conference page.</p>
+                        <p className="app-sticky-bar-copy-muted">
+                          Save to sync changes to the public MUN page (delegates see the marketplace API).
+                        </p>
                       </div>
                       <div className="flex items-center gap-2">
                         <button
@@ -3276,7 +3356,7 @@ export default function OrganizerDashboardPage() {
                                 assignedApplicantIds: [] as string[],
                               }))
                               .filter((member) => member.name);
-                            addOrganizerCommittee(selectedConference.id, {
+                            const createdCommittee = addOrganizerCommittee(selectedConference.id, {
                               name: committeeDraft.name.trim(),
                               agenda: committeeDraft.agenda.trim(),
                               committeeType: committeeDraft.committeeType,
@@ -3296,6 +3376,9 @@ export default function OrganizerDashboardPage() {
                               customQuestions: [],
                               portfolios: normalizedMembers,
                             });
+                            if (createdCommittee) {
+                              syncDelegatePhasesForNewCommittee(selectedConference.id, createdCommittee);
+                            }
                             setCommitteeDraft({
                               name: "",
                               agenda: "",
@@ -4368,7 +4451,7 @@ export default function OrganizerDashboardPage() {
                                 </p>
                               ) : category.pricingPhases.length === 0 ? (
                                 <p className="text-xs" style={{ color: "var(--fg-muted)" }}>
-                                  No pricing phases yet. Add one if you want date-based prices.
+                                  No pricing phases yet. Add a pricing phase to set date-based and committee-specific delegate prices.
                                 </p>
                               ) : (
                                 <div className="space-y-2">
@@ -4417,6 +4500,86 @@ export default function OrganizerDashboardPage() {
                                           }
                                         />
                                       </div>
+                                      {!isChairCategory && (
+                                        <div className="mt-3 space-y-2">
+                                          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                                            <div>
+                                              <p className="text-xs font-semibold" style={{ color: "var(--fg)" }}>
+                                                Committee prices
+                                              </p>
+                                              <p className="text-[11px] mt-0.5" style={{ color: "var(--fg-muted)" }}>
+                                                Delegates pay these amounts when they select a committee during this phase.
+                                                Prices are saved with your conference sync (not committee base price fields).
+                                              </p>
+                                            </div>
+                                            <button
+                                              type="button"
+                                              className="btn btn-ghost text-xs shrink-0 self-start"
+                                              onClick={() =>
+                                                applyPhaseBasePriceToCommittees(
+                                                  selectedConference.id,
+                                                  category,
+                                                  phase.id
+                                                )
+                                              }
+                                              disabled={selectedConference.committees.length === 0}
+                                            >
+                                              Apply phase base to all
+                                            </button>
+                                          </div>
+                                          {selectedConference.committees.length === 0 ? (
+                                            <p className="text-xs" style={{ color: "var(--fg-muted)" }}>
+                                              Add committees under Committees &amp; Matrix first.
+                                            </p>
+                                          ) : (
+                                            <div className="space-y-2">
+                                              <div
+                                                className="hidden sm:grid gap-2 text-[11px] font-semibold px-1"
+                                                style={{
+                                                  color: "var(--fg-muted)",
+                                                  gridTemplateColumns: "minmax(0, 1.5fr) minmax(7rem, 1fr)",
+                                                }}
+                                              >
+                                                <span>Committee</span>
+                                                <span>Price</span>
+                                              </div>
+                                              {selectedConference.committees.map((committee) => {
+                                                const row =
+                                                  phase.committeePrices.find(
+                                                    (entry) => entry.committeeId === committee.id
+                                                  ) ??
+                                                  buildDefaultCommitteePrices([committee], phase.basePrice)[0];
+                                                return (
+                                                  <div
+                                                    key={`${phase.id}-${committee.id}`}
+                                                    className="grid grid-cols-1 sm:grid-cols-[minmax(0,1.5fr)_minmax(7rem,1fr)] gap-2 items-center"
+                                                  >
+                                                    <p className="text-xs font-medium truncate" style={{ color: "var(--fg)" }}>
+                                                      {committee.name}
+                                                    </p>
+                                                    <input
+                                                      className="input-base text-xs"
+                                                      type="number"
+                                                      min={0}
+                                                      value={row?.price ?? phase.basePrice}
+                                                      onChange={(event) =>
+                                                        updatePhaseCommitteePrice(
+                                                          selectedConference.id,
+                                                          category,
+                                                          phase.id,
+                                                          committee.id,
+                                                          committee.name,
+                                                          event.target.value
+                                                        )
+                                                      }
+                                                    />
+                                                  </div>
+                                                );
+                                              })}
+                                            </div>
+                                          )}
+                                        </div>
+                                      )}
                                       <div className="flex justify-end mt-2">
                                         <button
                                           className="btn btn-ghost text-xs mr-2"

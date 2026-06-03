@@ -1,4 +1,10 @@
-import type { Conference, OrganizerDocument, PublicConferenceDetail } from "@/lib/types";
+import type {
+  Conference,
+  OrganizerAwardConfig,
+  OrganizerDocument,
+  OrganizerPreviousEdition,
+  PublicConferenceDetail,
+} from "@/lib/types";
 import type { CommitteeConfig, Event, OrganizerConferenceConfig, PricingPhaseConfig, User } from "@/generated/prisma/client";
 import { moneyNumber } from "@/lib/server/decimal-money";
 import { decodeOrganizerDescription } from "@/lib/server/organizer-description";
@@ -96,6 +102,53 @@ export type EventWithListing = Event & {
 function blobString(blob: Record<string, unknown> | null, key: string): string | undefined {
   const value = blob?.[key];
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function normalizeBlobAwards(blob: Record<string, unknown> | null): OrganizerAwardConfig[] | undefined {
+  if (!Array.isArray(blob?.awards)) return undefined;
+  const awards: OrganizerAwardConfig[] = [];
+  for (const entry of blob.awards as unknown[]) {
+    if (!entry || typeof entry !== "object") continue;
+    const item = entry as Record<string, unknown>;
+    const category = typeof item.category === "string" ? item.category.trim() : "";
+    if (!category) continue;
+    awards.push({
+      id: String(item.id || `award-${awards.length}`),
+      category,
+      prizeTitle: typeof item.prizeTitle === "string" ? item.prizeTitle : undefined,
+      description: typeof item.description === "string" ? item.description : undefined,
+    });
+  }
+  return awards.length > 0 ? awards : undefined;
+}
+
+function normalizeBlobPreviousEditions(
+  blob: Record<string, unknown> | null
+): OrganizerPreviousEdition[] | undefined {
+  if (!Array.isArray(blob?.previousEditions)) return undefined;
+  const editions: OrganizerPreviousEdition[] = [];
+  for (const entry of blob.previousEditions as unknown[]) {
+    if (!entry || typeof entry !== "object") continue;
+    const item = entry as Record<string, unknown>;
+    const title = typeof item.title === "string" ? item.title.trim() : "";
+    const year = typeof item.year === "string" ? item.year.trim() : String(item.year ?? "").trim();
+    if (!title || !year) continue;
+    const delegatesRaw = item.delegates;
+    const delegates =
+      typeof delegatesRaw === "number"
+        ? delegatesRaw
+        : typeof delegatesRaw === "string"
+          ? Number(delegatesRaw)
+          : 0;
+    editions.push({
+      id: String(item.id || `edition-${editions.length}`),
+      year,
+      title,
+      delegates: Number.isFinite(delegates) && delegates >= 0 ? Math.floor(delegates) : 0,
+      highlights: typeof item.highlights === "string" ? item.highlights : undefined,
+    });
+  }
+  return editions.length > 0 ? editions : undefined;
 }
 
 export function mapPublishedEventToConference(event: EventWithListing): Conference {
@@ -275,6 +328,8 @@ export function mapPublishedEventToPublicDetail(
           twitter: event.organizerConfig?.twitterUrl ?? undefined,
         },
     commonDocuments: normalizeBlobDocuments(blob),
+    awards: normalizeBlobAwards(blob),
+    previousEditions: normalizeBlobPreviousEditions(blob),
     reviews: options?.approvedReviews?.length ? options.approvedReviews : undefined,
   };
 }

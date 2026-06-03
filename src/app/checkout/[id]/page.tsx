@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
+import AppRouteSkeleton from "@/components/AppRouteSkeleton";
 import { useAuth } from "@/lib/auth-context";
 import {
   type Conference,
@@ -24,7 +25,7 @@ const createConfirmationId = () => `TZ-${Math.random().toString(36).slice(2, 8).
 export default function CheckoutPage() {
   const params = useParams();
   const router = useRouter();
-  const { isLoggedIn, user, addRegistration, organizerConferences } = useAuth();
+  const { isLoggedIn, user, authReady, addRegistration, organizerConferences } = useAuth();
 
   const [step, setStep] = useState<Step>(1);
   const [fullName, setFullName] = useState(user?.name || "");
@@ -67,6 +68,7 @@ export default function CheckoutPage() {
   }, [eventKey]);
 
   useEffect(() => {
+    if (!authReady) return;
     if (!isLoggedIn) {
       router.push("/");
       return;
@@ -74,7 +76,7 @@ export default function CheckoutPage() {
     if (user?.role === "organizer") {
       router.push(`/conference/${String(params.id)}`);
     }
-  }, [isLoggedIn, user?.role, router, params.id]);
+  }, [authReady, isLoggedIn, user?.role, router, params.id]);
 
   const displayTitle = organizerConference?.title || marketplaceConference?.title || "Conference";
   const displayCity = organizerConference?.city || marketplaceConference?.city || "";
@@ -146,6 +148,12 @@ export default function CheckoutPage() {
 
   const resolvedFeeDisplay = formatMoney(priceResult.amount, checkoutCurrency);
 
+  const committeeOptionLabel = (committee: OrganizerCommittee) => {
+    if (!selectedCategory) return committee.name;
+    const { amount } = resolveRegistrationPrice(selectedCategory, committee.id);
+    return `${committee.name} — ${formatMoney(amount, checkoutCurrency)}`;
+  };
+
   const committeeQuestionsValid = (() => {
     if (!selectedCommittee) return true;
     return (selectedCommittee.customQuestions ?? []).every(
@@ -205,6 +213,10 @@ export default function CheckoutPage() {
   ) && delegationSizeValid;
   const isStep3Valid = (!selectedCategory?.requiresCommitteeSelection || !!selectedCommitteeId) && committeeQuestionsValid;
   const isStep4Valid = true;
+
+  if (!authReady) {
+    return <AppRouteSkeleton />;
+  }
 
   if (user?.role === "organizer") {
     return (
@@ -503,7 +515,9 @@ export default function CheckoutPage() {
                     >
                       <option value="">Select first preference</option>
                       {committees.map((committee) => (
-                        <option key={committee.id} value={committee.id}>{committee.name}</option>
+                        <option key={committee.id} value={committee.id}>
+                          {committeeOptionLabel(committee)}
+                        </option>
                       ))}
                     </select>
                   </div>

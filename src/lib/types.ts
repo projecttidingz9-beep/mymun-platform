@@ -172,6 +172,7 @@ export interface PublicConferenceDetail extends Conference {
     featured?: boolean;
     createdAt?: string;
   }>;
+  previousEditions?: OrganizerPreviousEdition[];
 }
 
 export interface User {

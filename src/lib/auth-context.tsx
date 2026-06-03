@@ -831,12 +831,62 @@ interface AuthContextType {
     >,
     options?: OrganizerConferenceSyncOptions
   ) => void;
+  updateOrganizerConferenceConfigAsync: (
+    conferenceId: string,
+    patch: Partial<
+      Pick<
+        OrganizerConference,
+        | "title"
+        | "capacity"
+        | "level"
+        | "city"
+        | "country"
+        | "organizerName"
+        | "contactDetail"
+        | "tags"
+        | "venue"
+        | "startDate"
+        | "endDate"
+        | "description"
+        | "termsAndConditions"
+        | "refundPolicy"
+        | "codeOfConduct"
+        | "faqNotes"
+        | "logoImageUrl"
+        | "bannerImageUrl"
+        | "bannerSourceType"
+        | "socialLinks"
+        | "brandPrimaryColor"
+        | "brandSecondaryColor"
+        | "bankingDetails"
+        | "partnerConferenceIds"
+        | "partnerLinks"
+        | "previousEditions"
+        | "delegationInviteCode"
+        | "organizerTeam"
+        | "awards"
+        | "reviews"
+        | "statusEmailTemplates"
+        | "commonDocuments"
+        | "whatIsIncluded"
+        | "conferenceSchedule"
+      >
+    >,
+    options?: OrganizerConferenceSyncOptions
+  ) => Promise<{ ok: boolean; error?: string }>;
+  syncOrganizerConferenceById: (
+    conferenceId: string,
+    options?: OrganizerConferenceSyncOptions
+  ) => Promise<{ ok: boolean; error?: string }>;
   updateOrganizerCommitteeConfig: (
     conferenceId: string,
     committeeId: string,
     patch: Partial<OrganizerCommittee>
   ) => void;
-  addOrganizerCommittee: (conferenceId: string, committee: Omit<OrganizerCommittee, "id" | "allottedCount">) => void;
+  addOrganizerCommittee: (
+    conferenceId: string,
+    committee: Omit<OrganizerCommittee, "id" | "allottedCount">
+  ) => OrganizerCommittee | undefined;
   removeOrganizerCommittee: (conferenceId: string, committeeId: string) => void;
   updateRegistrationCategoryConfig: (
     conferenceId: string,
@@ -928,8 +978,10 @@ const AuthContext = createContext<AuthContextType>({
   removeOrganizerConference: () => {},
   updateOrganizerConferenceStatus: () => {},
   updateOrganizerConferenceConfig: () => {},
+  updateOrganizerConferenceConfigAsync: async () => ({ ok: false, error: "Not available." }),
+  syncOrganizerConferenceById: async () => ({ ok: false, error: "Not available." }),
   updateOrganizerCommitteeConfig: () => {},
-  addOrganizerCommittee: () => {},
+  addOrganizerCommittee: () => undefined,
   removeOrganizerCommittee: () => {},
   updateRegistrationCategoryConfig: () => {},
   addRegistrationCategory: () => {},
@@ -969,9 +1021,6 @@ const AuthContext = createContext<AuthContextType>({
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [authReady, setAuthReady] = useState(false);
-  useEffect(() => {
-    queueMicrotask(() => setAuthReady(true));
-  }, []);
 
   const [user, setUser] = useState<User | null>(null);
 
@@ -1046,11 +1095,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [refreshUserAndNotifications, refetchMyEvents]);
 
   useEffect(() => {
-    if (!authReady || typeof window === "undefined") return;
-    queueMicrotask(() => {
-      void refreshAuthState();
+    if (typeof window === "undefined") return;
+    let cancelled = false;
+    void refreshAuthState().finally(() => {
+      if (!cancelled) setAuthReady(true);
     });
-  }, [authReady, refreshAuthState]);
+    return () => {
+      cancelled = true;
+    };
+  }, [refreshAuthState]);
 
   useEffect(() => {
     if (!user || !isOrganizerUser(user)) {
@@ -1059,7 +1112,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [user]);
 
   const syncConferenceToServer = React.useCallback(
-    async (conference: OrganizerConference, options?: OrganizerConferenceSyncOptions) => {
+    async (
+      conference: OrganizerConference,
+      options?: OrganizerConferenceSyncOptions
+    ): Promise<{ ok: boolean; error?: string }> => {
       try {
         const res = await fetch(`/api/organizers/conferences/${conference.id}/sync`, {
           method: "PUT",
@@ -1072,13 +1128,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         });
         if (!res.ok) {
           const payload = (await res.json().catch(() => ({}))) as { error?: string };
-          setLastOrganizerSyncError(payload.error || "Could not save conference changes.");
-          return;
+          const error = payload.error || "Could not save conference changes.";
+          setLastOrganizerSyncError(error);
+          return { ok: false, error };
         }
         setLastOrganizerSyncError(null);
         await refetchMyEvents();
+        return { ok: true };
       } catch {
-        setLastOrganizerSyncError("Could not reach server. Check your connection and try again.");
+        const error = "Could not reach server. Check your connection and try again.";
+        setLastOrganizerSyncError(error);
+        return { ok: false, error };
       }
     },
     [refetchMyEvents]
@@ -1107,6 +1167,53 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         : target;
     void syncConferenceToServer(conferenceForSync, syncOptions);
   };
+
+  const syncOrganizerConferenceById: AuthContextType["syncOrganizerConferenceById"] = async (
+    conferenceId,
+    options
+  ) => {
+    const target = organizerConferences.find((conference) => conference.id === conferenceId);
+    if (!target) {
+      return { ok: false, error: "Conference not found." };
+    }
+    const conferenceForSync =
+      options?.serverStatus !== undefined ? { ...target, status: options.serverStatus } : target;
+    return syncConferenceToServer(conferenceForSync, options);
+  };
+
+  const updateOrganizerConferenceConfigAsync: AuthContextType["updateOrganizerConferenceConfigAsync"] =
+    async (conferenceId, patch, options) => {
+      if (!isOrganizerUser(user)) {
+        return { ok: false, error: "Not signed in as organizer." };
+      }
+      const current = organizerConferences;
+      const next = current.map((conference) =>
+        conference.id === conferenceId
+          ? {
+              ...conference,
+              ...patch,
+              socialLinks: {
+                ...(conference.socialLinks || {}),
+                ...(patch.socialLinks || {}),
+              },
+            }
+          : conference
+      );
+      const normalized = next.map(recomputeCommitteeAllotments);
+      const filtered = normalized.filter((conference) =>
+        hasOrganizerConferenceAccess({ id: user?.id, email: user?.email }, conference)
+      );
+      setOrganizerConferences(filtered);
+      const target = filtered.find((conference) => conference.id === conferenceId);
+      if (!target) {
+        return { ok: false, error: "Conference not found." };
+      }
+      const conferenceForSync =
+        options?.serverStatus !== undefined
+          ? { ...target, status: options.serverStatus }
+          : target;
+      return syncConferenceToServer(conferenceForSync, options);
+    };
 
   const clearOrganizerSyncError = () => setLastOrganizerSyncError(null);
 
@@ -1295,6 +1402,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const addOrganizerCommittee: AuthContextType["addOrganizerCommittee"] = (conferenceId, committee) => {
     const current = organizerConferences;
+    let created: OrganizerCommittee | undefined;
     const next = current.map((conference) => {
       if (conference.id !== conferenceId) return conference;
       const nextCommittee: OrganizerCommittee = {
@@ -1308,12 +1416,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         logoImageUrl: committee.logoImageUrl || undefined,
         chairs: committee.chairs ?? [],
       };
+      created = nextCommittee;
       return {
         ...conference,
         committees: [...conference.committees, nextCommittee],
       };
     });
     persistOrganizerConferences(next, conferenceId);
+    return created;
   };
 
   const removeOrganizerCommittee: AuthContextType["removeOrganizerCommittee"] = (conferenceId, committeeId) => {
@@ -1974,6 +2084,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         removeOrganizerConference,
         updateOrganizerConferenceStatus,
         updateOrganizerConferenceConfig,
+        updateOrganizerConferenceConfigAsync,
+        syncOrganizerConferenceById,
         updateOrganizerCommitteeConfig,
         addOrganizerCommittee,
         removeOrganizerCommittee,

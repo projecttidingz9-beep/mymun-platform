@@ -59,6 +59,42 @@ test.describe("organiser updates propagate to delegates", () => {
     expect(detailBody.conference.conferenceSchedule?.some((e) => e.title === scheduleTitle)).toBe(true);
   });
 
+  test("organiser preview blob fields appear on marketplace detail", async ({ request }) => {
+    const login = await loginWithCredentials(request, SEED_ORGANIZER_EMAIL, SEED_PASSWORD);
+    expect(login.ok()).toBeTruthy();
+
+    const marker = `E2E Overview ${Date.now()}`;
+    const patch = await request.patch(`/api/organizers/conference-config/${SEED_EVENT_ID}`, {
+      data: {
+        description: marker,
+        tags: ["E2E", "SyncTest"],
+        whatIsIncluded: ["Delegate kit", "Socials"],
+        awards: [{ id: "e2e-award", category: "Best Delegate", prizeTitle: "Crystal Gavel" }],
+        previousEditions: [
+          { id: "e2e-ed", year: "2024", title: "Prior Edition", delegates: 99, highlights: "Legacy" },
+        ],
+      },
+    });
+    expect(patch.ok()).toBeTruthy();
+
+    const detail = await request.get(`/api/marketplace/${SEED_EVENT_ID}`);
+    expect(detail.ok()).toBeTruthy();
+    const body = (await detail.json()) as {
+      conference: {
+        description: string;
+        tags: string[];
+        whatIsIncluded?: string[];
+        awards?: Array<{ prizeTitle?: string }>;
+        previousEditions?: Array<{ title: string }>;
+      };
+    };
+    expect(body.conference.description).toContain(marker);
+    expect(body.conference.tags).toEqual(expect.arrayContaining(["E2E", "SyncTest"]));
+    expect(body.conference.whatIsIncluded).toContain("Delegate kit");
+    expect(body.conference.awards?.some((a) => a.prizeTitle === "Crystal Gavel")).toBe(true);
+    expect(body.conference.previousEditions?.some((e) => e.title === "Prior Edition")).toBe(true);
+  });
+
   test("organiser title patch appears on marketplace and conference page", async ({ request, page }) => {
     const updatedTitle = `Global Summit E2E ${Date.now()}`;
 
