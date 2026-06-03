@@ -19,6 +19,13 @@ import {
   OrganizerStatusEmailTemplateKey,
 } from "@/lib/types";
 import { getActivePhase } from "@/lib/pricing";
+import {
+  getCategoryRegistrationLabel,
+  getCategoryTypeLabel,
+  getDefaultCategoryForType,
+  REGISTRATION_CATEGORY_TYPES,
+  type RegistrationCategoryType,
+} from "@/lib/registration-category-types";
 import { canAccessSuperDashboard, SUPER_ADMIN_HREF, SUPER_ADMIN_LABEL } from "@/lib/admin-nav";
 
 const STATUS_STYLES: Record<OrganizerConference["status"], string> = {
@@ -361,6 +368,7 @@ export default function OrganizerDashboardPage() {
     addOrganizerCommittee,
     removeOrganizerCommittee,
     updateRegistrationCategoryConfig,
+    addRegistrationCategory,
     addConferenceAward,
     removeConferenceAward,
     updateOrganizerConferenceStatus,
@@ -390,6 +398,7 @@ export default function OrganizerDashboardPage() {
   const [applicationTypeTab, setApplicationTypeTab] = useState<
     "delegate" | "chair" | "organizer" | "delegation"
   >("delegate");
+  const [pricingCategoryTypeTab, setPricingCategoryTypeTab] = useState<RegistrationCategoryType>("delegate");
   const [applicantProfileDrawerOpen, setApplicantProfileDrawerOpen] = useState(false);
   const [participantSearchQuery, setParticipantSearchQuery] = useState("");
   const [participantStatusFilter, setParticipantStatusFilter] = useState<
@@ -1467,6 +1476,13 @@ export default function OrganizerDashboardPage() {
       return categoryType === applicationTypeTab;
     });
   }, [selectedConference, applicationTypeTab]);
+
+  const selectedPricingCategory = useMemo(() => {
+    if (!selectedConference) return undefined;
+    return selectedConference.registrationCategories.find(
+      (category) => (category.applicationType || "delegate") === pricingCategoryTypeTab
+    );
+  }, [selectedConference, pricingCategoryTypeTab]);
 
   const selectedApplicant = useMemo(() => {
     if (!selectedConference || !selectedApplicantId) return null;
@@ -4136,17 +4152,55 @@ export default function OrganizerDashboardPage() {
                   {activeSection === "pricing" && (
                   <div className="card p-6 rounded-2xl">
                     <h3 className="text-2xl font-bold mb-4" style={{ color: "var(--fg)" }}>Registration Categories</h3>
+                    <div className="mb-4 space-y-2">
+                      <label className="text-sm font-semibold" style={{ color: "var(--fg-muted)" }}>
+                        Category type
+                        <select
+                          className="input-base text-sm mt-1 block w-full max-w-xs"
+                          value={pricingCategoryTypeTab}
+                          onChange={(event) =>
+                            setPricingCategoryTypeTab(event.target.value as RegistrationCategoryType)
+                          }
+                        >
+                          {REGISTRATION_CATEGORY_TYPES.map((type) => (
+                            <option key={type} value={type}>
+                              {getCategoryTypeLabel(type)}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <p className="text-xs" style={{ color: "var(--fg-muted)" }}>
+                        Configure pricing and questions for this registration type.
+                      </p>
+                    </div>
                     <div className="space-y-4">
-                      {selectedConference.registrationCategories.map((category) => {
+                      {!selectedPricingCategory ? (
+                        <div
+                          className="p-6 rounded-xl text-center space-y-3"
+                          style={{ background: "var(--bg-subtle)", border: "1px dashed var(--border)" }}
+                        >
+                          <p className="text-sm" style={{ color: "var(--fg-muted)" }}>
+                            No {getCategoryRegistrationLabel(pricingCategoryTypeTab)} category yet.
+                          </p>
+                          <button
+                            type="button"
+                            className="btn btn-primary text-xs"
+                            onClick={() =>
+                              addRegistrationCategory(
+                                selectedConference.id,
+                                getDefaultCategoryForType(pricingCategoryTypeTab, selectedConference)
+                              )
+                            }
+                          >
+                            Add {getCategoryTypeLabel(pricingCategoryTypeTab)} Category
+                          </button>
+                        </div>
+                      ) : (() => {
+                        const category = selectedPricingCategory;
                         const activePhase = getActivePhase(category.pricingPhases);
                         const categoryType = category.applicationType || "delegate";
                         const isChairCategory = categoryType === "chair";
-                        const categoryLabel =
-                          categoryType === "delegation"
-                            ? "Delegation Registration"
-                            : categoryType === "chair"
-                              ? "Chair Registration"
-                              : "Delegate Registration";
+                        const categoryLabel = getCategoryRegistrationLabel(categoryType);
                         return (
                           <div key={category.id} className="p-4 rounded-xl" style={{ background: "var(--bg-subtle)" }}>
                             <div className="flex items-start justify-between gap-3">
@@ -4466,7 +4520,7 @@ export default function OrganizerDashboardPage() {
                             </div>
                           </div>
                         );
-                      })}
+                      })()}
                     </div>
                   </div>
                   )}

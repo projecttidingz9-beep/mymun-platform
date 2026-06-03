@@ -15,6 +15,7 @@ import {
   OrganizerStatusEmailTemplates,
   User,
   Registration,
+  RegistrationCategory,
   OrganizerConference,
   OrganizerApplicant,
   OrganizerAnnouncement,
@@ -842,6 +843,7 @@ interface AuthContextType {
     categoryId: string,
     patch: Partial<OrganizerConference["registrationCategories"][number]>
   ) => void;
+  addRegistrationCategory: (conferenceId: string, category: RegistrationCategory) => void;
   addConferenceReview: (
     conferenceId: string,
     payload: Omit<ConferenceReview, "id" | "conferenceId" | "status" | "featured" | "createdAt">
@@ -930,6 +932,7 @@ const AuthContext = createContext<AuthContextType>({
   addOrganizerCommittee: () => {},
   removeOrganizerCommittee: () => {},
   updateRegistrationCategoryConfig: () => {},
+  addRegistrationCategory: () => {},
   addConferenceReview: () => {},
   moderateConferenceReview: () => {},
   removeConferenceReview: () => {},
@@ -1338,6 +1341,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         registrationCategories: conference.registrationCategories.map((category) =>
           category.id === categoryId ? { ...category, ...patch } : category
         ),
+      };
+    });
+    persistOrganizerConferences(next, conferenceId);
+  };
+
+  const addRegistrationCategory: AuthContextType["addRegistrationCategory"] = (conferenceId, category) => {
+    const current = organizerConferences;
+    const next = current.map((conference) => {
+      if (conference.id !== conferenceId) return conference;
+      const categoryType = category.applicationType || "delegate";
+      const hasDuplicateType = conference.registrationCategories.some(
+        (entry) => (entry.applicationType || "delegate") === categoryType
+      );
+      if (hasDuplicateType) return conference;
+      return {
+        ...conference,
+        registrationCategories: [...conference.registrationCategories, category],
       };
     });
     persistOrganizerConferences(next, conferenceId);
@@ -1958,6 +1978,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         addOrganizerCommittee,
         removeOrganizerCommittee,
         updateRegistrationCategoryConfig,
+        addRegistrationCategory,
         addConferenceReview,
         moderateConferenceReview,
         removeConferenceReview,

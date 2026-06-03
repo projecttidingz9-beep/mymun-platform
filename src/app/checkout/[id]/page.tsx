@@ -13,28 +13,13 @@ import {
   RegistrationCategory,
 } from "@/lib/types";
 import { getPhaseStatus, resolveRegistrationPrice } from "@/lib/pricing";
+import { getCategoryTypeHint, getCategoryTypeLabel } from "@/lib/registration-category-types";
 import { getMarketplaceConferences } from "@/lib/marketplace-conferences";
 import { formatMoney } from "@/lib/format-money";
 
 type Step = 1 | 2 | 3 | 4;
 
 const createConfirmationId = () => `TZ-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
-
-const getCategoryTypeLabel = (applicationType?: RegistrationCategory["applicationType"]) => {
-  if (applicationType === "delegation") return "Delegation";
-  if (applicationType === "chair") return "Chair";
-  if (applicationType === "organizer") return "Organizer Team";
-  if (applicationType === "other") return "Custom";
-  return "Delegate";
-};
-
-const getCategoryTypeHint = (applicationType?: RegistrationCategory["applicationType"]) => {
-  if (applicationType === "delegation") return "This category is intended for delegation-level applications.";
-  if (applicationType === "chair") return "This category is intended for executive board and chair applications.";
-  if (applicationType === "organizer") return "This category is intended for organizer team applications.";
-  if (applicationType === "other") return "This category uses organizer-defined custom criteria.";
-  return "This category is intended for delegate applications.";
-};
 
 export default function CheckoutPage() {
   const params = useParams();
