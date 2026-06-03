@@ -46,8 +46,10 @@ npm run build
 
 Do **not** run `prisma migrate deploy` inside Vercel’s build unless you use a dedicated migration step with secrets; prefer:
 
-- GitHub Action on merge to `main`, or  
+- **[`.github/workflows/migrate-production.yml`](../.github/workflows/migrate-production.yml)** — runs `npx prisma migrate deploy` on every push to `master` / `main` (requires `DATABASE_URL` and `DIRECT_URL` in the GitHub **production** environment secrets), or  
 - Manual `migrate deploy` before/after first deploy.
+
+If login succeeds but the UI shows a session/profile error after deploy, check that this workflow ran successfully and that all migrations (including the latest feature pack) appear in `npx prisma migrate status`.
 
 ## 4. Database migrations
 

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { Prisma } from "@/generated/prisma/client";
 import { getRequestActor } from "@/lib/server/auth";
+import { loadClientUserByEmail } from "@/lib/server/load-client-user";
+import { logger } from "@/lib/server/logger";
 import { prismaUserToClientUser } from "@/lib/server/map-db-user";
 import { prisma } from "@/lib/server/prisma";
 
@@ -10,21 +12,25 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
 
-  const user = await prisma.user.findUnique({
-    where: { email: actor.email },
-    include: {
-      registrations: {
-        where: { deletedAt: null },
-        include: { event: { select: { title: true } } },
+  try {
+    const user = await loadClientUserByEmail(actor.email);
+    if (!user) {
+      return NextResponse.json({ error: "User not found." }, { status: 404 });
+    }
+    return NextResponse.json({ user });
+  } catch (err) {
+    logger.error("user_me_failed", {
+      email: actor.email,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return NextResponse.json(
+      {
+        error: "Could not load your profile. The server may need a database update.",
+        code: "USER_ME_FAILED",
       },
-    },
-  });
-
-  if (!user) {
-    return NextResponse.json({ error: "User not found." }, { status: 404 });
+      { status: 500 }
+    );
   }
-
-  return NextResponse.json({ user: prismaUserToClientUser(user) });
 }
 
 export async function PATCH(request: NextRequest) {

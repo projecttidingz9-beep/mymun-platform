@@ -3,10 +3,12 @@ import { prisma } from "@/lib/server/prisma";
 import { hashPassword, validateNewPassword } from "@/lib/server/password";
 import { consumeRateLimitBucket } from "@/lib/server/rate-limit-db";
 import { getClientIp } from "@/lib/server/request-ip";
+import { loadClientUserByEmail } from "@/lib/server/load-client-user";
+import { logger } from "@/lib/server/logger";
+import { setMymunSessionCookie } from "@/lib/server/oauth-bridge";
 import { signSessionToken } from "@/lib/server/session-token";
 import { prismaUserRoleToSession } from "@/lib/server/user-role";
 import { registerBodySchema } from "@/lib/server/validators/auth";
-import { logger } from "@/lib/server/logger";
 import {
   createEmailVerificationToken,
   sendVerificationEmail,
@@ -69,19 +71,15 @@ export async function POST(request: NextRequest) {
       sub: user.id,
       sv: user.sessionVersion,
     });
+    const clientUser = await loadClientUserByEmail(user.email);
     const response = NextResponse.json({
       ok: true,
       name: user.name,
       role: sessionRole,
+      user: clientUser,
       emailVerificationRequired: true,
     });
-    response.cookies.set("mymun_session", token, {
-      httpOnly: true,
-      sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
-      path: "/",
-      maxAge: 60 * 60 * 24 * 7,
-    });
+    setMymunSessionCookie(response, token);
     return response;
   } catch (err) {
     logger.error("auth_register_failed", {

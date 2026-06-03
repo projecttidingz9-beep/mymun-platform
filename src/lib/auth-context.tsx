@@ -23,6 +23,23 @@ import {
   UserNotification,
 } from "./types";
 import { allotApplicantOnConference } from "./allot-applicant";
+
+export type LoginHydrateFailure = "session" | "user_me" | "network";
+
+export type LoginResult = { ok: true } | { ok: false; failure: LoginHydrateFailure };
+
+export function loginHydrateErrorMessage(failure: LoginHydrateFailure): string {
+  switch (failure) {
+    case "session":
+      return "Session cookie was not saved. Try again or contact support.";
+    case "user_me":
+      return "Server setup incomplete (database migration). Try again shortly.";
+    case "network":
+      return "Could not reach authentication server. Please try again.";
+  }
+}
+
+type AuthRefreshResult = { ok: true } | { ok: false; failure: LoginHydrateFailure };
 import {
   hasOrganizerConferenceAccess,
   isOrganizerUser,
@@ -810,7 +827,12 @@ interface AuthContextType {
   organizerConferences: OrganizerConference[];
   lastOrganizerSyncError: string | null;
   clearOrganizerSyncError: () => void;
-  login: (email: string, name?: string, role?: "delegate" | "organizer" | "admin") => Promise<boolean>;
+  login: (
+    email: string,
+    name?: string,
+    role?: "delegate" | "organizer" | "admin",
+    serverUser?: unknown
+  ) => Promise<LoginResult>;
   logout: () => void;
   addRegistration: (reg: Registration) => void;
   addOrganizerConference: (
@@ -1002,7 +1024,7 @@ const AuthContext = createContext<AuthContextType>({
   organizerConferences: [],
   lastOrganizerSyncError: null,
   clearOrganizerSyncError: () => {},
-  login: async () => false,
+  login: async () => ({ ok: false, failure: "network" as const }),
   logout: () => {},
   addRegistration: () => {},
   addOrganizerConference: async () => {},
@@ -1086,12 +1108,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [user?.id, user?.email]
   );
 
-  const refreshUserAndNotifications = React.useCallback(async (): Promise<User | null> => {
+  const refreshUserAndNotifications = React.useCallback(async (): Promise<{
+    user: User | null;
+    meStatus?: number;
+  }> => {
     const [meRes, nRes] = await Promise.all([
       fetch("/api/user/me", { credentials: "include" }),
       fetch("/api/notifications/me", { credentials: "include" }),
     ]);
-    if (!meRes.ok) return null;
+    if (!meRes.ok) return { user: null, meStatus: meRes.status };
+
     const meJson = (await meRes.json().catch(() => ({}))) as { user?: unknown };
     const u = normalizeUser(meJson.user);
     if (u) setUser(u);
@@ -1100,38 +1126,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const nJson = (await nRes.json().catch(() => ({}))) as { notifications?: UserNotification[] };
       setNotifications(Array.isArray(nJson.notifications) ? nJson.notifications : []);
     }
-    return u;
+    return { user: u, meStatus: meRes.status };
   }, []);
 
-  const refreshAuthState = React.useCallback(async (): Promise<boolean> => {
+  const refreshAuthState = React.useCallback(async (): Promise<AuthRefreshResult> => {
     try {
       const sessionRes = await fetch("/api/auth/session", { credentials: "include" });
       if (!sessionRes.ok) {
         setUser(null);
         setOrganizerConferences([]);
         setNotifications([]);
-        return false;
+        return { ok: false, failure: "session" };
       }
 
       await sessionRes.json().catch(() => ({}));
 
-      const u = await refreshUserAndNotifications();
+      const { user: u, meStatus } = await refreshUserAndNotifications();
       if (!u) {
         setUser(null);
         setOrganizerConferences([]);
         setNotifications([]);
-        return false;
+        if (meStatus !== undefined && meStatus >= 500) {
+          return { ok: false, failure: "user_me" };
+        }
+        return { ok: false, failure: "session" };
       }
 
       if (!isOrganizerUser(u)) {
         setOrganizerConferences([]);
       }
-      return true;
+      return { ok: true };
     } catch {
       setUser(null);
       setOrganizerConferences([]);
       setNotifications([]);
-      return false;
+      return { ok: false, failure: "network" };
     }
   }, [refreshUserAndNotifications]);
 
@@ -1271,11 +1300,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const clearOrganizerSyncError = () => setLastOrganizerSyncError(null);
 
-  const login: AuthContextType["login"] = async (email, name, role) => {
+  const login: AuthContextType["login"] = async (email, name, role, serverUser) => {
     const normalizedEmail = email.trim().toLowerCase();
-    if (!normalizedEmail) return false;
-    setUser(buildOptimisticUser(normalizedEmail, name, role ?? "delegate"));
-    return refreshAuthState();
+    if (!normalizedEmail) return { ok: false, failure: "network" };
+
+    const fromServer = serverUser ? normalizeUser(serverUser) : null;
+    if (fromServer) setUser(fromServer);
+    else setUser(buildOptimisticUser(normalizedEmail, name, role ?? "delegate"));
+
+    let result = await refreshAuthState();
+    if (!result.ok) {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      result = await refreshAuthState();
+    }
+
+    if (result.ok) return { ok: true };
+    if (fromServer) {
+      void refreshAuthState();
+      return { ok: true };
+    }
+    return result;
   };
 
   const logout = () => {

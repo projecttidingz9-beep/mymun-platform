@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { useAuth } from "@/lib/auth-context";
+import { loginHydrateErrorMessage, useAuth } from "@/lib/auth-context";
 import BrandLogo from "@/components/BrandLogo";
 import { createSupabaseBrowserClient, isSupabaseOAuthConfigured } from "@/lib/supabase/client";
 
@@ -133,8 +133,8 @@ export default function AuthModal({ isOpen, onClose, defaultTab = "signin" }: Au
       payload.name || undefined,
       payload.role || "delegate"
     );
-    if (!signedIn) {
-      setError("Signed in but session could not be loaded. Please try again.");
+    if (!signedIn.ok) {
+      setError(loginHydrateErrorMessage(signedIn.failure));
       setGoogleLoading(false);
       return;
     }
@@ -201,6 +201,7 @@ export default function AuthModal({ isOpen, onClose, defaultTab = "signin" }: Au
         error?: string;
         name?: string;
         role?: "delegate" | "organizer" | "admin";
+        user?: unknown;
       };
       if (!response.ok) {
         setError(payload.error || "Authentication failed.");
@@ -209,12 +210,11 @@ export default function AuthModal({ isOpen, onClose, defaultTab = "signin" }: Au
       const signedIn = await login(
         email,
         payload.name || (tab === "register" ? name : undefined),
-        payload.role || "delegate"
+        payload.role || "delegate",
+        payload.user
       );
-      if (!signedIn) {
-        setError(
-          "Signed in on the server but your session could not be loaded. Check your connection and try again."
-        );
+      if (!signedIn.ok) {
+        setError(loginHydrateErrorMessage(signedIn.failure));
         return;
       }
       closeModal();
