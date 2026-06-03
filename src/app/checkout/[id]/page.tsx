@@ -45,6 +45,13 @@ export default function CheckoutPage() {
   const [loading, setLoading] = useState(false);
   const [uploadedFiles, setUploadedFiles] = useState<Record<string, string[]>>({});
   const [catalogConference, setCatalogConference] = useState<Conference | null>(null);
+  const [checkoutConfig, setCheckoutConfig] = useState<{
+    eventId: string;
+    registrationCategories: RegistrationCategory[];
+    committees: OrganizerCommittee[];
+    currency: string;
+  } | null>(null);
+  const [checkoutConfigLoaded, setCheckoutConfigLoaded] = useState(false);
   const [submittedRegistration, setSubmittedRegistration] = useState<Registration | null>(null);
   const [delegationSchoolName, setDelegationSchoolName] = useState("");
   const [delegationMaxMembers, setDelegationMaxMembers] = useState("");
@@ -79,6 +86,45 @@ export default function CheckoutPage() {
   }, [eventKey]);
 
   useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/marketplace/${encodeURIComponent(eventKey)}/checkout-config`);
+        if (!res.ok) {
+          if (!cancelled) {
+            setCheckoutConfig(null);
+            setCheckoutConfigLoaded(true);
+          }
+          return;
+        }
+        const data = (await res.json()) as {
+          eventId?: string;
+          registrationCategories?: RegistrationCategory[];
+          committees?: OrganizerCommittee[];
+          currency?: string;
+        };
+        if (!cancelled) {
+          setCheckoutConfig({
+            eventId: data.eventId ?? eventKey,
+            registrationCategories: data.registrationCategories ?? [],
+            committees: data.committees ?? [],
+            currency: data.currency?.trim() || "INR",
+          });
+          setCheckoutConfigLoaded(true);
+        }
+      } catch {
+        if (!cancelled) {
+          setCheckoutConfig(null);
+          setCheckoutConfigLoaded(true);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [eventKey]);
+
+  useEffect(() => {
     if (!authReady) return;
     if (!isLoggedIn) {
       router.push("/");
@@ -96,44 +142,27 @@ export default function CheckoutPage() {
     (typeof organizerConference?.currency === "string" && organizerConference.currency.trim()
       ? organizerConference.currency.trim()
       : null) ||
+    checkoutConfig?.currency ||
     marketplaceConference?.currency?.trim() ||
     "INR";
 
   const rawCategories: RegistrationCategory[] = organizerConference
     ? organizerConference.registrationCategories
-    : [
-        {
-          id: "default-delegate",
-          name: "Delegate Registration",
-          description: "Standard delegate registration",
-          applicationType: "delegate",
-          isOpen: true,
-          basePrice: marketplaceConference?.price || 0,
-          requiresCommitteeSelection: true,
-          formFields: [
-            {
-              id: "mun-experience",
-              label: "MUN Experience",
-              type: "select",
-              required: true,
-              options: ["beginner", "intermediate", "experienced"],
-            },
-          ],
-          pricingPhases: [],
-        },
-      ];
+    : checkoutConfig?.registrationCategories ?? [];
   const categories = rawCategories.filter((category) => category.isOpen !== false);
 
   const committees: OrganizerCommittee[] = organizerConference
     ? organizerConference.committees
-    : (marketplaceConference?.committees || []).map((committee) => ({
-        id: committee.id,
-        name: committee.name,
-        agenda: committee.topic1,
-        seatCount: committee.size,
-        basePrice: undefined,
-        portfolios: [],
-      }));
+    : checkoutConfig?.committees.length
+      ? checkoutConfig.committees
+      : (marketplaceConference?.committees || []).map((committee) => ({
+          id: committee.id,
+          name: committee.name,
+          agenda: committee.topic1,
+          seatCount: committee.size,
+          basePrice: undefined,
+          portfolios: [],
+        }));
 
   const selectedCategory = categories.find((category) => category.id === selectedCategoryId);
   const selectedCommittee = committees.find((committee) => committee.id === selectedCommitteeId);
@@ -200,7 +229,7 @@ export default function CheckoutPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           registrationId,
-          eventId: String(params.id),
+          eventId: organizerConference?.id ?? checkoutConfig?.eventId ?? String(params.id),
           categoryId: selectedCategory.id,
           categoryName: selectedCategory.name,
           fullName: fullName.trim(),
@@ -245,7 +274,7 @@ export default function CheckoutPage() {
       : !selectedCategory?.requiresCommitteeSelection || !!selectedCommitteeId) && committeeQuestionsValid;
   const isStep4Valid = isStep1Valid && isStep2Valid && isStep3Valid;
 
-  if (!authReady) {
+  if (!authReady || (!organizerConference && !checkoutConfigLoaded)) {
     return <AppRouteSkeleton />;
   }
 
@@ -263,7 +292,7 @@ export default function CheckoutPage() {
     );
   }
 
-  if (!organizerConference && !marketplaceConference) {
+  if (!organizerConference && checkoutConfigLoaded && !checkoutConfig) {
     return (
       <>
         <Navbar />
