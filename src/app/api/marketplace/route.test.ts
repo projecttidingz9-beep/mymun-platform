@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { GET } from "./route";
+import { MARKETPLACE_CATALOG_CACHE_CONTROL } from "@/lib/server/http-cache";
 
 vi.mock("@/lib/server/prisma", () => ({
   prisma: {
@@ -38,6 +39,6 @@ describe("GET /api/marketplace", () => {
       })
     );
     expect(mapPublishedEventToConference).toHaveBeenCalledTimes(1);
-    expect(res.headers.get("Cache-Control")).toBe("no-store");
+    expect(res.headers.get("Cache-Control")).toBe(MARKETPLACE_CATALOG_CACHE_CONTROL);
   });
 });

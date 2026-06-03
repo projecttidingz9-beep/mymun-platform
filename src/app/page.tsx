@@ -93,7 +93,7 @@ export default function HomePage() {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch("/api/marketplace", { cache: "no-store" });
+        const res = await fetch("/api/marketplace");
         const data = (await res.json()) as { conferences?: Conference[] };
         if (!cancelled && Array.isArray(data.conferences)) {
           setFeaturedConferences(data.conferences.slice(0, 3));
@@ -153,8 +153,10 @@ export default function HomePage() {
   const isOrganizerUser = user?.role === "organizer" || user?.role === "admin";
   const shouldEnableScene =
     typeof window !== "undefined" &&
-    !window.matchMedia("(prefers-reduced-motion: reduce)").matches &&
-    !window.matchMedia("(max-width: 768px)").matches;
+    !reduced &&
+    !window.matchMedia("(max-width: 768px)").matches &&
+    (navigator.hardwareConcurrency ?? 8) > 4 &&
+    ((navigator as Navigator & { deviceMemory?: number }).deviceMemory ?? 8) > 4;
 
   // Track overall scroll progress (0..1) and hand it to the WebGL scene so it
   // can evolve subtly from section to section (camera pull-back, drift, tilt).

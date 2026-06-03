@@ -38,6 +38,11 @@ export function hasOrganizerConferenceAccess(
   return conferenceTeamEmails(conference).includes(actorEmail);
 }
 
+/** Load organizer conference list only on routes that need draft/preview or dashboard data. */
+export function pathNeedsOrganizerEvents(pathname: string): boolean {
+  return pathname.startsWith("/organizers") || pathname.startsWith("/conference/");
+}
+
 export function isOrganizerUser(user: User | null): boolean {
   return user?.role === "organizer" || user?.role === "admin";
 }

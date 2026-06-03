@@ -2,12 +2,21 @@
 
 import { ChangeEvent, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import Image from "next/image";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import AppRouteSkeleton from "@/components/AppRouteSkeleton";
-import QrScannerPanel from "@/components/QrScannerPanel";
+
+const QrScannerPanel = dynamic(() => import("@/components/QrScannerPanel"), {
+  ssr: false,
+  loading: () => (
+    <p className="text-sm" style={{ color: "var(--fg-muted)" }}>
+      Loading camera check-in…
+    </p>
+  ),
+});
 import { ensureServerSession } from "@/lib/client/session";
 import { useAuth } from "@/lib/auth-context";
 import { hasOrganizerConferenceAccess } from "@/lib/organizer-access";

@@ -86,27 +86,23 @@ export default function ConferenceDetailPage() {
   const loadPublicConference = useCallback(async () => {
     setCatalogLoading(true);
     try {
-      const [listRes, detailRes] = await Promise.all([
-        fetch("/api/marketplace", { cache: "no-store" }),
-        fetch(`/api/marketplace/${encodeURIComponent(eventKey)}`, { cache: "no-store" }),
-      ]);
-      const listData = (await listRes.json()) as { conferences?: Conference[] };
-      const list = Array.isArray(listData.conferences) ? listData.conferences : [];
-      const match = list.find((c) => c.id === eventKey || c.slug === eventKey) ?? null;
+      const detailRes = await fetch(`/api/marketplace/${encodeURIComponent(eventKey)}`, {
+        cache: refreshNonce > 0 ? "no-store" : "default",
+      });
       let detail: PublicConferenceDetail | null = null;
       if (detailRes.ok) {
         const detailData = (await detailRes.json()) as { conference?: PublicConferenceDetail };
         detail = detailData.conference ?? null;
       }
       setPublicDetail(detail);
-      setCatalogConference(match ?? detail);
+      setCatalogConference(detail);
     } catch {
       setCatalogConference(null);
       setPublicDetail(null);
     } finally {
       setCatalogLoading(false);
     }
-  }, [eventKey]);
+  }, [eventKey, refreshNonce]);
 
   useEffect(() => {
     void loadPublicConference();

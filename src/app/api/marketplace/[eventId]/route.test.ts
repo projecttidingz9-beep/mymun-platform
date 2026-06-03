@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { NextRequest } from "next/server";
 import { GET } from "./route";
+import { MARKETPLACE_DETAIL_CACHE_CONTROL } from "@/lib/server/http-cache";
 
 vi.mock("@/lib/server/prisma", () => ({
   prisma: {
@@ -41,6 +42,6 @@ describe("GET /api/marketplace/[eventId]", () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as { conference: { title: string } };
     expect(body.conference.title).toBe("Public Detail");
-    expect(res.headers.get("Cache-Control")).toBe("no-store");
+    expect(res.headers.get("Cache-Control")).toBe(MARKETPLACE_DETAIL_CACHE_CONTROL);
   });
 });

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/server/prisma";
 import { mapPublishedEventToConference } from "@/lib/server/marketplace-public";
+import { MARKETPLACE_CATALOG_CACHE_CONTROL } from "@/lib/server/http-cache";
 
 /** Public catalog: published events only (no client/local demo data). */
 export async function GET() {
@@ -36,7 +37,7 @@ export async function GET() {
       { conferences },
       {
         headers: {
-          "Cache-Control": "no-store",
+          "Cache-Control": MARKETPLACE_CATALOG_CACHE_CONTROL,
         },
       }
     );

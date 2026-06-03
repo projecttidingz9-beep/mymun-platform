@@ -1,6 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useEffect, useState, ReactNode } from "react";
+import { usePathname } from "next/navigation";
 import {
   ConferenceReview,
   DelegateMunAward,
@@ -21,7 +22,11 @@ import {
   OrganizerAnnouncement,
   UserNotification,
 } from "./types";
-import { hasOrganizerConferenceAccess, isOrganizerUser } from "./organizer-access";
+import {
+  hasOrganizerConferenceAccess,
+  isOrganizerUser,
+  pathNeedsOrganizerEvents,
+} from "./organizer-access";
 
 const buildDefaultStatusEmailTemplates = (conferenceTitle: string): OrganizerStatusEmailTemplates => ({
   allotted: {
@@ -1020,6 +1025,7 @@ const AuthContext = createContext<AuthContextType>({
 });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const pathname = usePathname();
   const [authReady, setAuthReady] = useState(false);
 
   const [user, setUser] = useState<User | null>(null);
@@ -1054,13 +1060,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const refreshUserAndNotifications = React.useCallback(async (): Promise<User | null> => {
-    const meRes = await fetch("/api/user/me", { credentials: "include" });
+    const [meRes, nRes] = await Promise.all([
+      fetch("/api/user/me", { credentials: "include" }),
+      fetch("/api/notifications/me", { credentials: "include" }),
+    ]);
     if (!meRes.ok) return null;
     const meJson = (await meRes.json().catch(() => ({}))) as { user?: unknown };
     const u = normalizeUser(meJson.user);
     if (u) setUser(u);
 
-    const nRes = await fetch("/api/notifications/me", { credentials: "include" });
     if (nRes.ok) {
       const nJson = (await nRes.json().catch(() => ({}))) as { notifications?: UserNotification[] };
       setNotifications(Array.isArray(nJson.notifications) ? nJson.notifications : []);
@@ -1082,9 +1090,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       const u = await refreshUserAndNotifications();
 
-      if (u && isOrganizerUser(u)) {
-        await refetchMyEvents({ id: u.id, email: u.email });
-      } else {
+      if (!u || !isOrganizerUser(u)) {
         setOrganizerConferences([]);
       }
     } catch {
@@ -1092,7 +1098,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setOrganizerConferences([]);
       setNotifications([]);
     }
-  }, [refreshUserAndNotifications, refetchMyEvents]);
+  }, [refreshUserAndNotifications]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -1104,6 +1110,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       cancelled = true;
     };
   }, [refreshAuthState]);
+
+  useEffect(() => {
+    if (!authReady || !user || !isOrganizerUser(user)) return;
+    if (!pathNeedsOrganizerEvents(pathname)) return;
+
+    let cancelled = false;
+    void refetchMyEvents({ id: user.id, email: user.email }).finally(() => {
+      if (cancelled) return;
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [authReady, user, pathname, refetchMyEvents]);
 
   useEffect(() => {
     if (!user || !isOrganizerUser(user)) {

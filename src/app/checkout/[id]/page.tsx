@@ -53,11 +53,13 @@ export default function CheckoutPage() {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch("/api/marketplace", { cache: "no-store" });
-        const data = (await res.json()) as { conferences?: Conference[] };
-        const list = Array.isArray(data.conferences) ? data.conferences : [];
-        const match = list.find((c) => c.id === eventKey || c.slug === eventKey) ?? null;
-        if (!cancelled) setCatalogConference(match);
+        const res = await fetch(`/api/marketplace/${encodeURIComponent(eventKey)}`);
+        if (!res.ok) {
+          if (!cancelled) setCatalogConference(null);
+          return;
+        }
+        const data = (await res.json()) as { conference?: Conference };
+        if (!cancelled) setCatalogConference(data.conference ?? null);
       } catch {
         if (!cancelled) setCatalogConference(null);
       }

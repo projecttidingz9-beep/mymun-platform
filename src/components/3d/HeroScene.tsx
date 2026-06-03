@@ -24,12 +24,15 @@ interface HeroSceneProps {
  * cannot prove the device is capable, we fall back to `lite`.
  */
 function detectTier(): Tier {
-  if (typeof window === "undefined") return "full";
+  if (typeof window === "undefined") return "lite";
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return "lite";
+
   const nav = navigator as Navigator & {
     deviceMemory?: number;
     connection?: { saveData?: boolean; effectiveType?: string };
   };
   const smallViewport = window.matchMedia("(max-width: 768px)").matches;
+  const tabletViewport = window.matchMedia("(max-width: 1024px)").matches;
   const lowCpu = (nav.hardwareConcurrency ?? 8) <= 4;
   const lowMem = typeof nav.deviceMemory === "number" && nav.deviceMemory <= 4;
   const saveData = nav.connection?.saveData === true;
@@ -39,9 +42,11 @@ function detectTier(): Tier {
     nav.connection?.effectiveType === "3g";
   const lowDpr = window.devicePixelRatio < 1.25;
 
-  if (saveData) return "lite";
-  if (smallViewport && (lowCpu || lowMem || slowNet || lowDpr)) return "lite";
+  if (saveData || slowNet) return "lite";
+  if (smallViewport) return "lite";
+  if (tabletViewport && (lowCpu || lowMem)) return "lite";
   if (lowCpu && lowMem) return "lite";
+  if (lowCpu || lowMem || lowDpr) return "lite";
   return "full";
 }
 

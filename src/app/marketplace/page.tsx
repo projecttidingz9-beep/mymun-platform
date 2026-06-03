@@ -58,7 +58,7 @@ export default function MarketplacePage() {
     (async () => {
       setCatalogLoading(true);
       try {
-        const res = await fetch("/api/marketplace", { cache: "no-store" });
+        const res = await fetch("/api/marketplace");
         const data = (await res.json()) as { conferences?: Conference[] };
         if (!cancelled && Array.isArray(data.conferences)) {
           setCatalog(data.conferences);
