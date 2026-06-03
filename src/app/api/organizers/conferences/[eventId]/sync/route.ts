@@ -6,7 +6,10 @@ import {
   requireEventOrganizerAccess,
   requireOrganizer,
 } from "@/lib/server/auth";
-import { persistOrganizerConferenceSync } from "@/lib/server/persist-organizer-conference-sync";
+import {
+  formatOrganizerSyncError,
+  persistOrganizerConferenceSync,
+} from "@/lib/server/persist-organizer-conference-sync";
 import { mapManagedEventToOrganizerConference } from "@/lib/server/map-managed-event-to-organizer-conference";
 
 export async function PUT(
@@ -44,7 +47,6 @@ export async function PUT(
     const conference = await mapManagedEventToOrganizerConference(eventId);
     return NextResponse.json({ conference });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Sync failed.";
-    return NextResponse.json({ error: message }, { status: 400 });
+    return NextResponse.json({ error: formatOrganizerSyncError(error) }, { status: 400 });
   }
 }

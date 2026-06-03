@@ -3,6 +3,11 @@ import type { EventStatus } from "@/generated/prisma/enums";
 import { prisma } from "./prisma";
 import { mergeOrganizerStoredBlob } from "./organizer-config-store";
 
+export const ORGANIZER_SYNC_TX_OPTIONS = {
+  maxWait: 15_000,
+  timeout: 30_000,
+} as const;
+
 export type PersistConferenceSyncOptions = {
   /**
    * Super-admin only: `"Published"` maps to `PUBLISHED`.
@@ -155,15 +160,13 @@ export async function persistOrganizerConferenceSync(
       },
     });
 
-    if (conference.committees.length > 0) {
-      await tx.committeeConfig.deleteMany({
-        where: { organizerConfigId: configRow.id },
-      });
-    }
+    await tx.committeeConfig.deleteMany({
+      where: { organizerConfigId: configRow.id },
+    });
 
-    for (const c of conference.committees) {
-      await tx.committeeConfig.create({
-        data: {
+    if (conference.committees.length > 0) {
+      await tx.committeeConfig.createMany({
+        data: conference.committees.map((c) => ({
           id: c.id,
           organizerConfigId: configRow.id,
           name: c.name,
@@ -174,18 +177,19 @@ export async function persistOrganizerConferenceSync(
           chairName: c.chairName ?? null,
           chairEmail: c.chairEmail ?? null,
           visibility: c.isPublic === false ? "PRIVATE" : "PUBLIC",
-        },
+        })),
       });
 
-      for (const q of c.customQuestions ?? []) {
-        await tx.applicationQuestion.create({
-          data: {
-            committeeId: c.id,
-            label: q.question,
-            type: "text",
-            required: q.required,
-          },
-        });
+      const questionRows = conference.committees.flatMap((c) =>
+        (c.customQuestions ?? []).map((q) => ({
+          committeeId: c.id,
+          label: q.question,
+          type: "text",
+          required: q.required,
+        }))
+      );
+      if (questionRows.length > 0) {
+        await tx.applicationQuestion.createMany({ data: questionRows });
       }
     }
 
@@ -196,28 +200,28 @@ export async function persistOrganizerConferenceSync(
       }
     }
 
-    if (phaseMap.size > 0) {
-      await tx.pricingPhaseConfig.deleteMany({
-        where: { organizerConfigId: configRow.id },
-      });
+    await tx.pricingPhaseConfig.deleteMany({
+      where: { organizerConfigId: configRow.id },
+    });
 
-      for (const phase of phaseMap.values()) {
-        const committeePriceObj = Object.fromEntries(
-          (phase.committeePrices || []).map((cp) => [cp.committeeId, cp.price])
-        );
-        await tx.pricingPhaseConfig.create({
-          data: {
+    if (phaseMap.size > 0) {
+      await tx.pricingPhaseConfig.createMany({
+        data: [...phaseMap.values()].map((phase) => {
+          const committeePriceObj = Object.fromEntries(
+            (phase.committeePrices || []).map((cp) => [cp.committeeId, cp.price])
+          );
+          return {
             organizerConfigId: configRow.id,
             name: phase.name,
             startDate: new Date(phase.startDate),
             endDate: new Date(phase.endDate),
             basePrice: phase.basePrice,
             committeePriceJson: JSON.stringify(committeePriceObj),
-          },
-        });
-      }
+          };
+        }),
+      });
     }
-  });
+  }, ORGANIZER_SYNC_TX_OPTIONS);
 
   const normalizedConference = {
     ...conference,
@@ -228,4 +232,16 @@ export async function persistOrganizerConferenceSync(
     delete blobPayload.status;
   }
   await mergeOrganizerStoredBlob(eventId, blobPayload);
+}
+
+export function formatOrganizerSyncError(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  if (
+    message.includes("expired transaction") ||
+    message.includes("P2028") ||
+    message.includes("timeout for this transaction")
+  ) {
+    return "Save took too long. Please try again in a moment.";
+  }
+  return message || "Sync failed.";
 }
