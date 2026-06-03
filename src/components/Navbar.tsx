@@ -177,7 +177,7 @@ export default function Navbar({ openAuthModal }: NavbarProps) {
             <BrandLogo
               variant="horizontal"
               themeOverride={shouldForceDarkBrandLogo(pathname) ? "dark" : undefined}
-              className="h-9 w-auto sm:h-10 max-w-[min(100%,240px)] object-contain object-left transition-transform group-hover:scale-[1.02]"
+              className="h-11 w-auto sm:h-12 max-w-[min(100%,280px)] object-contain object-left transition-transform group-hover:scale-[1.02]"
               priority
             />
           </Link>
