@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
+import { revalidateTag } from "next/cache";
 import { normalizeConferenceScheduleEntries } from "@/lib/conference-schedule";
+import type { RegistrationCategory } from "@/lib/types";
 import { getRequestActor, requireEventOrganizerAccess, requireOrganizer, resolveActorUserId } from "@/lib/server/auth";
 import { getOrganizerPreviewConfig, mergeOrganizerStoredBlob } from "@/lib/server/organizer-config-store";
+import { persistRegistrationCategories } from "@/lib/server/persist-registration-categories";
+import { MARKETPLACE_CACHE_TAG } from "@/lib/server/marketplace-queries";
 import { prisma } from "@/lib/server/prisma";
 
 export async function GET(
@@ -57,6 +61,7 @@ export async function PATCH(
     country: typeof body.country === "string" ? body.country : undefined,
     organizerName: typeof body.organizerName === "string" ? body.organizerName : undefined,
     contactDetail: typeof body.contactDetail === "string" ? body.contactDetail : undefined,
+    currency: typeof body.currency === "string" ? body.currency.trim().toUpperCase() : undefined,
     tags: Array.isArray(body.tags) ? body.tags.map((entry) => String(entry)).filter(Boolean) : undefined,
     capacity:
       typeof body.capacity === "number"
@@ -107,6 +112,14 @@ export async function PATCH(
 
   await mergeOrganizerStoredBlob(eventId, previewPatch);
 
+  if (Array.isArray(previewPatch.registrationCategories)) {
+    await persistRegistrationCategories(
+      eventId,
+      previewPatch.registrationCategories as RegistrationCategory[]
+    );
+    revalidateTag(MARKETPLACE_CACHE_TAG, { expire: 0 });
+  }
+
   const venueFromParts = [previewPatch.city, previewPatch.country]
     .map((part) => (typeof part === "string" ? part.trim() : ""))
     .filter(Boolean)
@@ -120,6 +133,7 @@ export async function PATCH(
     title?: string;
     startDate?: Date;
     endDate?: Date;
+    currency?: string;
     coverImageUrl?: string | null;
     venue?: string | null;
     logoImageUrl?: string | null;
@@ -140,6 +154,9 @@ export async function PATCH(
   }
   if (typeof previewPatch.endDate === "string" && previewPatch.endDate) {
     relationalPatch.endDate = new Date(previewPatch.endDate);
+  }
+  if (typeof previewPatch.currency === "string" && previewPatch.currency.trim()) {
+    relationalPatch.currency = previewPatch.currency.trim().toUpperCase();
   }
   if (typeof previewPatch.bannerImageUrl === "string") {
     relationalPatch.coverImageUrl = previewPatch.bannerImageUrl.trim() || null;
@@ -168,7 +185,7 @@ export async function PATCH(
 
   if (Object.keys(relationalPatch).length > 0) {
     const { title, startDate, endDate, coverImageUrl, ...configFields } = relationalPatch;
-    if (title || startDate || endDate || coverImageUrl !== undefined) {
+    if (title || startDate || endDate || coverImageUrl !== undefined || relationalPatch.currency) {
       await prisma.event.update({
         where: { id: eventId },
         data: {
@@ -176,6 +193,7 @@ export async function PATCH(
           ...(startDate ? { startDate } : {}),
           ...(endDate ? { endDate } : {}),
           ...(coverImageUrl !== undefined ? { coverImageUrl } : {}),
+          ...(relationalPatch.currency ? { currency: relationalPatch.currency } : {}),
         },
       });
     }

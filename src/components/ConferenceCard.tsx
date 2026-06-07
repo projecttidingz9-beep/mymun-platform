@@ -4,6 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { Conference } from "@/lib/types";
 import { resolveConferenceBannerImage } from "@/lib/conference-media";
+import { formatMoney } from "@/lib/format-money";
 
 interface ConferenceCardProps {
   conference: Conference;
@@ -126,7 +127,7 @@ export default function ConferenceCard({ conference: c }: ConferenceCardProps) {
         <div className="relative z-[3]">
           <p className="text-white/60 text-[10px] font-bold uppercase tracking-widest">From</p>
           <p className="text-white text-2xl font-black">
-            {c.currency === "USD" ? "$" : c.currency === "EUR" ? "€" : c.currency === "GBP" ? "£" : "$"}{c.price}
+            {formatMoney(c.price, c.currency)}
           </p>
         </div>
 

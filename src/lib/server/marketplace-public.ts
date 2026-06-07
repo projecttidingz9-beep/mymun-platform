@@ -1,6 +1,7 @@
 import type {
   Conference,
   OrganizerAwardConfig,
+  OrganizerConferencePartnerLink,
   OrganizerDocument,
   OrganizerPreviousEdition,
   PublicConferenceDetail,
@@ -100,7 +101,20 @@ export type EventWithListing = Event & {
     | null;
   owner: Pick<User, "name" | "email"> | null;
   _count: { registrations: number };
+  registrations?: Array<{ committeeName: string | null }>;
 };
+
+function allotmentCountsByCommitteeName(
+  registrations: Array<{ committeeName: string | null }> | undefined
+): Map<string, number> {
+  const map = new Map<string, number>();
+  for (const reg of registrations ?? []) {
+    const name = reg.committeeName?.trim();
+    if (!name) continue;
+    map.set(name, (map.get(name) ?? 0) + 1);
+  }
+  return map;
+}
 
 function blobString(blob: Record<string, unknown> | null, key: string): string | undefined {
   const value = blob?.[key];
@@ -178,7 +192,12 @@ export function mapPublishedEventToConference(event: EventWithListing): Conferen
   const priceCandidates = [...committeePrices, ...phasePrices];
   const price = priceCandidates.length > 0 ? Math.min(...priceCandidates) : 0;
 
-  const capacity = committees.reduce((sum, c) => sum + c.seatCount, 0);
+  const allotmentByName = allotmentCountsByCommitteeName(event.registrations);
+  const publicCommittees = committees.filter(
+    (cm) => cm.visibility === "PUBLIC" || cm.visibility == null
+  );
+
+  const capacity = publicCommittees.reduce((sum, c) => sum + c.seatCount, 0);
   const registered = event._count.registrations;
 
   const currency = event.currency?.trim() || "INR";
@@ -219,7 +238,7 @@ export function mapPublishedEventToConference(event: EventWithListing): Conferen
     price,
     currency,
     level,
-    committees: committees.map((cm) => ({
+    committees: publicCommittees.map((cm) => ({
       id: cm.id,
       name: cm.name,
       abbreviation: cm.name.slice(0, 8).toUpperCase(),
@@ -227,6 +246,7 @@ export function mapPublishedEventToConference(event: EventWithListing): Conferen
       topic2: "",
       difficulty: "Intermediate" as const,
       size: cm.seatCount,
+      allottedCount: allotmentByName.get(cm.name) ?? 0,
     })),
     capacity: capacity || Math.max(registered, 1),
     registered,
@@ -250,8 +270,8 @@ export function mapPublishedEventToConference(event: EventWithListing): Conferen
     tags:
       blobTags.length > 0
         ? blobTags
-        : committees.length > 0
-          ? committees.slice(0, 3).map((c) => c.name)
+        : publicCommittees.length > 0
+          ? publicCommittees.slice(0, 3).map((c) => c.name)
           : ["Model UN", "Published"],
     statusBadgeLabel: statusBadge(event.endDate, committees, phases),
   };
@@ -291,6 +311,26 @@ function normalizeBlobDocuments(blob: Record<string, unknown> | null): Organizer
     });
   }
   return docs.length > 0 ? docs : undefined;
+}
+
+function normalizePartnerConferences(
+  blob: Record<string, unknown> | null
+): PublicConferenceDetail["partnerConferences"] {
+  if (!Array.isArray(blob?.partnerLinks)) return undefined;
+  const partners: NonNullable<PublicConferenceDetail["partnerConferences"]> = [];
+  for (const entry of blob.partnerLinks as unknown[]) {
+    if (!entry || typeof entry !== "object") continue;
+    const link = entry as OrganizerConferencePartnerLink;
+    if (link.status !== "ACCEPTED") continue;
+    const id = String(link.partnerConferenceId || "").trim();
+    if (!id) continue;
+    partners.push({
+      id,
+      title: String(link.partnerConferenceTitle || "Partner MUN").trim(),
+      status: link.status,
+    });
+  }
+  return partners.length > 0 ? partners : undefined;
 }
 
 export function mapPublishedEventToPublicDetail(
@@ -333,6 +373,7 @@ export function mapPublishedEventToPublicDetail(
     commonDocuments: normalizeBlobDocuments(blob),
     awards: normalizeBlobAwards(blob),
     previousEditions: normalizeBlobPreviousEditions(blob),
+    partnerConferences: normalizePartnerConferences(blob),
     reviews: options?.approvedReviews?.length ? options.approvedReviews : undefined,
   };
 }

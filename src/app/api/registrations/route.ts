@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
         deletedAt: null,
         status: "PUBLISHED",
       },
-      select: { id: true, title: true },
+      select: { id: true, title: true, ownerUserId: true },
     });
 
     if (!event) {
@@ -84,6 +84,33 @@ export async function POST(request: NextRequest) {
         where: { id: result.registrationId },
         data: { formAnswersJson: prefs.formAnswersJson },
       });
+    }
+
+    try {
+      await prisma.notification.create({
+        data: {
+          userId: user.id,
+          eventId: event.id,
+          registrationId: result.registrationId,
+          title: "Registration submitted",
+          message: `You've registered for ${event.title}.`,
+          type: "APP_STATUS",
+        },
+      });
+      if (event.ownerUserId && event.ownerUserId !== user.id) {
+        await prisma.notification.create({
+          data: {
+            userId: event.ownerUserId,
+            eventId: event.id,
+            registrationId: result.registrationId,
+            title: "New registration",
+            message: `A delegate registered for ${event.title}.`,
+            type: "APP_STATUS",
+          },
+        });
+      }
+    } catch {
+      // Non-blocking — registration already succeeded.
     }
 
     const registeredAt = new Date().toLocaleDateString("en-IN", {

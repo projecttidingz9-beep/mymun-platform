@@ -55,6 +55,7 @@ export default function AuthModal({ isOpen, onClose, defaultTab = "signin" }: Au
   const [googleRole, setGoogleRole] = useState<"delegate" | "organizer">("delegate");
   const [googlePendingCredential, setGooglePendingCredential] = useState("");
   const [showGoogleRoleStep, setShowGoogleRoleStep] = useState(false);
+  const [registerVerifyNotice, setRegisterVerifyNotice] = useState(false);
   const overlayRef = useRef<HTMLDivElement>(null);
   const googleButtonRef = useRef<HTMLDivElement>(null);
   const googleClientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || "";
@@ -78,6 +79,7 @@ export default function AuthModal({ isOpen, onClose, defaultTab = "signin" }: Au
     setGoogleRole("delegate");
     setGooglePendingCredential("");
     setShowGoogleRoleStep(false);
+    setRegisterVerifyNotice(false);
     onClose();
   }, [defaultTab, onClose]);
 
@@ -173,6 +175,10 @@ export default function AuthModal({ isOpen, onClose, defaultTab = "signin" }: Au
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (registerVerifyNotice) {
+      closeModal();
+      return;
+    }
     setError("");
 
     if (!email || !password) { setError("Please fill all required fields."); return; }
@@ -202,6 +208,7 @@ export default function AuthModal({ isOpen, onClose, defaultTab = "signin" }: Au
         name?: string;
         role?: "delegate" | "organizer" | "admin";
         user?: unknown;
+        emailVerificationRequired?: boolean;
       };
       if (!response.ok) {
         setError(payload.error || "Authentication failed.");
@@ -215,6 +222,10 @@ export default function AuthModal({ isOpen, onClose, defaultTab = "signin" }: Au
       );
       if (!signedIn.ok) {
         setError(loginHydrateErrorMessage(signedIn.failure));
+        return;
+      }
+      if (tab === "register" && payload.emailVerificationRequired) {
+        setRegisterVerifyNotice(true);
         return;
       }
       closeModal();
@@ -573,16 +584,22 @@ export default function AuthModal({ isOpen, onClose, defaultTab = "signin" }: Au
             </div>
           )}
 
-          {(error || forgotNotice) && (
+          {(error || forgotNotice || registerVerifyNotice) && (
             <div
               className="flex items-center gap-2 text-sm px-4 py-3 rounded-xl"
               style={
                 error
                   ? { background: "rgba(157, 46, 46, 0.12)", color: "#c84f4f", border: "1px solid rgba(157, 46, 46, 0.28)" }
+                  : registerVerifyNotice
+                    ? { background: "rgba(59,130,246,0.12)", color: "#1d4ed8", border: "1px solid rgba(59,130,246,0.25)" }
                   : { background: "rgba(22,163,74,0.12)", color: "#15803d", border: "1px solid rgba(22,163,74,0.25)" }
               }
             >
-              <span>{error ? "!" : "✓"}</span> {error || forgotNotice}
+              <span>{error ? "!" : registerVerifyNotice ? "✉" : "✓"}</span>{" "}
+              {error ||
+                (registerVerifyNotice
+                  ? "Account created! Check your inbox and verify your email before registering for conferences."
+                  : forgotNotice)}
             </div>
           )}
           {forgotDevUrl && (
@@ -611,6 +628,8 @@ export default function AuthModal({ isOpen, onClose, defaultTab = "signin" }: Au
                 <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full inline-block" style={{ animation: "spin 0.8s linear infinite" }} />
                 {tab === "signin" ? "Signing in..." : "Creating account..."}
               </span>
+            ) : registerVerifyNotice ? (
+              "Continue"
             ) : (
               tab === "signin" ? "Sign In" : "Create Account"
             )}

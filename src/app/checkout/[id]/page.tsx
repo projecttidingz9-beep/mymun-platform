@@ -57,6 +57,8 @@ export default function CheckoutPage() {
   const [delegationMaxMembers, setDelegationMaxMembers] = useState("");
   const [delegationInviteLink, setDelegationInviteLink] = useState("");
   const [creatingDelegation, setCreatingDelegation] = useState(false);
+  const [emailVerifyBlocked, setEmailVerifyBlocked] = useState(false);
+  const [serverDuplicateRegistration, setServerDuplicateRegistration] = useState<Registration | null>(null);
 
   const eventKey = String(params.id);
   const organizerConference = organizerConferences.find((conference) => conference.id === eventKey);
@@ -64,6 +66,10 @@ export default function CheckoutPage() {
     (conference) => conference.id === eventKey || conference.slug === eventKey
   );
   const marketplaceConference = fromLocalList ?? catalogConference;
+  const resolvedEventId = checkoutConfig?.eventId ?? organizerConference?.id ?? eventKey;
+  const existingRegistration =
+    user?.registeredConferences?.find((registration) => registration.conferenceId === resolvedEventId) ||
+    serverDuplicateRegistration;
 
   useEffect(() => {
     let cancelled = false;
@@ -250,8 +256,37 @@ export default function CheckoutPage() {
       });
       const payload = (await res.json().catch(() => ({}))) as {
         error?: string;
+        code?: string;
         clientRegistration?: Registration;
+        existingRegistrationId?: string;
       };
+      if (res.status === 403 && payload.code === "EMAIL_NOT_VERIFIED") {
+        setEmailVerifyBlocked(true);
+        return;
+      }
+      if (res.status === 409) {
+        const duplicate =
+          user?.registeredConferences?.find(
+            (registration) =>
+              registration.id === payload.existingRegistrationId ||
+              registration.conferenceId === String(params.id)
+          ) ?? null;
+        setServerDuplicateRegistration(
+          duplicate ?? {
+            id: payload.existingRegistrationId || "existing",
+            conferenceId: String(params.id),
+            conferenceTitle: displayTitle,
+            categoryId: selectedCategory.id,
+            categoryName: selectedCategory.name,
+            formAnswers: {},
+            status: "Pending",
+            registeredAt: new Date().toISOString(),
+            paid: false,
+            amount: priceResult.amount,
+          }
+        );
+        return;
+      }
       if (!res.ok || !payload.clientRegistration) {
         alert(payload.error || "Registration failed. If this conference was created only on this device, publish it from the organizer dashboard so it exists on the server.");
         return;
@@ -340,7 +375,42 @@ export default function CheckoutPage() {
             </div>
           </header>
 
-          {step <= 4 && (
+          {existingRegistration && step < 5 && (
+            <div
+              className="rounded-xl px-4 py-4 mb-6"
+              style={{ background: "rgba(59,130,246,0.1)", border: "1px solid rgba(59,130,246,0.25)" }}
+            >
+              <p className="text-sm font-semibold" style={{ color: "var(--fg)" }}>
+                You are already registered for this conference
+              </p>
+              <p className="text-xs mt-1" style={{ color: "var(--fg-muted)" }}>
+                Status: {existingRegistration.status}
+                {existingRegistration.paid ? " · Paid" : " · Payment pending"}
+              </p>
+              <Link href="/dashboard" className="btn btn-primary text-xs mt-3 inline-flex">
+                Go to dashboard
+              </Link>
+            </div>
+          )}
+
+          {emailVerifyBlocked && (
+            <div
+              className="rounded-xl px-4 py-4 mb-6"
+              style={{ background: "rgba(234,179,8,0.15)", border: "1px solid rgba(234,179,8,0.35)" }}
+            >
+              <p className="text-sm font-semibold" style={{ color: "var(--fg)" }}>
+                Please verify your email first
+              </p>
+              <p className="text-xs mt-1" style={{ color: "var(--fg-muted)" }}>
+                Verify your email from the delegate dashboard, then return to complete registration.
+              </p>
+              <Link href="/dashboard" className="btn btn-primary text-xs mt-3 inline-flex">
+                Open dashboard
+              </Link>
+            </div>
+          )}
+
+          {step <= 4 && !existingRegistration && (
             <div className="app-card mb-6 flex items-center gap-4">
               <div
                 className="w-14 h-14 rounded-2xl flex items-center justify-center flex-shrink-0"
@@ -359,7 +429,7 @@ export default function CheckoutPage() {
             </div>
           )}
 
-          {step === 1 && (
+          {step === 1 && !existingRegistration && (
             <div className="card p-8 rounded-2xl space-y-4">
               <h2 className="text-xl font-bold" style={{ color: "var(--fg)" }}>Choose Category</h2>
               {categories.length === 0 && (
@@ -409,7 +479,7 @@ export default function CheckoutPage() {
             </div>
           )}
 
-          {step === 2 && selectedCategory && (
+          {step === 2 && !existingRegistration && selectedCategory && (
             <div className="card p-8 rounded-2xl space-y-4">
               <h2 className="text-xl font-bold" style={{ color: "var(--fg)" }}>{selectedCategory.name} Form</h2>
               <div className="rounded-xl p-3" style={{ background: "var(--bg-subtle)", border: "1px solid var(--border)" }}>
@@ -547,7 +617,7 @@ export default function CheckoutPage() {
             </div>
           )}
 
-          {step === 3 && selectedCategory && (
+          {step === 3 && !existingRegistration && selectedCategory && (
             <div className="card p-8 rounded-2xl space-y-4">
               <h2 className="text-xl font-bold" style={{ color: "var(--fg)" }}>Committee Selection</h2>
               {selectedCategory.requiresCommitteeSelection ? (
@@ -675,7 +745,7 @@ export default function CheckoutPage() {
             </div>
           )}
 
-          {step === 4 && (
+          {step === 4 && !existingRegistration && (
             <div className="card p-8 rounded-2xl space-y-4">
               <h2 className="text-xl font-bold" style={{ color: "var(--fg)" }}>Preview & confirm</h2>
               <p className="text-xs leading-relaxed" style={{ color: "var(--fg-muted)" }}>
@@ -750,8 +820,10 @@ export default function CheckoutPage() {
               <button
                 type="button"
                 className="btn btn-outline-blue w-full"
+                disabled={!submittedRegistration?.paid}
+                title={submittedRegistration?.paid ? undefined : "Pay first to download invoice"}
                 onClick={() => {
-                  if (!user) return;
+                  if (!user || !submittedRegistration?.paid) return;
                   downloadRegistrationInvoicePdf(submittedRegistration, {
                     name: user.name,
                     email: user.email,
@@ -759,7 +831,7 @@ export default function CheckoutPage() {
                   });
                 }}
               >
-                Download Invoice (PDF)
+                {submittedRegistration?.paid ? "Download Invoice (PDF)" : "Invoice available after payment"}
               </button>
               {submittedRegistration.categoryName?.toLowerCase().includes("delegation") ||
               selectedCategory?.applicationType === "delegation" ? (
@@ -836,9 +908,16 @@ export default function CheckoutPage() {
               <button
                 type="button"
                 className="btn btn-primary w-full"
+                onClick={() => router.push("/dashboard#conferences")}
+              >
+                Track my registration
+              </button>
+              <button
+                type="button"
+                className="btn btn-ghost w-full"
                 onClick={() => router.push("/dashboard")}
               >
-                Go to Dashboard
+                Go to dashboard
               </button>
             </div>
           )}

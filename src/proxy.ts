@@ -43,7 +43,7 @@ function actorFromPayload(payload: SessionClaims & { sub?: string }) {
 }
 
 /**
- * Middleware gate using JWT verification only (Edge-safe).
+ * Proxy gate using JWT verification only (Next.js 16 proxy runtime — Node.js).
  * Route handlers still use `validateSessionToken` + DB for session version / locks.
  */
 export async function proxy(request: NextRequest) {

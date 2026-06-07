@@ -147,7 +147,11 @@ export async function loadPublicCheckoutConfig(eventKey: string): Promise<Public
   }
   for (const committee of blobCommittees) {
     const existing = committeesById.get(committee.id);
-    committeesById.set(committee.id, existing ? { ...existing, ...committee, id: committee.id } : committee);
+    const merged = existing ? { ...existing, ...committee, id: committee.id } : committee;
+    if (committee.customQuestions?.length) {
+      merged.customQuestions = committee.customQuestions;
+    }
+    committeesById.set(committee.id, merged);
   }
   const committees = Array.from(committeesById.values()).filter((committee) => committee.isPublic !== false);
 
@@ -157,7 +161,17 @@ export async function loadPublicCheckoutConfig(eventKey: string): Promise<Public
   if (blobCategories && blobCategories.length > 0) {
     registrationCategories = blobCategories;
   } else if ((event.organizerConfig?.registrationCategories.length ?? 0) > 0) {
-    registrationCategories = categoriesFromDb(event.organizerConfig!.registrationCategories, pricingPhases);
+    registrationCategories = categoriesFromDb(event.organizerConfig!.registrationCategories, pricingPhases).map(
+      (category) => {
+        const blobMatch = blobCategories?.find(
+          (entry) => entry.id === category.id || entry.applicationType === category.applicationType
+        );
+        return {
+          ...category,
+          formFields: blobMatch?.formFields?.length ? blobMatch.formFields : category.formFields,
+        };
+      }
+    );
   } else {
     registrationCategories = [
       {

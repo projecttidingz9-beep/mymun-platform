@@ -52,6 +52,15 @@ function resolveFromCategoryPhases(
   }
 
   if (!active) {
+    if (phases.length > 0) {
+      const current = dayStart(ref);
+      const allUpcoming = phases.every(
+        (phase) => dayStart(new Date(phase.startDate)) > current
+      );
+      if (allUpcoming) {
+        return { amount: Math.max(0, Number(category.basePrice) || 0) };
+      }
+    }
     return null;
   }
 
@@ -184,6 +193,18 @@ export async function resolveServerRegistrationAmount(params: {
   const active = phases.length ? getActivePhaseRow(phases, ref) : null;
 
   if (!active) {
+    const current = dayStart(ref);
+    const allUpcoming =
+      phases.length > 0 && phases.every((phase) => dayStart(phase.startDate) > current);
+    if (allUpcoming) {
+      const firstCategory = event.organizerConfig.registrationCategories[0];
+      if (firstCategory) {
+        return {
+          amount: moneyNumber(firstCategory.basePrice),
+          currency,
+        };
+      }
+    }
     throw new RegistrationPricingError(
       "No active pricing phase is available for registration at this time."
     );

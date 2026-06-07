@@ -20,7 +20,10 @@ function mapRegistrationStatusToOrganizer(
 }
 
 function mapRegistrationToClient(
-  reg: PrismaRegistration & { event: { title: string } }
+  reg: PrismaRegistration & {
+    event: { title: string };
+    delegation?: { id: string; schoolName: string; inviteToken: string } | null;
+  }
 ): Registration {
   const org = mapRegistrationStatusToOrganizer(reg.status);
   const isAllotted = reg.status === RegistrationStatus.ALLOTTED;
@@ -49,6 +52,10 @@ function mapRegistrationToClient(
     amount: moneyNumber(reg.amount),
     userId: reg.userId,
     organizerStatus: org,
+    delegationId: reg.delegationId ?? undefined,
+    isDelegationHead: reg.isDelegationHead || undefined,
+    delegationSchoolName: reg.delegation?.schoolName,
+    delegationInviteToken: reg.isDelegationHead ? reg.delegation?.inviteToken : undefined,
   };
 }
 
@@ -76,6 +83,7 @@ export function prismaUserToClientUser(
     id: user.id,
     email: user.email,
     name: user.name,
+    emailVerified: user.emailVerified,
     role,
     avatar,
     profileImageUrl: readStr("profileImageUrl"),

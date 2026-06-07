@@ -31,6 +31,7 @@ export default function CreateOrganizerConferencePage() {
   const [capacity, setCapacity] = useState("");
   const [level, setLevel] = useState<"High School" | "University" | "Open">("High School");
   const [description, setDescription] = useState("");
+  const [currency, setCurrency] = useState<"INR" | "USD" | "EUR" | "GBP">("INR");
 
   const canSubmit =
     title.trim() &&
@@ -52,7 +53,7 @@ export default function CreateOrganizerConferencePage() {
     setIsSubmitting(true);
     setSubmitMessage("");
     try {
-      await addOrganizerConference({
+      const result = await addOrganizerConference({
         title: title.trim(),
         city: city.trim(),
         country: country.trim(),
@@ -65,6 +66,7 @@ export default function CreateOrganizerConferencePage() {
         endDate,
         registrationDeadline,
         description: description.trim() || undefined,
+        currency,
         socialLinks: {},
         registrationCategories: [
           {
@@ -82,8 +84,14 @@ export default function CreateOrganizerConferencePage() {
         ],
         committees: [],
       });
+      if (!result.ok) {
+        setSubmitMessage(result.error ?? "Could not create conference. Please try again.");
+        return;
+      }
       setSubmitMessage("Conference created as Draft. Go to your dashboard and click Publish to make it visible on the marketplace.");
       router.push("/organizers/dashboard");
+    } catch {
+      setSubmitMessage("Could not create conference. Please try again.");
     } finally {
       setIsSubmitting(false);
     }
@@ -176,6 +184,27 @@ export default function CreateOrganizerConferencePage() {
                   onChange={(e) => setCapacity(e.target.value)}
                 />
               </div>
+              <div>
+                <label className="app-sidebar-picker-label">Currency *</label>
+                <select
+                  className="input-base mt-2"
+                  value={currency}
+                  onChange={(event) =>
+                    setCurrency(
+                      event.target.value === "USD" ||
+                        event.target.value === "EUR" ||
+                        event.target.value === "GBP"
+                        ? event.target.value
+                        : "INR"
+                    )
+                  }
+                >
+                  <option value="INR">INR — Indian Rupee</option>
+                  <option value="USD">USD — US Dollar</option>
+                  <option value="EUR">EUR — Euro</option>
+                  <option value="GBP">GBP — British Pound</option>
+                </select>
+              </div>
               <div className="md:col-span-2">
                 <label className="app-sidebar-picker-label">Conference Level</label>
                 <div className="grid grid-cols-3 gap-2 mt-2">
@@ -209,7 +238,10 @@ export default function CreateOrganizerConferencePage() {
             </div>
 
             {submitMessage && (
-              <p className="mt-4 text-sm" style={{ color: "var(--success)" }}>
+              <p
+                className="mt-4 text-sm"
+                style={{ color: submitMessage.includes("Could not") ? "#b91c1c" : "var(--success)" }}
+              >
                 {submitMessage}
               </p>
             )}

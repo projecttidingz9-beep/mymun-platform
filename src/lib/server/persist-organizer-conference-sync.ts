@@ -2,6 +2,8 @@ import type { OrganizerConference } from "@/lib/types";
 import type { EventStatus } from "@/generated/prisma/enums";
 import { prisma } from "./prisma";
 import { mergeOrganizerStoredBlob } from "./organizer-config-store";
+import { syncRegistrationCategoriesToDb } from "./persist-registration-categories";
+import { env } from "./env";
 
 export const ORGANIZER_SYNC_TX_OPTIONS = {
   maxWait: 15_000,
@@ -105,6 +107,7 @@ export async function persistOrganizerConferenceSync(
   options?: PersistConferenceSyncOptions
 ) {
   let resolvedEventStatus: EventStatus = mapConferenceStatusToEvent(conference.status, options);
+  let previousEventStatus: EventStatus | null = null;
 
   await prisma.$transaction(async (tx) => {
     const existing = await tx.event.findUnique({
@@ -114,6 +117,7 @@ export async function persistOrganizerConferenceSync(
     if (!existing) {
       throw new Error("Event not found.");
     }
+    previousEventStatus = existing.status;
 
     resolvedEventStatus = options?.syncStatus === false
       ? existing.status
@@ -224,30 +228,11 @@ export async function persistOrganizerConferenceSync(
       }
     }
 
-    await tx.registrationCategoryConfig.deleteMany({
-      where: { organizerConfigId: configRow.id },
-    });
-
-    if ((conference.registrationCategories || []).length > 0) {
-      await tx.registrationCategoryConfig.createMany({
-        data: conference.registrationCategories.map((cat) => ({
-          id: cat.id,
-          organizerConfigId: configRow.id,
-          name: cat.name,
-          applicationType: cat.applicationType || "delegate",
-          description: cat.description ?? null,
-          isOpen: cat.isOpen !== false,
-          basePrice: cat.basePrice ?? 0,
-          requiresCommitteeSelection: cat.requiresCommitteeSelection !== false,
-          registrationDeadline: cat.registrationDeadline
-            ? new Date(cat.registrationDeadline)
-            : cat.deadlineOverride
-              ? new Date(cat.deadlineOverride)
-              : null,
-          maxDelegatesPerDelegation: cat.maxDelegatesPerDelegation ?? null,
-        })),
-      });
-    }
+    await syncRegistrationCategoriesToDb(
+      tx,
+      configRow.id,
+      conference.registrationCategories || []
+    );
 
     await tx.conferenceAward.deleteMany({ where: { eventId } });
     if ((conference.awards ?? []).length > 0) {
@@ -268,34 +253,6 @@ export async function persistOrganizerConferenceSync(
       });
     }
 
-    const phaseMap = new Map<string, (typeof conference.registrationCategories)[number]["pricingPhases"][number]>();
-    for (const cat of conference.registrationCategories || []) {
-      for (const phase of cat.pricingPhases || []) {
-        if (!phaseMap.has(phase.id)) phaseMap.set(phase.id, phase);
-      }
-    }
-
-    await tx.pricingPhaseConfig.deleteMany({
-      where: { organizerConfigId: configRow.id },
-    });
-
-    if (phaseMap.size > 0) {
-      await tx.pricingPhaseConfig.createMany({
-        data: [...phaseMap.values()].map((phase) => {
-          const committeePriceObj = Object.fromEntries(
-            (phase.committeePrices || []).map((cp) => [cp.committeeId, cp.price])
-          );
-          return {
-            organizerConfigId: configRow.id,
-            name: phase.name,
-            startDate: new Date(phase.startDate),
-            endDate: new Date(phase.endDate),
-            basePrice: phase.basePrice,
-            committeePriceJson: JSON.stringify(committeePriceObj),
-          };
-        }),
-      });
-    }
   }, ORGANIZER_SYNC_TX_OPTIONS);
 
   const normalizedConference = {
@@ -307,6 +264,33 @@ export async function persistOrganizerConferenceSync(
     delete blobPayload.status;
   }
   await mergeOrganizerStoredBlob(eventId, blobPayload);
+
+  if (
+    resolvedEventStatus === "REVIEW" &&
+    previousEventStatus !== "REVIEW" &&
+    options?.syncStatus !== false
+  ) {
+    try {
+      const adminEmail = env.adminEmail();
+      const adminUser = await prisma.user.findUnique({
+        where: { email: adminEmail },
+        select: { id: true },
+      });
+      if (adminUser) {
+        await prisma.notification.create({
+          data: {
+            userId: adminUser.id,
+            eventId,
+            title: "Conference submitted for review",
+            message: `"${conference.title}" is waiting for platform approval.`,
+            type: "OTHER",
+          },
+        });
+      }
+    } catch {
+      // Non-blocking admin alert.
+    }
+  }
 }
 
 export function formatOrganizerSyncError(error: unknown): string {

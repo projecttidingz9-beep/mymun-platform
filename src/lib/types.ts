@@ -6,6 +6,7 @@ export interface Committee {
   topic2: string;
   difficulty: "Beginner" | "Intermediate" | "Advanced";
   size: number;
+  allottedCount?: number;
 }
 
 export interface CommitteePricingInfo {
@@ -181,12 +182,14 @@ export interface PublicConferenceDetail extends Conference {
     createdAt?: string;
   }>;
   previousEditions?: OrganizerPreviousEdition[];
+  partnerConferences?: Array<{ id: string; title: string; status: string }>;
 }
 
 export interface User {
   id: string;
   name: string;
   email: string;
+  emailVerified?: boolean;
   role?: "delegate" | "organizer" | "admin";
   avatar: string;
   profileImageUrl?: string;
@@ -352,6 +355,7 @@ export interface OrganizerConference {
   previousEditions?: OrganizerPreviousEdition[];
   delegationInviteCode?: string;
   organizerTeam?: OrganizerTeamMember[];
+  organizerTeamEmails?: string[];
   awards?: OrganizerAwardConfig[];
   reviews?: ConferenceReview[];
 }
@@ -536,6 +540,10 @@ export interface Registration {
   userId?: string;
   userEmail?: string;
   organizerStatus?: "Pending" | "Allotted" | "Waitlisted" | "Rejected" | "Invited";
+  delegationId?: string;
+  isDelegationHead?: boolean;
+  delegationSchoolName?: string;
+  delegationInviteToken?: string;
 }
 
 export interface UserNotification {

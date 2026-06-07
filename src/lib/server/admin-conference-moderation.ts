@@ -99,6 +99,103 @@ async function notifyOrganizerModeration(params: {
   }
 }
 
+export async function moderateConferenceByStatus(input: {
+  eventId: string;
+  status: EventStatus;
+  actorUserId: string;
+  actorEmail: string;
+  note?: string;
+  ip?: string;
+  userAgent?: string;
+}): Promise<ModerateConferenceResult> {
+  const eventId = input.eventId.trim();
+  const existing = await prisma.event.findFirst({
+    where: { id: eventId, deletedAt: null },
+    select: { id: true, title: true, status: true, owner: { select: { email: true } } },
+  });
+  if (!existing) {
+    throw new Error("Event not found.");
+  }
+
+  if (input.status === "PUBLISHED" && existing.status === "REVIEW") {
+    return moderateConference({
+      eventId,
+      action: "approve",
+      note: input.note,
+      actorUserId: input.actorUserId,
+      actorEmail: input.actorEmail,
+      ip: input.ip,
+      userAgent: input.userAgent,
+    });
+  }
+
+  if (input.status === "DRAFT" && existing.status === "REVIEW") {
+    return moderateConference({
+      eventId,
+      action: "reject",
+      note: input.note,
+      actorUserId: input.actorUserId,
+      actorEmail: input.actorEmail,
+      ip: input.ip,
+      userAgent: input.userAgent,
+    });
+  }
+
+  if (existing.status === input.status) {
+    return {
+      eventId,
+      status: existing.status,
+      title: existing.title,
+      organizerEmail: existing.owner?.email?.trim().toLowerCase() ?? null,
+    };
+  }
+
+  const blobStatus =
+    input.status === "PUBLISHED"
+      ? "Published"
+      : input.status === "REVIEW"
+        ? "Review"
+        : "Draft";
+
+  await prisma.$transaction(async (tx) => {
+    await tx.event.update({
+      where: { id: eventId },
+      data: { status: input.status },
+    });
+
+    await mergeOrganizerStoredBlob(eventId, {
+      status: blobStatus,
+      adminModeratedAt: new Date().toISOString(),
+      adminModeratedBy: input.actorEmail,
+    });
+
+    await tx.auditLog.create({
+      data: {
+        actorUserId: input.actorUserId,
+        eventId,
+        action: "admin.conference.status",
+        entity: "Event",
+        entityId: eventId,
+        before: { status: existing.status },
+        after: { status: input.status, note: input.note ?? null },
+        ip: input.ip,
+        userAgent: input.userAgent,
+      },
+    });
+  });
+
+  const conference = await mapManagedEventToOrganizerConference(eventId);
+  return {
+    eventId,
+    status: input.status,
+    title: conference?.title || existing.title,
+    organizerEmail:
+      conference?.ownerEmail?.trim().toLowerCase() ||
+      existing.owner?.email?.trim().toLowerCase() ||
+      null,
+  };
+}
+
 export async function moderateConference(
   input: ModerateConferenceInput
 ): Promise<ModerateConferenceResult> {

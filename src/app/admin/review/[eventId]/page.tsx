@@ -128,13 +128,30 @@ export default async function AdminReviewPreviewPage({
         <h2 className="text-lg font-semibold text-[var(--fg)] mb-4">
           Registration categories ({conference.registrationCategories.length})
         </h2>
-        <ul className="space-y-2">
+        <ul className="space-y-4">
           {conference.registrationCategories.map((cat) => (
-            <li key={cat.id} className="text-sm flex justify-between gap-4">
-              <span className="text-[var(--fg)]">{cat.name}</span>
-              <span className="text-[var(--fg-muted)] tabular-nums">
-                {conference.currency ?? "INR"} {cat.basePrice}
-              </span>
+            <li key={cat.id} className="text-sm border-b border-[var(--border)] pb-4 last:border-0">
+              <div className="flex justify-between gap-4 mb-2">
+                <span className="font-medium text-[var(--fg)]">{cat.name}</span>
+                <span className="text-[var(--fg-muted)] tabular-nums">
+                  {conference.currency ?? "INR"} {cat.basePrice}
+                </span>
+              </div>
+              {cat.description && (
+                <p className="text-[var(--fg-muted)] mb-2">{cat.description}</p>
+              )}
+              {cat.pricingPhases.length > 0 ? (
+                <ul className="space-y-1 pl-3 border-l border-[var(--border)]">
+                  {cat.pricingPhases.map((phase) => (
+                    <li key={phase.id} className="text-[var(--fg-muted)]">
+                      {phase.name}: {conference.currency ?? "INR"} {phase.basePrice} ·{" "}
+                      {phase.startDate} → {phase.endDate}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-[var(--fg-muted)]">No pricing phases configured.</p>
+              )}
             </li>
           ))}
         </ul>

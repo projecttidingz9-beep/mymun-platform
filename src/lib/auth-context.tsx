@@ -23,6 +23,16 @@ import {
   UserNotification,
 } from "./types";
 import { allotApplicantOnConference } from "./allot-applicant";
+import AuthModal from "@/components/AuthModal";
+
+const PROTECTED_API_PREFIXES = [
+  "/api/user/",
+  "/api/registrations",
+  "/api/notifications/me",
+  "/api/passes/me",
+  "/api/organizers/",
+  "/api/admin/",
+];
 
 export type LoginHydrateFailure = "session" | "user_me" | "network";
 
@@ -749,6 +759,7 @@ const normalizeUser = (raw: unknown): User | null => {
     id: String(value.id ?? ""),
     name: String(value.name ?? ""),
     email: String(value.email ?? ""),
+    emailVerified: value.emailVerified === true,
     role:
       value.role === "organizer" || value.role === "admin"
         ? value.role
@@ -824,6 +835,9 @@ interface AuthContextType {
   isLoggedIn: boolean;
   /** True after client mount — avoids blank flashes before localStorage hydrates. */
   authReady: boolean;
+  /** Set when a protected API returns 401 mid-session — opens sign-in modal. */
+  authModalOpen: boolean;
+  dismissAuthModal: () => void;
   organizerConferences: OrganizerConference[];
   lastOrganizerSyncError: string | null;
   clearOrganizerSyncError: () => void;
@@ -837,7 +851,7 @@ interface AuthContextType {
   addRegistration: (reg: Registration) => void;
   addOrganizerConference: (
     payload: Omit<OrganizerConference, "id" | "status" | "applicants" | "announcements">
-  ) => Promise<void>;
+  ) => Promise<{ ok: boolean; error?: string }>;
   removeOrganizerConference: (conferenceId: string) => void;
   updateOrganizerConferenceStatus: (conferenceId: string, status: OrganizerConference["status"]) => void;
   updateOrganizerConferenceConfig: (
@@ -850,6 +864,7 @@ interface AuthContextType {
         | "level"
         | "city"
         | "country"
+        | "currency"
         | "organizerName"
         | "contactDetail"
         | "tags"
@@ -893,6 +908,7 @@ interface AuthContextType {
         | "level"
         | "city"
         | "country"
+        | "currency"
         | "organizerName"
         | "contactDetail"
         | "tags"
@@ -930,6 +946,7 @@ interface AuthContextType {
     conferenceId: string,
     options?: OrganizerConferenceSyncOptions
   ) => Promise<{ ok: boolean; error?: string }>;
+  refetchMyEvents: (identity?: { id?: string | null; email?: string | null }) => Promise<void>;
   updateOrganizerCommitteeConfig: (
     conferenceId: string,
     committeeId: string,
@@ -1021,18 +1038,21 @@ const AuthContext = createContext<AuthContextType>({
   user: null,
   isLoggedIn: false,
   authReady: false,
+  authModalOpen: false,
+  dismissAuthModal: () => {},
   organizerConferences: [],
   lastOrganizerSyncError: null,
   clearOrganizerSyncError: () => {},
   login: async () => ({ ok: false, failure: "network" as const }),
   logout: () => {},
   addRegistration: () => {},
-  addOrganizerConference: async () => {},
+  addOrganizerConference: async () => ({ ok: false, error: "Not available." }),
   removeOrganizerConference: () => {},
   updateOrganizerConferenceStatus: () => {},
   updateOrganizerConferenceConfig: () => {},
   updateOrganizerConferenceConfigAsync: async () => ({ ok: false, error: "Not available." }),
   syncOrganizerConferenceById: async () => ({ ok: false, error: "Not available." }),
+  refetchMyEvents: async () => {},
   updateOrganizerCommitteeConfig: () => {},
   addOrganizerCommittee: () => undefined,
   removeOrganizerCommittee: () => {},
@@ -1076,6 +1096,7 @@ const AuthContext = createContext<AuthContextType>({
 export function AuthProvider({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const [authReady, setAuthReady] = useState(false);
+  const [authModalOpen, setAuthModalOpen] = useState(false);
 
   const [user, setUser] = useState<User | null>(null);
 
@@ -1174,6 +1195,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       cancelled = true;
     };
   }, [refreshAuthState]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const originalFetch = window.fetch.bind(window);
+    window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+      const response = await originalFetch(input, init);
+      if (response.status !== 401) return response;
+      const url =
+        typeof input === "string"
+          ? input
+          : input instanceof URL
+            ? input.href
+            : input.url;
+      if (!PROTECTED_API_PREFIXES.some((prefix) => url.includes(prefix))) {
+        return response;
+      }
+      setUser(null);
+      setOrganizerConferences([]);
+      setNotifications([]);
+      setAuthModalOpen(true);
+      return response;
+    };
+    return () => {
+      window.fetch = originalFetch;
+    };
+  }, []);
 
   useEffect(() => {
     if (!authReady || !user || !isOrganizerUser(user)) return;
@@ -1315,10 +1362,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     if (result.ok) return { ok: true };
-    if (fromServer) {
-      void refreshAuthState();
-      return { ok: true };
-    }
     return result;
   };
 
@@ -1433,12 +1476,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         endDate: payload.endDate,
         registrationDeadline: payload.registrationDeadline,
         description: payload.description,
+        currency: payload.currency,
         socialLinks: payload.socialLinks,
         registrationCategories: payload.registrationCategories,
       }),
     });
-    if (!res.ok) return;
+    const body = (await res.json().catch(() => ({}))) as { error?: string };
+    if (!res.ok) {
+      return { ok: false, error: body.error ?? "Could not create conference." };
+    }
     await refetchMyEvents({ id: user?.id, email: user?.email });
+    return { ok: true };
   };
 
   const removeOrganizerConference: AuthContextType["removeOrganizerConference"] = (conferenceId) => {
@@ -1468,18 +1516,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     options
   ) => {
     const current = organizerConferences;
-    const next = current.map((conference) =>
-      conference.id === conferenceId
-        ? {
-            ...conference,
-            ...patch,
-            socialLinks: {
-              ...(conference.socialLinks || {}),
-              ...(patch.socialLinks || {}),
-            },
-          }
-        : conference
-    );
+    const next = current.map((conference) => {
+      if (conference.id !== conferenceId) return conference;
+      const merged: OrganizerConference = {
+        ...conference,
+        ...patch,
+        socialLinks: {
+          ...(conference.socialLinks || {}),
+          ...(patch.socialLinks || {}),
+        },
+      };
+      if (patch.organizerTeam) {
+        merged.organizerTeamEmails = patch.organizerTeam
+          .map((member) => member.email.trim().toLowerCase())
+          .filter(Boolean);
+      }
+      return merged;
+    });
     persistOrganizerConferences(next, conferenceId, options);
   };
 
@@ -1554,7 +1607,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         ),
       };
     });
-    persistOrganizerConferences(next, conferenceId);
+    persistOrganizerConferences(next);
   };
 
   const addRegistrationCategory: AuthContextType["addRegistrationCategory"] = (conferenceId, category) => {
@@ -1571,7 +1624,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         registrationCategories: [...conference.registrationCategories, category],
       };
     });
-    persistOrganizerConferences(next, conferenceId);
+    persistOrganizerConferences(next);
   };
 
   const addConferenceReview: AuthContextType["addConferenceReview"] = (conferenceId, payload) => {
@@ -1730,6 +1783,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     })();
     if (targetConference && targetApplicant) {
       triggerStatusEmail({ conference: targetConference, applicant: targetApplicant, status });
+      if (status === "Rejected") {
+        addNotification({
+          id: `ntf-${Date.now()}`,
+          conferenceId,
+          registrationId: targetApplicant.registrationId,
+          userId: targetApplicant.userId,
+          userEmail: targetApplicant.userEmail,
+          title: "Application Update",
+          message: `Your application for ${targetConference.title} was not accepted.`,
+          type: "status",
+          createdAt: new Date().toISOString(),
+          read: false,
+        });
+      }
     }
   };
 
@@ -2116,6 +2183,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         user,
         isLoggedIn: !!user,
         authReady,
+        authModalOpen,
+        dismissAuthModal: () => setAuthModalOpen(false),
         organizerConferences,
         lastOrganizerSyncError,
         clearOrganizerSyncError,
@@ -2128,6 +2197,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         updateOrganizerConferenceConfig,
         updateOrganizerConferenceConfigAsync,
         syncOrganizerConferenceById,
+        refetchMyEvents,
         updateOrganizerCommitteeConfig,
         addOrganizerCommittee,
         removeOrganizerCommittee,
@@ -2154,6 +2224,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }}
     >
       {children}
+      <AuthModal isOpen={authModalOpen} onClose={() => setAuthModalOpen(false)} />
     </AuthContext.Provider>
   );
 }

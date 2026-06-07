@@ -38,7 +38,7 @@ export default function MarketplacePage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [level, setLevel] = useState("All");
   const [region, setRegion] = useState("All");
-  const [maxPrice, setMaxPrice] = useState(250);
+  const [freeOnly, setFreeOnly] = useState(false);
   const [seatsMin, setSeatsMin] = useState(0);
   const [seatsMax, setSeatsMax] = useState(3000);
   const [startDateFrom, setStartDateFrom] = useState("");
@@ -112,7 +112,7 @@ export default function MarketplacePage() {
         !searchQuery || searchText.includes(searchQuery);
       const matchLevel = level === "All" || c.level === level;
       const matchRegion = region === "All" || c.region === region;
-      const matchPrice = c.price <= maxPrice;
+      const matchPrice = !freeOnly || c.price === 0;
       const seatsRemaining = Math.max(0, c.capacity - c.registered);
       const matchSeats = seatsRemaining >= normalizedSeatsMin && seatsRemaining <= normalizedSeatsMax;
 
@@ -160,7 +160,7 @@ export default function MarketplacePage() {
     searchQuery,
     level,
     region,
-    maxPrice,
+    freeOnly,
     seatsMin,
     seatsMax,
     startDateFrom,
@@ -174,13 +174,13 @@ export default function MarketplacePage() {
   const activeFilters: string[] = [];
   if (level !== "All") activeFilters.push(level);
   if (region !== "All") activeFilters.push(region);
-  if (maxPrice < 250) activeFilters.push(`≤$${maxPrice}`);
+  if (freeOnly) activeFilters.push("Free only");
   if (seatsMin > 0 || seatsMax < 3000) activeFilters.push(`Seats ${Math.min(seatsMin, seatsMax)}-${Math.max(seatsMin, seatsMax)}`);
   if (startDateFrom || startDateTo) activeFilters.push(`Start ${startDateFrom || "Any"} to ${startDateTo || "Any"}`);
   if (deadlineFrom || deadlineTo) activeFilters.push(`Deadline ${deadlineFrom || "Any"} to ${deadlineTo || "Any"}`);
   if (featuredOnly) activeFilters.push("Featured only");
 
-  const clearPrice = () => setMaxPrice(250);
+  const clearPrice = () => setFreeOnly(false);
   const clearSeats = () => {
     setSeatsMin(0);
     setSeatsMax(3000);
@@ -196,7 +196,7 @@ export default function MarketplacePage() {
   const clearAll = () => {
     setLevel("All");
     setRegion("All");
-    setMaxPrice(250);
+    setFreeOnly(false);
     setSeatsMin(0);
     setSeatsMax(3000);
     setStartDateFrom("");
@@ -320,31 +320,22 @@ export default function MarketplacePage() {
         </div>
       </div>
 
-      <div>
-        <div className="flex items-center justify-between mb-1.5">
-          <p
-            className="text-[10px] font-semibold"
-            style={{ color: "var(--fg-muted)", letterSpacing: "0.24em", textTransform: "uppercase" }}
-          >
-            Max Price <span style={{ color: "var(--accent-warm)" }}>${maxPrice}</span>
-          </p>
-          {maxPrice < 250 && (
-            <button onClick={clearPrice} className="text-[11px]" style={{ color: "var(--accent-warm)" }}>Clear</button>
-          )}
-        </div>
-        <input
-          type="range"
-          min={0}
-          max={250}
-          step={10}
-          value={maxPrice}
-          onChange={(event) => setMaxPrice(Number(event.target.value))}
-          className="w-full"
-          style={{ accentColor: "var(--accent-warm)" }}
-        />
-        <div className="flex justify-between text-xs mt-1" style={{ color: "var(--fg-muted)" }}>
-          <span>$0</span><span>$250+</span>
-        </div>
+      <div
+        className="flex items-center justify-between rounded-xl p-3"
+        style={{ background: "var(--bg-subtle)", border: "1px solid var(--border)" }}
+      >
+        <label className="flex items-center gap-2 text-sm" style={{ color: "var(--fg)" }}>
+          <input
+            type="checkbox"
+            checked={freeOnly}
+            onChange={(event) => setFreeOnly(event.target.checked)}
+            style={{ accentColor: "var(--accent-warm)" }}
+          />
+          Free conferences only
+        </label>
+        {freeOnly && (
+          <button onClick={clearPrice} className="text-[11px]" style={{ color: "var(--accent-warm)" }}>Clear</button>
+        )}
       </div>
 
       <div

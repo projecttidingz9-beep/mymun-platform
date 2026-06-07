@@ -5,7 +5,10 @@ import { prisma } from "@/lib/server/prisma";
 const clientUserInclude = {
   registrations: {
     where: { deletedAt: null },
-    include: { event: { select: { title: true } } },
+    include: {
+      event: { select: { title: true } },
+      delegation: { select: { id: true, schoolName: true, inviteToken: true } },
+    },
   },
 } as const;
 

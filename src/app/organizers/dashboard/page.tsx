@@ -20,6 +20,12 @@ const QrScannerPanel = dynamic(() => import("@/components/QrScannerPanel"), {
 import { ensureServerSession } from "@/lib/client/session";
 import { allotApplicantOnConference } from "@/lib/allot-applicant";
 import { netAfterPlatformFee } from "@/lib/platform-finance";
+import { formatMoney } from "@/lib/format-money";
+import { downloadCsv } from "@/lib/client/csv-export";
+import {
+  EMAIL_TEMPLATE_PREVIEW_CONTEXT,
+  renderEmailTemplate,
+} from "@/lib/render-email-template";
 import { useAuth } from "@/lib/auth-context";
 import { hasOrganizerConferenceAccess } from "@/lib/organizer-access";
 import {
@@ -377,6 +383,7 @@ export default function OrganizerDashboardPage() {
     commitOrganizerConferences,
     unassignApplicant,
     updateOrganizerConferenceConfig,
+    updateOrganizerConferenceConfigAsync,
     toggleApplicantPayment,
     syncOrganizerConferenceById,
     updateOrganizerCommitteeConfig,
@@ -391,6 +398,7 @@ export default function OrganizerDashboardPage() {
     updateOrganizerConferenceStatus,
     lastOrganizerSyncError,
     clearOrganizerSyncError,
+    refetchMyEvents,
   } = useAuth();
 
   const organizerConferences = useMemo(
@@ -414,6 +422,12 @@ export default function OrganizerDashboardPage() {
     "all" | "paid" | "allotted" | "committeeId" | "categoryId" | "delegationId"
   >("all");
   const [broadcastSending, setBroadcastSending] = useState(false);
+  const [payingRegistrationId, setPayingRegistrationId] = useState<string | null>(null);
+  const [paymentActionStatus, setPaymentActionStatus] = useState("");
+  const [paperActionStatus, setPaperActionStatus] = useState("");
+  const [templatesSavedJson, setTemplatesSavedJson] = useState("");
+  const [templatesSaving, setTemplatesSaving] = useState(false);
+  const [templatesSaveStatus, setTemplatesSaveStatus] = useState("");
   const [indiaPresetSelection, setIndiaPresetSelection] = useState<CommitteeFormatKey>("AIPPM");
   const [awardPresetKey, setAwardPresetKey] = useState("");
   const [eventDelegations, setEventDelegations] = useState<
@@ -536,6 +550,9 @@ export default function OrganizerDashboardPage() {
     () => parseConferenceScheduleEntries(organizerConferences[0]?.conferenceSchedule || [])
   );
   const [previewSaveStatus, setPreviewSaveStatus] = useState("");
+  const [pricingSaveStatus, setPricingSaveStatus] = useState("");
+  const [pricingSaving, setPricingSaving] = useState(false);
+  const [pricingSavedCategoriesJson, setPricingSavedCategoriesJson] = useState("");
   const [scheduleAddDayOpen, setScheduleAddDayOpen] = useState(false);
   const [deleteConfirmStep, setDeleteConfirmStep] = useState<0 | 1>(0);
   const [partnerRelationships, setPartnerRelationships] = useState<PartnerRelationship[]>([]);
@@ -1785,7 +1802,7 @@ export default function OrganizerDashboardPage() {
 
       if (assigned > 0) {
         commitOrganizerConferences(workingConferences, selectedConference.id);
-        await Promise.all(
+        const patchResponses = await Promise.all(
           patchQueue.map((job) =>
             fetch(`/api/organizers/registrations/${job.registrationId}`, {
               method: "PATCH",
@@ -1802,6 +1819,44 @@ export default function OrganizerDashboardPage() {
             })
           )
         );
+        const syncedConference = workingConferences.find((entry) => entry.id === selectedConference.id);
+        if (syncedConference) {
+          const templates =
+            syncedConference.statusEmailTemplates ||
+            buildDefaultStatusEmailTemplates(syncedConference.title);
+          const allottedTemplate = templates.allotted;
+          await Promise.all(
+            patchQueue.map(async (job, index) => {
+              if (!patchResponses[index]?.ok) return;
+              const applicant = syncedConference.applicants.find(
+                (entry) => entry.registrationId === job.registrationId
+              );
+              const recipientEmail = applicant?.userEmail;
+              if (!recipientEmail || !allottedTemplate?.subject?.trim() || !allottedTemplate?.body?.trim()) {
+                return;
+              }
+              await fetch("/api/organizers/send-status-email", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                credentials: "include",
+                body: JSON.stringify({
+                  eventId: syncedConference.id,
+                  to: recipientEmail,
+                  templateKey: "allotted",
+                  subjectTemplate: allottedTemplate.subject,
+                  bodyTemplate: allottedTemplate.body,
+                  context: {
+                    applicantName: applicant?.name ?? "Delegate",
+                    conferenceTitle: syncedConference.title,
+                    status: "Allotted",
+                    assignedCommittee: job.committeeName,
+                    assignedPortfolio: job.portfolioName ?? "",
+                  },
+                }),
+              });
+            })
+          );
+        }
       }
 
       alert(`Auto-assign complete: ${assigned} allotted, ${failed} skipped or failed.`);
@@ -1817,6 +1872,78 @@ export default function OrganizerDashboardPage() {
       (category) => (category.applicationType || "delegate") === pricingCategoryTypeTab
     );
   }, [selectedConference, pricingCategoryTypeTab]);
+
+  const pricingCategoriesJson = useMemo(
+    () => JSON.stringify(selectedConference?.registrationCategories ?? []),
+    [selectedConference?.registrationCategories]
+  );
+
+  const hasPricingUnsavedChanges =
+    !!selectedConference &&
+    pricingSavedCategoriesJson !== "" &&
+    pricingCategoriesJson !== pricingSavedCategoriesJson;
+
+  useEffect(() => {
+    if (!selectedConference) {
+      setPricingSavedCategoriesJson("");
+      return;
+    }
+    setPricingSavedCategoriesJson(JSON.stringify(selectedConference.registrationCategories));
+  }, [selectedConference?.id]);
+
+  const savePricingCategories = async (
+    categoriesOverride?: OrganizerConference["registrationCategories"]
+  ) => {
+    if (!selectedConference || pricingSaving) return;
+    const categoriesToSave = categoriesOverride ?? selectedConference.registrationCategories;
+    setPricingSaving(true);
+    setPricingSaveStatus("");
+    try {
+      const response = await fetch(
+        `/api/organizers/conference-config/${encodeURIComponent(selectedConference.id)}`,
+        {
+          method: "PATCH",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            registrationCategories: categoriesToSave,
+            ownerUserId: selectedConference.ownerUserId || user?.id,
+            ownerEmail: selectedConference.ownerEmail || user?.email,
+            organizerTeamEmails: (selectedConference.organizerTeam || [])
+              .map((member) => member.email.trim().toLowerCase())
+              .filter(Boolean),
+          }),
+        }
+      );
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => ({}))) as { error?: string };
+        throw new Error(payload.error || "Failed to save categories and pricing.");
+      }
+      setPricingSavedCategoriesJson(JSON.stringify(categoriesToSave));
+      await refetchMyEvents({ id: user?.id, email: user?.email });
+      setPricingSaveStatus("Categories and pricing saved.");
+      window.setTimeout(() => setPricingSaveStatus(""), 3500);
+    } catch (error) {
+      setPricingSaveStatus(
+        error instanceof Error ? error.message : "Unable to save categories and pricing."
+      );
+    } finally {
+      setPricingSaving(false);
+    }
+  };
+
+  const handleAddPricingCategory = async () => {
+    if (!selectedConference || pricingSaving) return;
+    const categoryType = pricingCategoryTypeTab;
+    const hasType = selectedConference.registrationCategories.some(
+      (entry) => (entry.applicationType || "delegate") === categoryType
+    );
+    if (hasType) return;
+    const newCategory = getDefaultCategoryForType(categoryType, selectedConference);
+    const nextCategories = [...selectedConference.registrationCategories, newCategory];
+    addRegistrationCategory(selectedConference.id, newCategory);
+    await savePricingCategories(nextCategories);
+  };
 
   const selectedApplicant = useMemo(() => {
     if (!selectedConference || !selectedApplicantId) return null;
@@ -2144,6 +2271,37 @@ export default function OrganizerDashboardPage() {
     if (!selectedConference) return null;
     return selectedConference.statusEmailTemplates || buildDefaultStatusEmailTemplates(selectedConference.title);
   }, [selectedConference]);
+  const templatesJson = useMemo(
+    () => JSON.stringify(selectedConference?.statusEmailTemplates ?? null),
+    [selectedConference?.statusEmailTemplates]
+  );
+  const hasTemplatesUnsavedChanges =
+    !!selectedConference && templatesSavedJson !== "" && templatesJson !== templatesSavedJson;
+
+  useEffect(() => {
+    if (!selectedConference) {
+      setTemplatesSavedJson("");
+      return;
+    }
+    setTemplatesSavedJson(JSON.stringify(selectedConference.statusEmailTemplates ?? null));
+  }, [selectedConference?.id]);
+
+  const saveStatusEmailTemplates = async () => {
+    if (!selectedConference || !selectedConferenceEmailTemplates || templatesSaving) return;
+    setTemplatesSaving(true);
+    setTemplatesSaveStatus("");
+    const result = await updateOrganizerConferenceConfigAsync(selectedConference.id, {
+      statusEmailTemplates: selectedConferenceEmailTemplates,
+    });
+    if (result.ok) {
+      setTemplatesSavedJson(JSON.stringify(selectedConferenceEmailTemplates));
+      setTemplatesSaveStatus("Templates saved.");
+    } else {
+      setTemplatesSaveStatus(result.error ?? "Could not save templates.");
+    }
+    setTemplatesSaving(false);
+    setTimeout(() => setTemplatesSaveStatus(""), 2500);
+  };
   const selectedConferenceBankingDetails = useMemo<OrganizerBankingDetails>(() => {
     if (!selectedConference?.bankingDetails) {
       return { verificationStatus: "Unverified" };
@@ -2403,6 +2561,13 @@ export default function OrganizerDashboardPage() {
                   })}
                 </div>
               ))}
+              <div className="app-sidebar-section">
+                <span className="app-sidebar-section-label">Finance</span>
+                <Link href="/organizers/payments" className="app-sidebar-item">
+                  <span className="app-sidebar-item-icon" aria-hidden>💳</span>
+                  <span className="app-sidebar-item-label">Manual Payments</span>
+                </Link>
+              </div>
             </aside>
 
             <main className="min-w-0">
@@ -2423,6 +2588,20 @@ export default function OrganizerDashboardPage() {
                       <p className="app-subtitle mt-2">{ORGANIZER_SECTION_META.overview.subtitle}</p>
                     </div>
                   </header>
+
+                  {selectedConference?.adminRejectionNote?.trim() && (
+                    <div
+                      className="card p-4 rounded-2xl mb-6 border border-amber-500/35 bg-amber-500/10"
+                      role="status"
+                    >
+                      <p className="text-sm font-semibold" style={{ color: "var(--fg)" }}>
+                        Conference not approved
+                      </p>
+                      <p className="text-sm mt-1" style={{ color: "var(--fg-muted)" }}>
+                        {selectedConference.adminRejectionNote}
+                      </p>
+                    </div>
+                  )}
 
                   <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
                     {[
@@ -2684,6 +2863,10 @@ export default function OrganizerDashboardPage() {
                           </button>
                         ) : selectedConference.status === "Review" ? (
                           <span className="badge badge-gold text-xs">Pending platform review</span>
+                        ) : selectedConference.status === "Published" ? (
+                          <span className="text-xs" style={{ color: "var(--fg-muted)" }}>
+                            Live on marketplace — contact platform admin for status changes.
+                          </span>
                         ) : (
                           <button
                             type="button"
@@ -3213,6 +3396,41 @@ export default function OrganizerDashboardPage() {
                           ? `Auto-assigning… (${autoAssignProgress})`
                           : "Auto-assign all pending"}
                       </button>
+                      <button
+                        type="button"
+                        className="btn btn-ghost text-xs"
+                        disabled={filteredApplications.length === 0}
+                        onClick={() => {
+                          if (!selectedConference) return;
+                          downloadCsv(
+                            `${selectedConference.title.replace(/[^\w.-]+/g, "_")}-applications.csv`,
+                            [
+                              "Name",
+                              "Email",
+                              "School",
+                              "Category",
+                              "Status",
+                              "Committee",
+                              "Country",
+                              "Paid",
+                              "Amount",
+                            ],
+                            filteredApplications.map((applicant) => [
+                              applicant.name,
+                              applicant.userEmail || "",
+                              applicant.school,
+                              applicant.categoryName || "",
+                              applicant.status,
+                              applicant.assignedCommitteeName || "",
+                              applicant.countryPreference || "",
+                              applicant.paid ? "Yes" : "No",
+                              applicant.amount || 0,
+                            ])
+                          );
+                        }}
+                      >
+                        Export CSV
+                      </button>
                     </div>
                     {filteredApplications.length === 0 ? (
                       <p className="text-sm" style={{ color: "var(--fg-muted)" }}>No applications yet.</p>
@@ -3407,6 +3625,9 @@ export default function OrganizerDashboardPage() {
 
                   <div className="card p-6 rounded-2xl mt-6">
                     <h3 className="text-lg font-bold mb-4" style={{ color: "var(--fg)" }}>Position Papers</h3>
+                    {paperActionStatus && (
+                      <p className="text-xs mb-3" style={{ color: "var(--fg-muted)" }}>{paperActionStatus}</p>
+                    )}
                     {positionPapers.length === 0 ? (
                       <p className="text-sm" style={{ color: "var(--fg-muted)" }}>No position papers submitted yet.</p>
                     ) : (
@@ -3430,21 +3651,30 @@ export default function OrganizerDashboardPage() {
                                 type="button"
                                 className="btn btn-ghost text-xs"
                                 onClick={() => {
-                                  void fetch(
-                                    `/api/organizers/registrations/${paper.registrationId}/position-paper`,
-                                    {
-                                      method: "PATCH",
-                                      credentials: "include",
-                                      headers: { "Content-Type": "application/json" },
-                                      body: JSON.stringify({ status: "APPROVED" }),
+                                  void (async () => {
+                                    setPaperActionStatus("");
+                                    const res = await fetch(
+                                      `/api/organizers/registrations/${paper.registrationId}/position-paper`,
+                                      {
+                                        method: "PATCH",
+                                        credentials: "include",
+                                        headers: { "Content-Type": "application/json" },
+                                        body: JSON.stringify({ status: "APPROVED" }),
+                                      }
+                                    );
+                                    if (!res.ok) {
+                                      const payload = (await res.json().catch(() => ({}))) as { error?: string };
+                                      setPaperActionStatus(payload.error ?? "Could not approve position paper.");
+                                      return;
                                     }
-                                  ).then(() => {
                                     setPositionPapers((prev) =>
                                       prev.map((entry) =>
                                         entry.id === paper.id ? { ...entry, status: "APPROVED" } : entry
                                       )
                                     );
-                                  });
+                                    setPaperActionStatus("Position paper approved.");
+                                    setTimeout(() => setPaperActionStatus(""), 2500);
+                                  })();
                                 }}
                               >
                                 Approve
@@ -3453,21 +3683,30 @@ export default function OrganizerDashboardPage() {
                                 type="button"
                                 className="btn btn-ghost text-xs"
                                 onClick={() => {
-                                  void fetch(
-                                    `/api/organizers/registrations/${paper.registrationId}/position-paper`,
-                                    {
-                                      method: "PATCH",
-                                      credentials: "include",
-                                      headers: { "Content-Type": "application/json" },
-                                      body: JSON.stringify({ status: "REJECTED", reviewerNotes: "Needs revision" }),
+                                  void (async () => {
+                                    setPaperActionStatus("");
+                                    const res = await fetch(
+                                      `/api/organizers/registrations/${paper.registrationId}/position-paper`,
+                                      {
+                                        method: "PATCH",
+                                        credentials: "include",
+                                        headers: { "Content-Type": "application/json" },
+                                        body: JSON.stringify({ status: "REJECTED", reviewerNotes: "Needs revision" }),
+                                      }
+                                    );
+                                    if (!res.ok) {
+                                      const payload = (await res.json().catch(() => ({}))) as { error?: string };
+                                      setPaperActionStatus(payload.error ?? "Could not reject position paper.");
+                                      return;
                                     }
-                                  ).then(() => {
                                     setPositionPapers((prev) =>
                                       prev.map((entry) =>
                                         entry.id === paper.id ? { ...entry, status: "REJECTED" } : entry
                                       )
                                     );
-                                  });
+                                    setPaperActionStatus("Position paper rejected.");
+                                    setTimeout(() => setPaperActionStatus(""), 2500);
+                                  })();
                                 }}
                               >
                                 Reject
@@ -4132,6 +4371,28 @@ export default function OrganizerDashboardPage() {
                                   alert(`Emailed ${data.sent ?? 0} delegate(s).`);
                                 })
                                 .finally(() => setBroadcastSending(false));
+                            } else {
+                              void Promise.all(
+                                selectedConference.applicants
+                                  .filter(
+                                    (applicant) =>
+                                      applicant.registrationId &&
+                                      applicant.status !== "Rejected"
+                                  )
+                                  .map((applicant) =>
+                                    fetch("/api/organizers/notifications", {
+                                      method: "POST",
+                                      credentials: "include",
+                                      headers: { "Content-Type": "application/json" },
+                                      body: JSON.stringify({
+                                        registrationId: applicant.registrationId,
+                                        title,
+                                        message,
+                                        type: "ANNOUNCEMENT",
+                                      }),
+                                    })
+                                  )
+                              );
                             }
                             setAnnouncementTitle("");
                             setAnnouncementMessage("");
@@ -4161,10 +4422,16 @@ export default function OrganizerDashboardPage() {
                         <>
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
                             {[
-                              { label: "Gross", value: `$${financeSummary.gross}` },
-                              { label: "Successful", value: `${financeSummary.successfulCount} ($${financeSummary.successfulAmount})` },
+                              { label: "Gross", value: formatMoney(financeSummary.gross, selectedConference.currency || "INR") },
+                              {
+                                label: "Successful",
+                                value: `${financeSummary.successfulCount} (${formatMoney(financeSummary.successfulAmount, selectedConference.currency || "INR")})`,
+                              },
                               { label: "Pending", value: financeSummary.pending },
-                              { label: "Refunds", value: `${financeSummary.refundCount} ($${financeSummary.refundAmount})` },
+                              {
+                                label: "Refunds",
+                                value: `${financeSummary.refundCount} (${formatMoney(financeSummary.refundAmount, selectedConference.currency || "INR")})`,
+                              },
                             ].map((item) => (
                               <div key={item.label} className="rounded-xl p-2" style={{ background: "var(--bg-subtle)" }}>
                                 <p className="text-[11px]" style={{ color: "var(--fg-muted)" }}>{item.label}</p>
@@ -4173,8 +4440,51 @@ export default function OrganizerDashboardPage() {
                             ))}
                           </div>
                           <p className="text-xs mb-2" style={{ color: "var(--fg-muted)" }}>
-                            Net after fees (6%): <strong style={{ color: "var(--fg)" }}>${financeSummary.netAfterFees}</strong>
+                            Net after fees (6%):{" "}
+                            <strong style={{ color: "var(--fg)" }}>
+                              {formatMoney(financeSummary.netAfterFees, selectedConference.currency || "INR")}
+                            </strong>
                           </p>
+                          {paymentActionStatus && (
+                            <p className="text-xs mb-2" style={{ color: "var(--fg-muted)" }}>{paymentActionStatus}</p>
+                          )}
+                          <div className="flex flex-wrap items-center gap-2 mb-3">
+                            <button
+                              type="button"
+                              className="btn btn-ghost text-xs"
+                              disabled={transactionRows.length === 0}
+                              onClick={() => {
+                                if (!selectedConference) return;
+                                downloadCsv(
+                                  `${selectedConference.title.replace(/[^\w.-]+/g, "_")}-transactions.csv`,
+                                  [
+                                    "Name",
+                                    "Category",
+                                    "Committee",
+                                    "Portfolio",
+                                    "Payment",
+                                    "Applicant Status",
+                                    "Refund",
+                                    "Amount",
+                                    "Registered At",
+                                  ],
+                                  transactionRows.map((row) => [
+                                    row.name,
+                                    row.category,
+                                    row.committee,
+                                    row.portfolio,
+                                    row.paymentStatus,
+                                    row.applicantStatus,
+                                    row.refundStatus,
+                                    row.amount,
+                                    row.registeredAt,
+                                  ])
+                                );
+                              }}
+                            >
+                              Export CSV
+                            </button>
+                          </div>
                           <div className="flex flex-col gap-3 mb-3">
                             <input
                               className="input-base text-xs"
@@ -4253,7 +4563,9 @@ export default function OrganizerDashboardPage() {
                                       </p>
                                     </div>
                                     <div className="text-right">
-                                      <p className="text-sm font-bold" style={{ color: "var(--fg)" }}>${row.amount}</p>
+                                      <p className="text-sm font-bold" style={{ color: "var(--fg)" }}>
+                                        {formatMoney(row.amount, selectedConference.currency || "INR")}
+                                      </p>
                                       <div className="flex gap-1 justify-end mt-1 flex-wrap">
                                         <span className={`badge ${row.paymentStatus === "Paid" ? "badge-green" : "badge-gold"}`}>
                                           {row.paymentStatus}
@@ -4280,11 +4592,25 @@ export default function OrganizerDashboardPage() {
                                       <button
                                         type="button"
                                         className="btn btn-primary text-xs"
-                                        onClick={() =>
-                                          toggleApplicantPayment(selectedConference.id, row.id)
-                                        }
+                                        disabled={payingRegistrationId === row.registrationId}
+                                        onClick={() => {
+                                          if (!row.registrationId) return;
+                                          setPayingRegistrationId(row.registrationId);
+                                          setPaymentActionStatus("");
+                                          void (async () => {
+                                            try {
+                                              toggleApplicantPayment(selectedConference.id, row.id);
+                                              setPaymentActionStatus(`Marked ${row.name} as paid.`);
+                                            } catch {
+                                              setPaymentActionStatus(`Could not mark ${row.name} as paid.`);
+                                            } finally {
+                                              setPayingRegistrationId(null);
+                                              setTimeout(() => setPaymentActionStatus(""), 2500);
+                                            }
+                                          })();
+                                        }}
                                       >
-                                        Mark as paid
+                                        {payingRegistrationId === row.registrationId ? "Saving..." : "Mark as paid"}
                                       </button>
                                     )}
                                     <button
@@ -4328,6 +4654,59 @@ export default function OrganizerDashboardPage() {
                     <div className="card p-6 rounded-2xl">
                       <h3 className="text-2xl font-bold mb-4" style={{ color: "var(--fg)" }}>Conference Settings</h3>
                       <div className="space-y-3">
+                        <div className="p-3 rounded-xl" style={{ background: "var(--bg-subtle)" }}>
+                          <p className="text-xs font-semibold mb-2" style={{ color: "var(--fg)" }}>Currency</p>
+                          <p className="text-[11px] mb-2" style={{ color: "var(--fg-muted)" }}>
+                            Used for registration fees, invoices, and marketplace pricing display.
+                          </p>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <select
+                              className="input-base text-xs"
+                              value={selectedConference.currency || "INR"}
+                              onChange={(event) => {
+                                const nextCurrency =
+                                  event.target.value === "USD" ||
+                                  event.target.value === "EUR" ||
+                                  event.target.value === "GBP"
+                                    ? event.target.value
+                                    : "INR";
+                                updateOrganizerConferenceConfig(selectedConference.id, {
+                                  currency: nextCurrency,
+                                });
+                              }}
+                            >
+                              <option value="INR">INR — Indian Rupee</option>
+                              <option value="USD">USD — US Dollar</option>
+                              <option value="EUR">EUR — Euro</option>
+                              <option value="GBP">GBP — British Pound</option>
+                            </select>
+                            <button
+                              type="button"
+                              className="btn btn-primary text-xs"
+                              onClick={() => {
+                                void fetch(`/api/organizers/conference-config/${selectedConference.id}`, {
+                                  method: "PATCH",
+                                  credentials: "include",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({
+                                    currency: selectedConference.currency || "INR",
+                                    ownerUserId: selectedConference.ownerUserId || user?.id,
+                                    ownerEmail: selectedConference.ownerEmail || user?.email,
+                                  }),
+                                }).then(async (response) => {
+                                  if (!response.ok) {
+                                    const payload = (await response.json().catch(() => ({}))) as { error?: string };
+                                    alert(payload.error || "Could not save currency.");
+                                    return;
+                                  }
+                                  await syncOrganizerConferenceById(selectedConference.id);
+                                });
+                              }}
+                            >
+                              Save currency
+                            </button>
+                          </div>
+                        </div>
                         <div className="p-3 rounded-xl space-y-3" style={{ background: "var(--bg-subtle)" }}>
                           <p className="text-xs font-semibold" style={{ color: "var(--fg)" }}>Partner MUNs</p>
                           <div className="flex items-center gap-2">
@@ -4968,7 +5347,35 @@ export default function OrganizerDashboardPage() {
 
                   {activeSection === "pricing" && (
                   <div className="card p-6 rounded-2xl">
-                    <h3 className="text-2xl font-bold mb-4" style={{ color: "var(--fg)" }}>Registration Categories</h3>
+                    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-4">
+                      <div>
+                        <h3 className="text-2xl font-bold" style={{ color: "var(--fg)" }}>Registration Categories</h3>
+                        <p className="text-xs mt-1" style={{ color: "var(--fg-muted)" }}>
+                          Changes are not live for delegates until you save.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        className="btn btn-primary text-sm shrink-0"
+                        disabled={pricingSaving || !selectedConference}
+                        onClick={() => void savePricingCategories()}
+                      >
+                        {pricingSaving ? "Saving…" : "Save categories & pricing"}
+                      </button>
+                    </div>
+                    {pricingSaveStatus ? (
+                      <div
+                        className={`alert mb-4 ${/unable|fail|error/i.test(pricingSaveStatus) ? "alert-danger" : "alert-success"}`}
+                        role="status"
+                      >
+                        <span>{pricingSaveStatus}</span>
+                      </div>
+                    ) : null}
+                    {hasPricingUnsavedChanges ? (
+                      <p className="text-xs mb-4 font-semibold" style={{ color: "var(--warning-fg)" }}>
+                        You have unsaved category or pricing changes.
+                      </p>
+                    ) : null}
                     <div className="mb-4 space-y-2">
                       <label className="text-sm font-semibold" style={{ color: "var(--fg-muted)" }}>
                         Category type
@@ -5002,14 +5409,10 @@ export default function OrganizerDashboardPage() {
                           <button
                             type="button"
                             className="btn btn-primary text-xs"
-                            onClick={() =>
-                              addRegistrationCategory(
-                                selectedConference.id,
-                                getDefaultCategoryForType(pricingCategoryTypeTab, selectedConference)
-                              )
-                            }
+                            disabled={pricingSaving}
+                            onClick={() => void handleAddPricingCategory()}
                           >
-                            Add {getCategoryTypeLabel(pricingCategoryTypeTab)} Category
+                            {pricingSaving ? "Saving…" : `Add ${getCategoryTypeLabel(pricingCategoryTypeTab)} Category`}
                           </button>
                         </div>
                       ) : (() => {
@@ -5424,7 +5827,12 @@ export default function OrganizerDashboardPage() {
 
                   {activeSection === "communications" && (
                   <div className="card p-6 rounded-2xl mt-6">
-                    <h3 className="text-lg font-bold mb-4" style={{ color: "var(--fg)" }}>Status Email Templates</h3>
+                    <div className="flex items-center justify-between gap-3 mb-4">
+                      <h3 className="text-lg font-bold" style={{ color: "var(--fg)" }}>Status Email Templates</h3>
+                      {hasTemplatesUnsavedChanges && (
+                        <span className="badge badge-gold text-[10px]">Unsaved</span>
+                      )}
+                    </div>
                     <p className="text-xs mb-3" style={{ color: "var(--fg-muted)" }}>
                       These emails are sent automatically when an applicant is marked as Allotted, Rejected, Waitlisted, or Invited.
                     </p>
@@ -5462,6 +5870,60 @@ export default function OrganizerDashboardPage() {
                         <p className="text-[11px]" style={{ color: "var(--fg-muted)" }}>
                           Placeholders: {`{{applicantName}}`}, {`{{conferenceTitle}}`}, {`{{status}}`}, {`{{assignedCommittee}}`}, {`{{assignedPortfolio}}`}
                         </p>
+                        <div className="rounded-xl p-4 space-y-2" style={{ background: "var(--bg-subtle)", border: "1px solid var(--border)" }}>
+                          <p className="text-xs font-semibold" style={{ color: "var(--fg)" }}>Live preview</p>
+                          <p className="text-xs font-semibold" style={{ color: "var(--fg)" }}>
+                            Subject:{" "}
+                            {renderEmailTemplate(
+                              selectedConferenceEmailTemplates?.[selectedStatusEmailTemplate]?.subject || "",
+                              {
+                                ...EMAIL_TEMPLATE_PREVIEW_CONTEXT,
+                                conferenceTitle: selectedConference?.title || EMAIL_TEMPLATE_PREVIEW_CONTEXT.conferenceTitle,
+                                status:
+                                  selectedStatusEmailTemplate === "allotted"
+                                    ? "Allotted"
+                                    : selectedStatusEmailTemplate === "rejected"
+                                      ? "Rejected"
+                                      : selectedStatusEmailTemplate === "waitlisted"
+                                        ? "Waitlisted"
+                                        : "Invited",
+                              }
+                            ) || "—"}
+                          </p>
+                          <pre
+                            className="text-xs whitespace-pre-wrap rounded-lg p-3"
+                            style={{ background: "var(--bg)", color: "var(--fg-muted)" }}
+                          >
+                            {renderEmailTemplate(
+                              selectedConferenceEmailTemplates?.[selectedStatusEmailTemplate]?.body || "",
+                              {
+                                ...EMAIL_TEMPLATE_PREVIEW_CONTEXT,
+                                conferenceTitle: selectedConference?.title || EMAIL_TEMPLATE_PREVIEW_CONTEXT.conferenceTitle,
+                                status:
+                                  selectedStatusEmailTemplate === "allotted"
+                                    ? "Allotted"
+                                    : selectedStatusEmailTemplate === "rejected"
+                                      ? "Rejected"
+                                      : selectedStatusEmailTemplate === "waitlisted"
+                                        ? "Waitlisted"
+                                        : "Invited",
+                              }
+                            ) || "Email body preview will appear here."}
+                          </pre>
+                        </div>
+                        <div className="flex items-center gap-2 pt-2">
+                          <button
+                            type="button"
+                            className="btn btn-primary text-xs"
+                            disabled={templatesSaving || !hasTemplatesUnsavedChanges}
+                            onClick={() => void saveStatusEmailTemplates()}
+                          >
+                            {templatesSaving ? "Saving..." : "Save Templates"}
+                          </button>
+                          {templatesSaveStatus && (
+                            <span className="text-xs" style={{ color: "var(--fg-muted)" }}>{templatesSaveStatus}</span>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -5533,6 +5995,17 @@ export default function OrganizerDashboardPage() {
                 })}
               </div>
             ))}
+            <div className="app-sidebar-section">
+              <span className="app-sidebar-section-label">Finance</span>
+              <Link
+                href="/organizers/payments"
+                className="app-sidebar-item"
+                onClick={() => setMobileNavOpen(false)}
+              >
+                <span className="app-sidebar-item-icon" aria-hidden>💳</span>
+                <span className="app-sidebar-item-label">Manual Payments</span>
+              </Link>
+            </div>
           </aside>
         </div>
       )}

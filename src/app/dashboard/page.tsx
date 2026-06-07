@@ -1,7 +1,7 @@
 "use client";
 
 import { ChangeEvent, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import Navbar from "@/components/Navbar";
@@ -9,6 +9,7 @@ import Footer from "@/components/Footer";
 import AppRouteSkeleton from "@/components/AppRouteSkeleton";
 import { ensureServerSession } from "@/lib/client/session";
 import { useAuth } from "@/lib/auth-context";
+import { formatMoney } from "@/lib/format-money";
 import {
   DelegateMunAward,
   DelegateMunParticipation,
@@ -28,6 +29,16 @@ const DELEGATE_TABS: Array<{ id: DelegateTabId; label: string; icon: string }> =
 
 const isDelegateTabId = (value: string): value is DelegateTabId =>
   DELEGATE_TABS.some((tab) => tab.id === value);
+
+const NOTIFICATION_TYPE_LABELS: Record<string, string> = {
+  PASS_RELEASED: "Pass released",
+  CHECKED_IN: "Check-in confirmation",
+  APP_STATUS: "Application status updates",
+  PAYMENT_CONFIRMED: "Payment confirmed",
+  TEAM_INVITE: "Team invitations",
+  ANNOUNCEMENT: "Conference announcements",
+  OTHER: "Other notifications",
+};
 
 const formatInvoiceAddress = (registration: Registration, userAddress?: {
   line1?: string;
@@ -54,9 +65,10 @@ const formatInvoiceAddress = (registration: Registration, userAddress?: {
 };
 
 export default function DashboardPage() {
-  const { user, isLoggedIn, authReady, notifications, markNotificationRead, updateDelegateProfile, logout } =
+  const { user, isLoggedIn, authReady, notifications, markNotificationRead, updateDelegateProfile, logout, addRegistration } =
     useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [delegatePasses, setDelegatePasses] = useState<Array<{
     id: string;
     eventName: string;
@@ -124,6 +136,11 @@ export default function DashboardPage() {
   const [changePasswordNext, setChangePasswordNext] = useState("");
   const [changePasswordConfirm, setChangePasswordConfirm] = useState("");
   const [changePasswordLoading, setChangePasswordLoading] = useState(false);
+  const [logoutAllLoading, setLogoutAllLoading] = useState(false);
+  const [logoutAllNotice, setLogoutAllNotice] = useState("");
+  const [resendVerifyLoading, setResendVerifyLoading] = useState(false);
+  const [resendVerifyNotice, setResendVerifyNotice] = useState("");
+  const [resendVerifyError, setResendVerifyError] = useState("");
   const [forgotPasswordLoading, setForgotPasswordLoading] = useState(false);
   const [forgotPasswordNotice, setForgotPasswordNotice] = useState("");
   const [forgotPasswordError, setForgotPasswordError] = useState("");
@@ -132,6 +149,15 @@ export default function DashboardPage() {
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<DelegateTabId>("conferences");
   const [invoicePreviewRegistrationId, setInvoicePreviewRegistrationId] = useState<string | null>(null);
+  const [verifyRedirectNotice, setVerifyRedirectNotice] = useState<{ tone: "success" | "error"; message: string } | null>(null);
+  const [withdrawingRegistrationId, setWithdrawingRegistrationId] = useState<string | null>(null);
+  const [withdrawNotice, setWithdrawNotice] = useState("");
+  const [notificationPreferences, setNotificationPreferences] = useState<
+    Array<{ notificationType: string; emailEnabled: boolean; inAppEnabled: boolean }>
+  >([]);
+  const [notificationPrefsLoading, setNotificationPrefsLoading] = useState(false);
+  const [notificationPrefsSaving, setNotificationPrefsSaving] = useState(false);
+  const [notificationPrefsStatus, setNotificationPrefsStatus] = useState("");
 
   useEffect(() => {
     if (!authReady) return;
@@ -156,6 +182,35 @@ export default function DashboardPage() {
     window.addEventListener("hashchange", onHashChange);
     return () => window.removeEventListener("hashchange", onHashChange);
   }, []);
+
+  useEffect(() => {
+    const verified = searchParams.get("verified");
+    const verifyFailed = searchParams.get("verify");
+    if (verified === "1") {
+      setVerifyRedirectNotice({
+        tone: "success",
+        message: "Your email has been verified. You can now register for conferences.",
+      });
+    } else if (verifyFailed === "failed") {
+      setVerifyRedirectNotice({
+        tone: "error",
+        message: "Email verification failed or the link expired. Resend a verification email below.",
+      });
+    }
+    if (verified || verifyFailed) {
+      router.replace("/dashboard", { scroll: false });
+    }
+  }, [searchParams, router]);
+
+  useEffect(() => {
+    if (!isLoggedIn || activeTab !== "security") return;
+    setNotificationPrefsLoading(true);
+    void fetch("/api/user/notification-preferences", { credentials: "include" })
+      .then((response) => response.json())
+      .then((data) => setNotificationPreferences(data.preferences || []))
+      .catch(() => setNotificationPreferences([]))
+      .finally(() => setNotificationPrefsLoading(false));
+  }, [isLoggedIn, activeTab]);
 
   const changeActiveTab = (next: DelegateTabId) => {
     setActiveTab(next);
@@ -552,6 +607,55 @@ export default function DashboardPage() {
     }
   };
 
+  const onResendVerification = async () => {
+    setResendVerifyNotice("");
+    setResendVerifyError("");
+    setResendVerifyLoading(true);
+    try {
+      const response = await fetch("/api/auth/resend-verification", {
+        method: "POST",
+        credentials: "include",
+      });
+      const payload = (await response.json().catch(() => ({}))) as {
+        error?: string;
+        message?: string;
+        alreadyVerified?: boolean;
+      };
+      if (!response.ok) {
+        setResendVerifyError(payload.error ?? "Could not send verification email.");
+        return;
+      }
+      if (payload.alreadyVerified) {
+        setResendVerifyNotice("Your email is already verified.");
+        return;
+      }
+      setResendVerifyNotice(payload.message ?? "Verification email sent. Check your inbox.");
+    } finally {
+      setResendVerifyLoading(false);
+    }
+  };
+
+  const onLogoutAllDevices = async () => {
+    setLogoutAllNotice("");
+    setLogoutAllLoading(true);
+    try {
+      const response = await fetch("/api/auth/logout-all", {
+        method: "POST",
+        credentials: "include",
+      });
+      const payload = (await response.json().catch(() => ({}))) as { error?: string };
+      if (!response.ok) {
+        alert(payload.error ?? "Could not sign out all devices.");
+        return;
+      }
+      setLogoutAllNotice("Signed out on all devices.");
+      logout();
+      router.push("/");
+    } finally {
+      setLogoutAllLoading(false);
+    }
+  };
+
   const onForgotPasswordFromSecurity = async () => {
     if (!user.email) return;
     setForgotPasswordNotice("");
@@ -586,6 +690,48 @@ export default function DashboardPage() {
     }
   };
 
+  const onWithdrawRegistration = async (registrationId: string) => {
+    if (!window.confirm("Withdraw this registration? This cannot be undone.")) return;
+    setWithdrawNotice("");
+    setWithdrawingRegistrationId(registrationId);
+    try {
+      const response = await fetch(`/api/registrations/${registrationId}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      const payload = (await response.json().catch(() => ({}))) as { error?: string };
+      if (!response.ok) {
+        setWithdrawNotice(payload.error || "Could not withdraw registration.");
+        return;
+      }
+      setWithdrawNotice("Registration withdrawn.");
+      addRegistration({ id: registrationId } as Registration);
+    } finally {
+      setWithdrawingRegistrationId(null);
+    }
+  };
+
+  const onSaveNotificationPreferences = async () => {
+    setNotificationPrefsStatus("");
+    setNotificationPrefsSaving(true);
+    try {
+      const response = await fetch("/api/user/notification-preferences", {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ preferences: notificationPreferences }),
+      });
+      const payload = (await response.json().catch(() => ({}))) as { error?: string };
+      if (!response.ok) {
+        setNotificationPrefsStatus(payload.error || "Could not save preferences.");
+        return;
+      }
+      setNotificationPrefsStatus("Preferences saved.");
+    } finally {
+      setNotificationPrefsSaving(false);
+    }
+  };
+
   return (
     <>
       <Navbar />
@@ -607,6 +753,68 @@ export default function DashboardPage() {
               </Link>
             </div>
           </header>
+
+          {verifyRedirectNotice && (
+            <div
+              className="mb-4 rounded-xl px-4 py-3 flex items-start justify-between gap-3"
+              style={
+                verifyRedirectNotice.tone === "success"
+                  ? { background: "rgba(22,163,74,0.12)", border: "1px solid rgba(22,163,74,0.25)" }
+                  : { background: "rgba(220,38,38,0.12)", border: "1px solid rgba(220,38,38,0.25)" }
+              }
+              role="status"
+            >
+              <p className="text-sm" style={{ color: verifyRedirectNotice.tone === "success" ? "#15803d" : "#b91c1c" }}>
+                {verifyRedirectNotice.message}
+              </p>
+              <button
+                type="button"
+                className="btn btn-ghost text-xs shrink-0"
+                onClick={() => setVerifyRedirectNotice(null)}
+              >
+                Dismiss
+              </button>
+            </div>
+          )}
+
+          {withdrawNotice && (
+            <div className="alert alert-success mb-4" role="status">
+              <span>{withdrawNotice}</span>
+              <button type="button" className="btn btn-ghost text-xs" onClick={() => setWithdrawNotice("")}>
+                Dismiss
+              </button>
+            </div>
+          )}
+
+          {user.emailVerified === false && (
+            <div
+              className="sticky top-0 z-20 mb-4 rounded-xl px-4 py-3 flex flex-wrap items-center justify-between gap-3"
+              style={{ background: "rgba(234,179,8,0.15)", border: "1px solid rgba(234,179,8,0.35)" }}
+            >
+              <div>
+                <p className="text-sm font-semibold" style={{ color: "var(--fg)" }}>
+                  Verify your email to register for conferences
+                </p>
+                <p className="text-xs mt-0.5" style={{ color: "var(--fg-muted)" }}>
+                  Check your inbox for a verification link, or resend it below.
+                </p>
+                {resendVerifyNotice && (
+                  <p className="text-xs mt-1" style={{ color: "#15803d" }}>{resendVerifyNotice}</p>
+                )}
+                {resendVerifyError && (
+                  <p className="text-xs mt-1" style={{ color: "#b91c1c" }}>{resendVerifyError}</p>
+                )}
+              </div>
+              <button
+                type="button"
+                className="btn btn-primary text-xs shrink-0"
+                onClick={onResendVerification}
+                disabled={resendVerifyLoading}
+              >
+                {resendVerifyLoading ? "Sending..." : "Resend verification email"}
+              </button>
+            </div>
+          )}
 
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-7">
             {[
@@ -709,6 +917,39 @@ export default function DashboardPage() {
                                 Organizer Status: {reg.organizerStatus || "Pending"}
                               </span>
                             </div>
+                            {reg.delegationId && (
+                              <div className="mt-3 p-3 rounded-xl space-y-2" style={{ background: "var(--bg-subtle)", border: "1px solid var(--border)" }}>
+                                <p className="text-xs font-semibold" style={{ color: "var(--fg)" }}>
+                                  {reg.isDelegationHead ? "Delegation head" : "Delegation member"}
+                                  {reg.delegationSchoolName ? ` · ${reg.delegationSchoolName}` : ""}
+                                </p>
+                                {reg.isDelegationHead && reg.delegationInviteToken && (
+                                  <div className="space-y-1">
+                                    <p className="text-[11px]" style={{ color: "var(--fg-muted)" }}>
+                                      Share this invite link with your delegation:
+                                    </p>
+                                    <div className="flex gap-2">
+                                      <input
+                                        className="input-base text-[11px] flex-1"
+                                        readOnly
+                                        value={`${typeof window !== "undefined" ? window.location.origin : ""}/join/delegation/${reg.delegationInviteToken}`}
+                                      />
+                                      <button
+                                        type="button"
+                                        className="btn btn-ghost text-[11px]"
+                                        onClick={() => {
+                                          void navigator.clipboard.writeText(
+                                            `${window.location.origin}/join/delegation/${reg.delegationInviteToken}`
+                                          );
+                                        }}
+                                      >
+                                        Copy
+                                      </button>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            )}
                           </div>
                         </div>
                         <div className="flex items-center justify-between mt-4 pt-4" style={{ borderTop: "1px solid var(--border)" }}>
@@ -716,9 +957,22 @@ export default function DashboardPage() {
                             <span className={`badge text-[10px] ${reg.paid ? "badge-success" : "badge-danger"}`}>
                               {reg.paid ? "✓ Paid" : "Pending Payment"}
                             </span>
-                            <span className="text-sm font-bold" style={{ color: "var(--fg)" }}>${reg.amount}</span>
+                            <span className="text-sm font-bold" style={{ color: "var(--fg)" }}>
+                              {formatMoney(reg.amount, "INR")}
+                            </span>
                           </div>
-                          <div className="flex gap-2">
+                          <div className="flex gap-2 flex-wrap">
+                            {!reg.paid && reg.organizerStatus !== "Rejected" && (
+                              <button
+                                type="button"
+                                className="btn btn-ghost text-xs"
+                                style={{ padding: "6px 14px", borderRadius: "8px", color: "#b91c1c" }}
+                                disabled={withdrawingRegistrationId === reg.id}
+                                onClick={() => void onWithdrawRegistration(reg.id)}
+                              >
+                                {withdrawingRegistrationId === reg.id ? "Withdrawing…" : "Withdraw"}
+                              </button>
+                            )}
                             <Link
                               href={`/conference/${reg.conferenceId}`}
                               className="btn btn-ghost text-xs"
@@ -1519,6 +1773,25 @@ export default function DashboardPage() {
                   )}
                 </div>
                 <div className="mt-5 pt-4" style={{ borderTop: "1px solid var(--border)" }}>
+                  <p className="text-xs font-semibold mb-2" style={{ color: "var(--fg)" }}>Active Sessions</p>
+                  <p className="text-[11px] mb-2" style={{ color: "var(--fg-muted)" }}>
+                    Sign out everywhere if you suspect unauthorized access to your account.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={onLogoutAllDevices}
+                    className="btn btn-secondary text-xs w-full"
+                    disabled={logoutAllLoading}
+                  >
+                    {logoutAllLoading ? "Signing out..." : "Sign out all devices"}
+                  </button>
+                  {logoutAllNotice && (
+                    <p className="text-xs mt-2 rounded-lg px-3 py-2" style={{ background: "rgba(22,163,74,0.12)", color: "#15803d" }}>
+                      {logoutAllNotice}
+                    </p>
+                  )}
+                </div>
+                <div className="mt-5 pt-4" style={{ borderTop: "1px solid var(--border)" }}>
                   <p className="text-xs font-semibold mb-2" style={{ color: "var(--danger)" }}>Delete Account</p>
                   <input
                     type="password"
@@ -1535,6 +1808,76 @@ export default function DashboardPage() {
                     {deleteLoading ? "Deleting..." : "Delete My Account"}
                   </button>
                 </div>
+              </div>
+              <div className="card p-5 rounded-2xl">
+                <h3 className="font-bold mb-2" style={{ color: "var(--fg)" }}>Notification Preferences</h3>
+                <p className="text-xs mb-4" style={{ color: "var(--fg-muted)" }}>
+                  Choose how you receive updates for each notification type.
+                </p>
+                {notificationPrefsLoading ? (
+                  <p className="text-xs" style={{ color: "var(--fg-muted)" }}>Loading preferences…</p>
+                ) : notificationPreferences.length === 0 ? (
+                  <p className="text-xs" style={{ color: "var(--fg-muted)" }}>No notification preferences available.</p>
+                ) : (
+                  <div className="space-y-3">
+                    {notificationPreferences.map((pref, index) => (
+                      <div
+                        key={pref.notificationType}
+                        className="rounded-xl p-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2"
+                        style={{ background: "var(--bg-subtle)" }}
+                      >
+                        <p className="text-xs font-semibold" style={{ color: "var(--fg)" }}>
+                          {NOTIFICATION_TYPE_LABELS[pref.notificationType] || pref.notificationType}
+                        </p>
+                        <div className="flex items-center gap-4 text-xs">
+                          <label className="flex items-center gap-2" style={{ color: "var(--fg-muted)" }}>
+                            <input
+                              type="checkbox"
+                              checked={pref.emailEnabled}
+                              onChange={(event) =>
+                                setNotificationPreferences((prev) =>
+                                  prev.map((entry, entryIndex) =>
+                                    entryIndex === index
+                                      ? { ...entry, emailEnabled: event.target.checked }
+                                      : entry
+                                  )
+                                )
+                              }
+                            />
+                            Email
+                          </label>
+                          <label className="flex items-center gap-2" style={{ color: "var(--fg-muted)" }}>
+                            <input
+                              type="checkbox"
+                              checked={pref.inAppEnabled}
+                              onChange={(event) =>
+                                setNotificationPreferences((prev) =>
+                                  prev.map((entry, entryIndex) =>
+                                    entryIndex === index
+                                      ? { ...entry, inAppEnabled: event.target.checked }
+                                      : entry
+                                  )
+                                )
+                              }
+                            />
+                            In-app
+                          </label>
+                        </div>
+                      </div>
+                    ))}
+                    <button
+                      type="button"
+                      className="btn btn-primary text-xs w-full"
+                      disabled={notificationPrefsSaving}
+                      onClick={() => void onSaveNotificationPreferences()}
+                    >
+                      {notificationPrefsSaving ? "Saving…" : "Save preferences"}
+                    </button>
+                    {notificationPrefsStatus && (
+                      <p className="text-xs" style={{ color: "var(--fg-muted)" }}>{notificationPrefsStatus}</p>
+                    )}
+                  </div>
+                )}
               </div>
               </div>
             )}

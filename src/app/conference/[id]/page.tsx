@@ -11,6 +11,7 @@ import type { Conference, PublicConferenceDetail } from "@/lib/types";
 import { useAuth } from "@/lib/auth-context";
 import { getCategoryStartingPrice, getActivePhase, getPhaseStatus } from "@/lib/pricing";
 import { resolveConferenceBannerImage } from "@/lib/conference-media";
+import { formatMoney } from "@/lib/format-money";
 import {
   resolvePublishedConferenceDisplay,
 } from "@/lib/public-conference-view";
@@ -231,7 +232,7 @@ export default function ConferenceDetailPage() {
     : c.capacity;
   const pct = derivedCapacity > 0 ? Math.round((derivedRegistered / derivedCapacity) * 100) : 0;
   const seatsLeft = derivedCapacity - derivedRegistered;
-  const currencySymbol = c.currency === "USD" ? "$" : c.currency === "EUR" ? "€" : c.currency === "GBP" ? "£" : "$";
+  const publicPartnerConferences = publicDetail?.partnerConferences ?? [];
   const mergedRegistrationCategories = organizerConference
     ? mergedOrganizerConferences.flatMap((entry) => entry.registrationCategories)
     : [];
@@ -371,7 +372,7 @@ export default function ConferenceDetailPage() {
     : c.committees.map((cm) => ({
         ...cm,
         agendas: [cm.topic1, cm.topic2].filter((agenda) => agenda.trim().length > 0),
-        seatsRemaining: cm.size,
+        seatsRemaining: Math.max(cm.size - (cm.allottedCount ?? 0), 0),
         portfolios: [],
         chairName: undefined,
         sourceConferenceTitle: c.title,
@@ -622,8 +623,7 @@ export default function ConferenceDetailPage() {
                     letterSpacing: "-0.02em",
                   }}
                 >
-                  {currencySymbol}
-                  {dynamicStartingPrice}
+                  {formatMoney(dynamicStartingPrice, c.currency)}
                 </span>
                 <span className="text-xs" style={{ color: "var(--fg-muted)" }}>
                   {activeCategoryPhase ? `${activeCategoryPhase.name} pricing` : "per delegate"}
@@ -817,34 +817,6 @@ export default function ConferenceDetailPage() {
                     </div>
                   </div>
                 )}
-                {commonDocuments.length > 0 && (
-                    <div>
-                      <p className="text-sm font-semibold mb-3" style={{ color: "var(--fg)" }}>Common MUN Documents</p>
-                      <div
-                        className="rounded-xl overflow-hidden divide-y"
-                        style={{ border: "1px solid var(--border)" }}
-                      >
-                        {commonDocuments.map((document) => (
-                          <a
-                            key={`${document.sourceConferenceTitle}-${document.id}`}
-                            className="flex items-center justify-between gap-2 px-4 py-3"
-                            style={{ color: "inherit" }}
-                            href={document.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                          >
-                            <div>
-                              <p className="text-sm" style={{ color: "var(--fg)" }}>{document.title}</p>
-                              <p className="text-xs" style={{ color: "var(--fg-muted)" }}>
-                                {document.category} · {document.sourceConferenceTitle}
-                              </p>
-                            </div>
-                            <span className="text-xs shrink-0" style={{ color: "var(--blue)" }}>Open</span>
-                          </a>
-                        ))}
-                      </div>
-                    </div>
-                )}
                 {committeeDocumentGroups.length > 0 && (
                     <div>
                       <p className="text-sm font-semibold mb-3" style={{ color: "var(--fg)" }}>Committee Documents</p>
@@ -928,15 +900,19 @@ export default function ConferenceDetailPage() {
               <div className="lux-card p-6 sm:p-7">
                 <h2 className="text-2xl font-bold mb-4" style={{ color: "var(--fg)" }}>Partner MUN</h2>
                 <div className="grid md:grid-cols-2 gap-4">
-                  {(acceptedPartnerConferences.length > 0
-                    ? acceptedPartnerConferences
-                    : []).map((partner) => (
-                    <div key={partner.id} className="conference-surface rounded-2xl p-4">
-                      <p className="text-sm font-semibold" style={{ color: "var(--fg)" }}>{partner.title}</p>
-                      <p className="text-xs mt-1" style={{ color: "var(--fg-muted)" }}>{partner.city}, {partner.country}</p>
-                    </div>
-                  ))}
-                  {acceptedPartnerConferences.length === 0 && (
+                  {acceptedPartnerConferences.length > 0
+                    ? acceptedPartnerConferences.map((partner) => (
+                        <div key={partner.id} className="conference-surface rounded-2xl p-4">
+                          <p className="text-sm font-semibold" style={{ color: "var(--fg)" }}>{partner.title}</p>
+                          <p className="text-xs mt-1" style={{ color: "var(--fg-muted)" }}>{partner.city}, {partner.country}</p>
+                        </div>
+                      ))
+                    : publicPartnerConferences.map((partner) => (
+                        <div key={partner.id} className="conference-surface rounded-2xl p-4">
+                          <p className="text-sm font-semibold" style={{ color: "var(--fg)" }}>{partner.title}</p>
+                        </div>
+                      ))}
+                  {acceptedPartnerConferences.length === 0 && publicPartnerConferences.length === 0 && (
                     <p className="text-sm" style={{ color: "var(--fg-muted)" }}>No partner MUNs linked yet.</p>
                   )}
                 </div>
@@ -1264,7 +1240,11 @@ export default function ConferenceDetailPage() {
                   </div>
                 </div>
               )}
-              <button className="btn btn-ghost w-full">Contact Organizer</button>
+              {displayOrganizerEmail && (
+                <a href={`mailto:${displayOrganizerEmail}`} className="btn btn-ghost w-full">
+                  Contact Organizer
+                </a>
+              )}
             </div>
           </div>
         )}
@@ -1322,7 +1302,7 @@ export default function ConferenceDetailPage() {
                 <textarea className="input-base text-sm" rows={4} value={reviewDraft.comment} onChange={(event) => setReviewDraft((prev) => ({ ...prev, comment: event.target.value }))} placeholder="Write your review..." />
                 <button
                   className="btn btn-primary w-full text-sm"
-                  onClick={() => {
+                  onClick={async () => {
                     if (!isLoggedIn || !user) {
                       setAuthOpen(true);
                       return;
@@ -1337,28 +1317,47 @@ export default function ConferenceDetailPage() {
                       hospitalityRating: reviewDraft.hospitalityRating,
                       comment: reviewDraft.comment.trim(),
                     };
-                    addConferenceReview(c.id, draftPayload);
-                    if (!organizerConference) {
-                      setInstantReviews((prev) => [
-                        {
-                          id: `instant-${Date.now()}`,
-                          userName: draftPayload.userName,
+                    try {
+                      const res = await fetch(`/api/marketplace/${c.id}/reviews`, {
+                        method: "POST",
+                        credentials: "include",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
                           rating: draftPayload.rating,
                           comment: draftPayload.comment,
-                          sourceConferenceTitle: displayTitle,
-                          featured: false,
-                        },
-                        ...prev,
-                      ]);
+                        }),
+                      });
+                      const payload = (await res.json().catch(() => ({}))) as { error?: string };
+                      if (!res.ok) {
+                        setReviewMessage(payload.error ?? "Could not submit review.");
+                        return;
+                      }
+                      if (organizerConference) {
+                        addConferenceReview(c.id, draftPayload);
+                      } else {
+                        setInstantReviews((prev) => [
+                          {
+                            id: `instant-${Date.now()}`,
+                            userName: draftPayload.userName,
+                            rating: draftPayload.rating,
+                            comment: draftPayload.comment,
+                            sourceConferenceTitle: displayTitle,
+                            featured: false,
+                          },
+                          ...prev,
+                        ]);
+                      }
+                      setReviewMessage("Review submitted and pending moderation.");
+                      setReviewDraft({
+                        rating: 5,
+                        organizationRating: 5,
+                        committeeRating: 5,
+                        hospitalityRating: 5,
+                        comment: "",
+                      });
+                    } catch {
+                      setReviewMessage("Could not submit review. Try again.");
                     }
-                    setReviewMessage("Review submitted and now visible on this page.");
-                    setReviewDraft({
-                      rating: 5,
-                      organizationRating: 5,
-                      committeeRating: 5,
-                      hospitalityRating: 5,
-                      comment: "",
-                    });
                   }}
                 >
                   Submit Review

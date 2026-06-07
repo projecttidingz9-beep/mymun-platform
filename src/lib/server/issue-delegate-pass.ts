@@ -139,13 +139,22 @@ export async function issueDelegatePassForRegistration(
 
   const shouldNotify = options.notify !== false;
   if (shouldNotify) {
+    const now = new Date();
+    const released = releaseAt.getTime() <= now.getTime();
+    const releaseLabel = releaseAt.toLocaleDateString("en-IN", {
+      month: "long",
+      day: "numeric",
+      year: "numeric",
+    });
     await prisma.notification.create({
       data: {
         userId: registration.userId,
         eventId: registration.eventId,
         registrationId: registration.id,
         title: "Digital pass issued",
-        message: `Your digital delegate pass for ${registration.event.title} is now available.`,
+        message: released
+          ? `Your digital delegate pass for ${registration.event.title} is now available.`
+          : `Your delegate pass for ${registration.event.title} will be available ${releaseLabel}.`,
         type: "PASS_RELEASED",
       },
     });

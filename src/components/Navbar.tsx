@@ -40,8 +40,9 @@ interface NavbarProps {
 }
 
 export default function Navbar({ openAuthModal }: NavbarProps) {
-  const { user, isLoggedIn, logout } = useAuth();
+  const { user, isLoggedIn, logout, notifications } = useAuth();
   const pathname = usePathname() || "/";
+  const unreadNotificationCount = notifications.filter((entry) => !entry.read).length;
   const isActive = (href: string) =>
     href === "/" ? pathname === "/" : pathname.startsWith(href);
   const [scrolled, setScrolled] = useState(false);
@@ -242,6 +243,30 @@ export default function Navbar({ openAuthModal }: NavbarProps) {
             )}
 
             {showLoggedInUi ? (
+              <>
+                <Link
+                  href="/notifications"
+                  className="relative flex items-center justify-center w-11 h-11 sm:w-9 sm:h-9 rounded-xl transition-all touch-manipulation"
+                  style={{ background: "color-mix(in srgb, var(--bg) 84%, transparent 16%)", border: "1.5px solid var(--border)" }}
+                  aria-label={
+                    unreadNotificationCount > 0
+                      ? `${unreadNotificationCount} unread notifications`
+                      : "Notifications"
+                  }
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: "var(--fg)" }}>
+                    <path d="M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9" strokeLinecap="round" strokeLinejoin="round" />
+                    <path d="M13.73 21a2 2 0 01-3.46 0" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                  {unreadNotificationCount > 0 && (
+                    <span
+                      className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold flex items-center justify-center text-white"
+                      style={{ background: "#dc2626" }}
+                    >
+                      {unreadNotificationCount > 9 ? "9+" : unreadNotificationCount}
+                    </span>
+                  )}
+                </Link>
               <div className="relative" ref={userMenuRef}>
                 <button
                   type="button"
@@ -375,6 +400,7 @@ export default function Navbar({ openAuthModal }: NavbarProps) {
                   </div>
                 )}
               </div>
+              </>
             ) : (
               <>
                 <button

@@ -82,6 +82,10 @@ export async function fetchPublishedEventDetail(eventKey: string) {
           },
         },
       },
+      registrations: {
+        where: { deletedAt: null, status: "ALLOTTED" },
+        select: { committeeName: true },
+      },
     },
   });
 }
