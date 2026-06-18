@@ -851,7 +851,7 @@ interface AuthContextType {
   addRegistration: (reg: Registration) => void;
   addOrganizerConference: (
     payload: Omit<OrganizerConference, "id" | "status" | "applicants" | "announcements">
-  ) => Promise<{ ok: boolean; error?: string }>;
+  ) => Promise<{ ok: boolean; error?: string; code?: string }>;
   removeOrganizerConference: (conferenceId: string) => void;
   updateOrganizerConferenceStatus: (conferenceId: string, status: OrganizerConference["status"]) => void;
   updateOrganizerConferenceConfig: (
@@ -1481,9 +1481,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         registrationCategories: payload.registrationCategories,
       }),
     });
-    const body = (await res.json().catch(() => ({}))) as { error?: string };
+    const body = (await res.json().catch(() => ({}))) as { error?: string; code?: string };
     if (!res.ok) {
-      return { ok: false, error: body.error ?? "Could not create conference." };
+      return {
+        ok: false,
+        error:
+          body.error ??
+          `Server error (${res.status}). Try again or contact support.`,
+        code: body.code,
+      };
     }
     await refetchMyEvents({ id: user?.id, email: user?.email });
     return { ok: true };

@@ -77,6 +77,7 @@ export default function OrganizersPage() {
         isOpen={authOpen}
         onClose={() => setAuthOpen(false)}
         defaultTab={authDefaultTab}
+        defaultRegisterRole="organizer"
       />
 
       <section className="relative lux-section pt-[calc(9rem+env(safe-area-inset-top,0px))] pb-16 sm:pb-24 px-4 sm:px-6 overflow-hidden">

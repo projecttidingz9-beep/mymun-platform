@@ -2,6 +2,7 @@
 
 import { useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import AuthModal from "@/components/AuthModal";
@@ -14,10 +15,11 @@ export default function CreateOrganizerConferencePage() {
     () => true,
     () => false
   );
-  const { isLoggedIn, addOrganizerConference } = useAuth();
+  const { isLoggedIn, user, addOrganizerConference } = useAuth();
   const [authOpen, setAuthOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitMessage, setSubmitMessage] = useState("");
+  const [submitError, setSubmitError] = useState(false);
 
   const [title, setTitle] = useState("");
   const [city, setCity] = useState("");
@@ -52,6 +54,26 @@ export default function CreateOrganizerConferencePage() {
     if (!canSubmit || isSubmitting) return;
     setIsSubmitting(true);
     setSubmitMessage("");
+    setSubmitError(false);
+
+    if (user?.role === "delegate") {
+      setSubmitError(true);
+      setSubmitMessage(
+        "Your account is registered as a delegate. Sign up with an organizer account to create conferences."
+      );
+      setIsSubmitting(false);
+      return;
+    }
+
+    if (user?.emailVerified === false) {
+      setSubmitError(true);
+      setSubmitMessage(
+        "Please verify your email before creating a conference. Open your dashboard to resend the verification link."
+      );
+      setIsSubmitting(false);
+      return;
+    }
+
     try {
       const result = await addOrganizerConference({
         title: title.trim(),
@@ -85,12 +107,21 @@ export default function CreateOrganizerConferencePage() {
         committees: [],
       });
       if (!result.ok) {
-        setSubmitMessage(result.error ?? "Could not create conference. Please try again.");
+        setSubmitError(true);
+        if (result.code === "EMAIL_NOT_VERIFIED") {
+          setSubmitMessage(
+            "Please verify your email before creating a conference. Open your dashboard to resend the verification link."
+          );
+        } else {
+          setSubmitMessage(result.error ?? "Could not create conference. Please try again.");
+        }
         return;
       }
+      setSubmitError(false);
       setSubmitMessage("Conference created as Draft. Go to your dashboard and click Publish to make it visible on the marketplace.");
       router.push("/organizers/dashboard");
     } catch {
+      setSubmitError(true);
       setSubmitMessage("Could not create conference. Please try again.");
     } finally {
       setIsSubmitting(false);
@@ -100,7 +131,12 @@ export default function CreateOrganizerConferencePage() {
   return (
     <div className="min-h-[100dvh]" style={{ background: "var(--bg)" }}>
       <Navbar openAuthModal={() => setAuthOpen(true)} />
-      <AuthModal isOpen={authOpen} onClose={() => setAuthOpen(false)} />
+      <AuthModal
+        isOpen={authOpen}
+        onClose={() => setAuthOpen(false)}
+        defaultTab="register"
+        defaultRegisterRole="organizer"
+      />
       <main className="pt-[calc(7rem+env(safe-area-inset-top,0px))] pb-16 px-4 sm:px-6">
         <div className="max-w-4xl mx-auto">
           {!hydrated ? (
@@ -238,12 +274,29 @@ export default function CreateOrganizerConferencePage() {
             </div>
 
             {submitMessage && (
-              <p
-                className="mt-4 text-sm"
-                style={{ color: submitMessage.includes("Could not") ? "#b91c1c" : "var(--success)" }}
+              <div
+                className="mt-4 rounded-xl px-4 py-3 space-y-2"
+                style={
+                  submitError
+                    ? { background: "rgba(220,38,38,0.12)", border: "1px solid rgba(220,38,38,0.25)" }
+                    : { background: "rgba(22,163,74,0.12)", border: "1px solid rgba(22,163,74,0.25)" }
+                }
               >
-                {submitMessage}
-              </p>
+                <p className="text-sm" style={{ color: submitError ? "#b91c1c" : "#15803d" }}>
+                  {submitMessage}
+                </p>
+                {submitError && user?.role === "delegate" && (
+                  <Link href="/organizers" className="btn btn-ghost text-xs inline-flex">
+                    Register as organizer
+                  </Link>
+                )}
+                {submitError &&
+                  (user?.emailVerified === false || submitMessage.toLowerCase().includes("verify your email")) && (
+                    <Link href="/dashboard" className="btn btn-ghost text-xs inline-flex">
+                      Open dashboard to verify email
+                    </Link>
+                  )}
+              </div>
             )}
 
             <div className="mt-6 flex flex-col sm:flex-row gap-3">

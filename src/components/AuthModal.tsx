@@ -9,6 +9,7 @@ interface AuthModalProps {
   isOpen: boolean;
   onClose: () => void;
   defaultTab?: "signin" | "register";
+  defaultRegisterRole?: "delegate" | "organizer";
 }
 
 type GoogleCredentialResponse = {
@@ -36,10 +37,15 @@ type GoogleApi = {
   };
 };
 
-export default function AuthModal({ isOpen, onClose, defaultTab = "signin" }: AuthModalProps) {
+export default function AuthModal({
+  isOpen,
+  onClose,
+  defaultTab = "signin",
+  defaultRegisterRole = "delegate",
+}: AuthModalProps) {
   const { login } = useAuth();
   const [tab, setTab] = useState<"signin" | "register">(defaultTab);
-  const [registerRole, setRegisterRole] = useState<"delegate" | "organizer">("delegate");
+  const [registerRole, setRegisterRole] = useState<"delegate" | "organizer">(defaultRegisterRole);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
@@ -52,7 +58,7 @@ export default function AuthModal({ isOpen, onClose, defaultTab = "signin" }: Au
   const [forgotNotice, setForgotNotice] = useState("");
   const [forgotDevUrl, setForgotDevUrl] = useState("");
   const [googleLoading, setGoogleLoading] = useState(false);
-  const [googleRole, setGoogleRole] = useState<"delegate" | "organizer">("delegate");
+  const [googleRole, setGoogleRole] = useState<"delegate" | "organizer">(defaultRegisterRole);
   const [googlePendingCredential, setGooglePendingCredential] = useState("");
   const [showGoogleRoleStep, setShowGoogleRoleStep] = useState(false);
   const [registerVerifyNotice, setRegisterVerifyNotice] = useState(false);
@@ -62,6 +68,12 @@ export default function AuthModal({ isOpen, onClose, defaultTab = "signin" }: Au
   const supabaseOAuthEnabled = isSupabaseOAuthConfigured();
   const legacyGoogleEnabled = googleClientId.trim().length > 0 && !supabaseOAuthEnabled;
   const oauthEnabled = supabaseOAuthEnabled || legacyGoogleEnabled;
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setTab(defaultTab);
+    setRegisterRole(defaultRegisterRole);
+  }, [isOpen, defaultTab, defaultRegisterRole]);
 
   const closeModal = useCallback(() => {
     setTab(defaultTab);
@@ -76,12 +88,12 @@ export default function AuthModal({ isOpen, onClose, defaultTab = "signin" }: Au
     setForgotNotice("");
     setForgotDevUrl("");
     setGoogleLoading(false);
-    setGoogleRole("delegate");
+    setGoogleRole(defaultRegisterRole);
     setGooglePendingCredential("");
     setShowGoogleRoleStep(false);
     setRegisterVerifyNotice(false);
     onClose();
-  }, [defaultTab, onClose]);
+  }, [defaultTab, defaultRegisterRole, onClose]);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => e.key === "Escape" && onClose();
