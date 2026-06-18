@@ -38,6 +38,15 @@ export async function POST(request: NextRequest) {
 
     const loaded = await loadPassFromQrToken(qrToken);
     if (!loaded.ok) {
+      if (loaded.status === 409) {
+        return NextResponse.json(
+          {
+            ...alreadyUsedResponse(),
+            checkedIn: true,
+          },
+          { status: 409 }
+        );
+      }
       return NextResponse.json({ error: loaded.error }, { status: loaded.status });
     }
 

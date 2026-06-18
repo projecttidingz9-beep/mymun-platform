@@ -30,15 +30,6 @@ export default function ScheduleAddDayModal({
 
   useEffect(() => {
     if (!open) return;
-    setDayName(defaultDayName);
-    setFromTime("");
-    setToTime("");
-    setTitle("");
-    setError("");
-  }, [open, defaultDayName]);
-
-  useEffect(() => {
-    if (!open) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") onClose();
     };

@@ -231,6 +231,8 @@ export async function PATCH(
 
   const saved = await getOrganizerPreviewConfig(eventId);
 
+    revalidateTag(MARKETPLACE_CACHE_TAG, { expire: 0 });
+
     return NextResponse.json({ config: saved });
   } catch (error) {
     logger.error("conference_config_patch_failed", {

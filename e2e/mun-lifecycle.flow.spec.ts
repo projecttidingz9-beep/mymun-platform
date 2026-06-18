@@ -76,8 +76,8 @@ test.describe("MUN lifecycle (seeded conference)", () => {
       { data: { paid: true } }
     );
     expect(patch.ok()).toBeTruthy();
-    const body = (await patch.json()) as { registration?: { paid: boolean } };
-    expect(body.registration?.paid).toBe(true);
+    const body = (await patch.json()) as { ok?: boolean };
+    expect(body.ok).toBe(true);
   });
 
   test("delegate downloads participation certificate metadata", async ({ request }) => {

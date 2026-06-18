@@ -117,7 +117,7 @@ export async function resolveServerRegistrationAmount(params: {
   const currency = event?.currency?.trim() || "INR";
   const categoryId = params.categoryId?.trim();
 
-  let categoryFromDb = categoryId
+  const categoryFromDb = categoryId
     ? event?.organizerConfig?.registrationCategories.find((c) => c.id === categoryId)
     : undefined;
 

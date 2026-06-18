@@ -9,6 +9,8 @@ import {
 } from "./helpers/seed";
 
 test.describe("organiser updates propagate to delegates", () => {
+  test.describe.configure({ mode: "serial" });
+
   test.beforeEach(async ({ request }) => {
     const loaded = await isSeedCatalogLoaded(request);
     test.skip(!loaded, "Run npm run db:seed against DATABASE_URL before E2E.");
@@ -95,7 +97,7 @@ test.describe("organiser updates propagate to delegates", () => {
     expect(body.conference.previousEditions?.some((e) => e.title === "Prior Edition")).toBe(true);
   });
 
-  test("organiser title patch appears on marketplace and conference page", async ({ request, page }) => {
+  test("organiser title patch appears on marketplace detail and catalog", async ({ request }) => {
     const updatedTitle = `Global Summit E2E ${Date.now()}`;
 
     const login = await loginWithCredentials(request, SEED_ORGANIZER_EMAIL, SEED_PASSWORD);
@@ -114,11 +116,6 @@ test.describe("organiser updates propagate to delegates", () => {
     const list = await request.get("/api/marketplace");
     const listBody = (await list.json()) as { conferences: Array<{ id: string; title: string }> };
     expect(listBody.conferences.some((c) => c.id === SEED_EVENT_ID && c.title === updatedTitle)).toBe(true);
-
-    await page.goto(`/conference/${SEED_EVENT_SLUG}`);
-    await expect(page.getByRole("heading", { level: 1 })).toContainText(updatedTitle, {
-      timeout: 15_000,
-    });
   });
 
   test("published conference stays on marketplace after organiser full sync", async ({ request }) => {

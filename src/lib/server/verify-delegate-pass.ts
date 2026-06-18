@@ -42,7 +42,6 @@ export async function loadPassFromQrToken(qrToken: string): Promise<LoadPassResu
     where: {
       id: payload.passId,
       deletedAt: null,
-      status: PassStatus.ISSUED,
     },
     include: {
       registration: {
@@ -57,6 +56,14 @@ export async function loadPassFromQrToken(qrToken: string): Promise<LoadPassResu
     pass.qrTokenHash !== tokenHash ||
     pass.qrNonce !== payload.nonce
   ) {
+    return { ok: false, status: 400, error: "Invalid delegate pass." };
+  }
+
+  if (isPassAlreadyUsed(pass)) {
+    return { ok: false, status: 409, error: PASS_ALREADY_USED_ERROR };
+  }
+
+  if (pass.status !== PassStatus.ISSUED) {
     return { ok: false, status: 400, error: "Invalid delegate pass." };
   }
 

@@ -15,8 +15,8 @@ test.describe("Indian MUN feature pack (seeded conference)", () => {
   });
   test("delegation invite page loads for seed token", async ({ page }) => {
     await page.goto("/join/delegation/seed-delegation-invite-token");
+    await expect(page.getByText(/Delhi Public School/i)).toBeVisible({ timeout: 15_000 });
     await expect(page.getByRole("heading", { name: /join delegation/i })).toBeVisible();
-    await expect(page.getByText(/Delhi Public School/i)).toBeVisible();
   });
 
   test("marketplace conference exposes Indian committee formats via API", async ({ request }) => {

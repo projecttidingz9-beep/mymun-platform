@@ -54,7 +54,6 @@ export default function ConferenceDetailPage() {
     organizerConferences,
     addConferenceReview,
     updateOrganizerConferenceConfig,
-    syncOrganizerConferenceById,
     removeConferenceReview,
     lastOrganizerSyncError,
   } = useAuth();
@@ -90,7 +89,7 @@ export default function ConferenceDetailPage() {
     setCatalogLoading(true);
     try {
       const detailRes = await fetch(`/api/marketplace/${encodeURIComponent(eventKey)}`, {
-        cache: refreshNonce > 0 ? "no-store" : "default",
+        cache: "no-store",
       });
       let detail: PublicConferenceDetail | null = null;
       if (detailRes.ok) {

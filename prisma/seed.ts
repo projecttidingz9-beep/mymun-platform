@@ -2,12 +2,16 @@
  * Seed demo data for local / preview environments.
  * Run: `npx prisma db seed` or `npm run db:seed`
  */
-import "dotenv/config";
-import { prisma } from "../src/lib/server/prisma";
-import { hashPassword } from "../src/lib/server/password";
-import { issueDelegatePassForRegistration } from "../src/lib/server/issue-delegate-pass";
+import dotenv from "dotenv";
+import { resolve } from "node:path";
+
+dotenv.config({ path: resolve(process.cwd(), ".env.local") });
+dotenv.config();
 
 async function main() {
+  const { prisma } = await import("../src/lib/server/prisma");
+  const { hashPassword } = await import("../src/lib/server/password");
+  const { issueDelegatePassForRegistration } = await import("../src/lib/server/issue-delegate-pass");
   await prisma.participationCertificate.deleteMany();
   await prisma.documentAcknowledgment.deleteMany();
   await prisma.positionPaper.deleteMany();
@@ -411,6 +415,19 @@ async function main() {
     console.warn("Seed pass issue:", passIssue.skipReason);
   }
 
+  const unscBackgroundGuide = await prisma.committeeDocument.findFirst({
+    where: { committeeId: unsc.id, category: "background-guide" },
+    select: { id: true },
+  });
+  if (unscBackgroundGuide) {
+    await prisma.documentAcknowledgment.create({
+      data: {
+        registrationId: reg1.id,
+        documentId: unscBackgroundGuide.id,
+      },
+    });
+  }
+
   await prisma.participationCertificate.create({
     data: {
       registrationId: reg1.id,
@@ -538,13 +555,11 @@ async function main() {
     delegates: delegates.map((d) => d.email),
     conference: `${eventId} /global-summit-mun-2026`,
   });
+
+  await prisma.$disconnect();
 }
 
-main()
-  .catch((e) => {
-    console.error(e);
-    process.exit(1);
-  })
-  .finally(async () => {
-    await prisma.$disconnect();
-  });
+main().catch((e) => {
+  console.error(e);
+  process.exit(1);
+});

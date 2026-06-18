@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import type { PricingPhaseConfig } from "@/generated/prisma/client";
 import { mapPublishedEventToConference, mapPublishedEventToPublicDetail } from "./marketplace-public";
 import type { EventWithListing } from "./marketplace-public";
 
@@ -63,6 +64,32 @@ describe("mapPublishedEventToConference", () => {
     expect(conference.level).toBe("University");
     expect(conference.tags).toEqual(["Elite", "Asia"]);
     expect(conference.description).toBe("Blob body text");
+  });
+
+  it("handles pricing phase dates serialized as ISO strings", () => {
+    const base = makeEvent();
+    const stringPhases = [
+      {
+        id: "phase-1",
+        organizerConfigId: "cfg-1",
+        name: "Early Bird",
+        startDate: "2026-05-01T00:00:00.000Z",
+        endDate: "2026-06-01T00:00:00.000Z",
+        basePrice: 1500,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    ] as unknown as PricingPhaseConfig[];
+    const conference = mapPublishedEventToConference(
+      makeEvent({
+        organizerConfig: {
+          ...base.organizerConfig!,
+          pricingPhases: stringPhases,
+        },
+      })
+    );
+    expect(conference.registrationOpenDate).toContain("May");
+    expect(conference.registrationDeadline).toContain("June");
   });
 });
 

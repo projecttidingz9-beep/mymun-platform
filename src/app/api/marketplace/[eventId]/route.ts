@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { mapPublishedEventToPublicDetail } from "@/lib/server/marketplace-public";
 import { getCachedPublishedEventDetail } from "@/lib/server/marketplace-queries";
 import { MARKETPLACE_DETAIL_CACHE_CONTROL } from "@/lib/server/http-cache";
+import { toIsoString } from "@/lib/server/coerce-date";
 
 /** Public conference detail for delegates (published events only). */
 export async function GET(
@@ -27,7 +28,7 @@ export async function GET(
       rating: review.rating,
       comment: review.comment?.trim() || "",
       featured: review.featured,
-      createdAt: review.createdAt.toISOString(),
+      createdAt: toIsoString(review.createdAt),
     }));
 
     const conference = mapPublishedEventToPublicDetail(event, { approvedReviews });

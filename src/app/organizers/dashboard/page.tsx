@@ -3223,6 +3223,7 @@ export default function OrganizerDashboardPage() {
                     </div>
                     )}
                     <ScheduleAddDayModal
+                      key={scheduleAddDayOpen ? defaultScheduleDayName : "closed"}
                       open={scheduleAddDayOpen}
                       defaultDayName={defaultScheduleDayName}
                       onClose={() => setScheduleAddDayOpen(false)}

@@ -1188,6 +1188,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (typeof window === "undefined") return;
     let cancelled = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- async session bootstrap; setState runs in .finally, not synchronously
     void refreshAuthState().finally(() => {
       if (!cancelled) setAuthReady(true);
     });
@@ -1227,6 +1228,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!pathNeedsOrganizerEvents(pathname)) return;
 
     let cancelled = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- async organizer fetch; setState runs after await inside refetchMyEvents
     void refetchMyEvents({ id: user.id, email: user.email }).finally(() => {
       if (cancelled) return;
     });
@@ -1372,7 +1374,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setNotifications([]);
   };
 
-  const addRegistration = (_reg: Registration) => {
+  const addRegistration = () => {
     void refreshUserAndNotifications();
     if (isOrganizerUser(user)) {
       void refetchMyEvents();
@@ -1452,9 +1454,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const updateUserRegistrationAssignment = (
-    _registrationId: string | undefined,
-    _patch: Partial<Registration>
+    registrationId: string | undefined,
+    patch: Partial<Registration>
   ) => {
+    void registrationId;
+    void patch;
     void refreshUserAndNotifications();
   };
 

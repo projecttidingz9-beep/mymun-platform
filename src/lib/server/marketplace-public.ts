@@ -10,6 +10,7 @@ import type { CommitteeConfig, Event, OrganizerConferenceConfig, PricingPhaseCon
 import { moneyNumber } from "@/lib/server/decimal-money";
 import { decodeOrganizerDescription } from "@/lib/server/organizer-description";
 import { decodeOrganizerStoredBlobRecord } from "@/lib/server/organizer-blob-decode";
+import { coerceDate } from "@/lib/server/coerce-date";
 
 const REGION_BY_COUNTRY: Record<string, Conference["region"]> = {
   india: "Asia",
@@ -30,8 +31,8 @@ const REGION_BY_COUNTRY: Record<string, Conference["region"]> = {
   australia: "Oceania",
 };
 
-function formatDate(d: Date): string {
-  return d.toLocaleDateString("en-US", {
+function formatDate(d: Date | string): string {
+  return coerceDate(d).toLocaleDateString("en-US", {
     month: "long",
     day: "numeric",
     year: "numeric",
@@ -67,7 +68,7 @@ function parseVenue(venue: string | null | undefined): { location: string; city:
 }
 
 function statusBadge(
-  end: Date,
+  end: Date | string,
   committees: CommitteeConfig[],
   phases: PricingPhaseConfig[]
 ): NonNullable<Conference["statusBadgeLabel"]> {
@@ -203,10 +204,12 @@ export function mapPublishedEventToConference(event: EventWithListing): Conferen
   const currency = event.currency?.trim() || "INR";
 
   const earliestPhaseStart = phases
-    .map((p) => p.startDate)
+    .map((p) => coerceDate(p.startDate))
+    .filter((d) => !Number.isNaN(d.getTime()))
     .sort((a, b) => a.getTime() - b.getTime())[0];
   const latestPhaseEnd = phases
-    .map((p) => p.endDate)
+    .map((p) => coerceDate(p.endDate))
+    .filter((d) => !Number.isNaN(d.getTime()))
     .sort((a, b) => b.getTime() - a.getTime())[0];
 
   const slug = event.slug?.trim() || toSlug(event.title);

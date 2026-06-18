@@ -107,6 +107,7 @@ export default function DashboardPage() {
     read: boolean;
   }>>([]);
   const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [profileSaving, setProfileSaving] = useState(false);
   const [draftSchool, setDraftSchool] = useState("");
   const [draftProfileImageUrl, setDraftProfileImageUrl] = useState("");
   const [draftFirstName, setDraftFirstName] = useState("");
@@ -471,7 +472,9 @@ export default function DashboardPage() {
       );
       return;
     }
-    const ok = await updateDelegateProfile({
+    setProfileSaving(true);
+    try {
+      const ok = await updateDelegateProfile({
       profileImageUrl: draftProfileImageUrl,
       firstName: draftFirstName.trim(),
       lastName: draftLastName.trim(),
@@ -525,12 +528,15 @@ export default function DashboardPage() {
           committee: entry.committee?.trim() || undefined,
           year: entry.year,
         })),
-    });
-    if (ok) {
-      toast.show("Profile saved successfully.", "success");
-      setIsEditingProfile(false);
-    } else {
-      toast.show("Could not save profile. Please try again.", "error");
+      });
+      if (ok) {
+        toast.show("Profile saved successfully.", "success");
+        setIsEditingProfile(false);
+      } else {
+        toast.show("Could not save profile. Please try again.", "error");
+      }
+    } finally {
+      setProfileSaving(false);
     }
   };
 
@@ -1274,7 +1280,13 @@ export default function DashboardPage() {
                   ) : (
                     <div className="flex gap-2">
                       <button onClick={() => setIsEditingProfile(false)} className="btn btn-ghost text-xs">Cancel</button>
-                      <button onClick={saveProfile} className="btn btn-primary text-xs">Save</button>
+                      <button
+                        onClick={saveProfile}
+                        disabled={profileSaving}
+                        className="btn btn-primary text-xs"
+                      >
+                        {profileSaving ? "Saving…" : "Save"}
+                      </button>
                     </div>
                   )}
                 </div>
@@ -1705,8 +1717,13 @@ export default function DashboardPage() {
                     <button type="button" onClick={() => setIsEditingProfile(false)} className="btn btn-ghost text-xs">
                       Discard
                     </button>
-                    <button type="button" onClick={saveProfile} className="btn btn-primary text-xs">
-                      Save changes
+                    <button
+                      type="button"
+                      onClick={saveProfile}
+                      disabled={profileSaving}
+                      className="btn btn-primary text-xs"
+                    >
+                      {profileSaving ? "Saving…" : "Save changes"}
                     </button>
                   </div>
                 </div>

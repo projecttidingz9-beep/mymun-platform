@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getRequestActor, requireEventOrganizerAccess, requireOrganizer } from "@/lib/server/auth";
 import { prisma } from "@/lib/server/prisma";
+import { toIsoString } from "@/lib/server/coerce-date";
 
 export async function GET(
   _request: NextRequest,
@@ -55,7 +56,7 @@ export async function GET(
       name: delegation.name,
       status: delegation.status,
       maxMembers: delegation.maxMembers,
-      createdAt: delegation.createdAt.toISOString(),
+      createdAt: toIsoString(delegation.createdAt),
       owner: delegation.owner,
       members: delegation.members.map((member) => {
         const registration =
@@ -64,7 +65,7 @@ export async function GET(
           id: member.id,
           userId: member.userId,
           role: member.role,
-          joinedAt: member.joinedAt.toISOString(),
+          joinedAt: toIsoString(member.joinedAt),
           user: member.user,
           registration,
         };

@@ -2,34 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@/generated/prisma/client";
 import { DelegationStatus } from "@/generated/prisma/enums";
 import { getRequestActor, resolveActorUserId } from "@/lib/server/auth";
+import { getDelegationInviteByToken } from "@/lib/server/delegation-invite";
 import { prisma } from "@/lib/server/prisma";
-
-async function findDelegationByToken(token: string) {
-  return prisma.delegation.findUnique({
-    where: { inviteToken: token },
-    include: {
-      event: {
-        select: {
-          id: true,
-          title: true,
-          startDate: true,
-          endDate: true,
-          status: true,
-        },
-      },
-      owner: { select: { id: true, name: true } },
-      members: {
-        select: {
-          id: true,
-          userId: true,
-          joinedAt: true,
-          user: { select: { name: true } },
-        },
-      },
-      _count: { select: { members: true, registrations: true } },
-    },
-  });
-}
 
 export async function GET(
   _request: NextRequest,
@@ -37,33 +11,12 @@ export async function GET(
 ) {
   const params = await context.params;
   const token = String(params.token || "").trim();
-  if (!token) {
-    return NextResponse.json({ error: "Invite token is required." }, { status: 400 });
+  const { info, error } = await getDelegationInviteByToken(token);
+  if (error) {
+    const status = error === "Invite token is required." ? 400 : 404;
+    return NextResponse.json({ error }, { status });
   }
-
-  const delegation = await findDelegationByToken(token);
-  if (!delegation) {
-    return NextResponse.json({ error: "Delegation invite not found." }, { status: 404 });
-  }
-
-  return NextResponse.json({
-    delegation: {
-      id: delegation.id,
-      schoolName: delegation.schoolName,
-      name: delegation.name,
-      status: delegation.status,
-      maxMembers: delegation.maxMembers,
-      memberCount: delegation._count.members + 1,
-      ownerName: delegation.owner.name,
-    },
-    event: {
-      id: delegation.event.id,
-      title: delegation.event.title,
-      startDate: delegation.event.startDate.toISOString(),
-      endDate: delegation.event.endDate.toISOString(),
-      status: delegation.event.status,
-    },
-  });
+  return NextResponse.json(info);
 }
 
 export async function POST(
