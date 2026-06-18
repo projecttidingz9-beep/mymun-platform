@@ -71,6 +71,8 @@ export default function ConferenceDetailPage() {
   const [tagDraft, setTagDraft] = useState("");
   const [editableStats, setEditableStats] = useState<Record<string, string | number>>({});
   const [reviewMessage, setReviewMessage] = useState<string | null>(null);
+  const [reviewSubmitting, setReviewSubmitting] = useState(false);
+  const [reviewDeletingId, setReviewDeletingId] = useState<string | null>(null);
   const [shareOpen, setShareOpen] = useState(false);
   const [shareMessage, setShareMessage] = useState<string | null>(null);
   const [instantReviews, setInstantReviews] = useState<
@@ -447,9 +449,15 @@ export default function ConferenceDetailPage() {
     if (!link) return;
   };
 
-  const removeOwnReview = (reviewId: string) => {
-    if (!organizerConference || !user?.id) return;
-    removeConferenceReview(organizerConference.id, reviewId, user.id);
+  const removeOwnReview = async (reviewId: string) => {
+    if (!organizerConference || !user?.id || reviewDeletingId) return;
+    setReviewDeletingId(reviewId);
+    try {
+      removeConferenceReview(organizerConference.id, reviewId, user.id);
+      setReviewMessage("Review removed.");
+    } finally {
+      setReviewDeletingId(null);
+    }
   };
 
   const tabs: { key: Tab; label: string }[] = [
@@ -1264,9 +1272,10 @@ export default function ConferenceDetailPage() {
                             <button
                               type="button"
                               className="btn btn-danger-ghost text-xs"
-                              onClick={() => removeOwnReview(review.id)}
+                              disabled={reviewDeletingId === review.id}
+                              onClick={() => void removeOwnReview(review.id)}
                             >
-                              Delete
+                              {reviewDeletingId === review.id ? "Deleting…" : "Delete"}
                             </button>
                           )}
                         </div>
@@ -1302,12 +1311,18 @@ export default function ConferenceDetailPage() {
                 <textarea className="input-base text-sm" rows={4} value={reviewDraft.comment} onChange={(event) => setReviewDraft((prev) => ({ ...prev, comment: event.target.value }))} placeholder="Write your review..." />
                 <button
                   className="btn btn-primary w-full text-sm"
+                  disabled={reviewSubmitting}
                   onClick={async () => {
                     if (!isLoggedIn || !user) {
                       setAuthOpen(true);
                       return;
                     }
-                    if (!reviewDraft.comment.trim()) return;
+                    if (!reviewDraft.comment.trim()) {
+                      setReviewMessage("Please write a review before submitting.");
+                      return;
+                    }
+                    if (reviewSubmitting) return;
+                    setReviewSubmitting(true);
                     const draftPayload = {
                       userId: user.id,
                       userName: user.name,
@@ -1357,10 +1372,12 @@ export default function ConferenceDetailPage() {
                       });
                     } catch {
                       setReviewMessage("Could not submit review. Try again.");
+                    } finally {
+                      setReviewSubmitting(false);
                     }
                   }}
                 >
-                  Submit Review
+                  {reviewSubmitting ? "Submitting…" : "Submit Review"}
                 </button>
                 {reviewMessage && <p className="text-xs" style={{ color: "var(--success)" }}>{reviewMessage}</p>}
               </div>

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getRequestActor, requireEventOrganizerAccess, requireOrganizer, resolveActorUserId } from "@/lib/server/auth";
+import { logger } from "@/lib/server/logger";
 import { unlinkPartnership, updatePartnershipStatus } from "@/lib/server/organizer-partners";
 
 export async function PATCH(
@@ -46,8 +47,12 @@ export async function PATCH(
     });
     return NextResponse.json({ partnership });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Failed to update partnership.";
-    return NextResponse.json({ error: message }, { status: 400 });
+    logger.error("partnership_update_failed", {
+      eventId,
+      partnershipId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return NextResponse.json({ error: "Failed to update partnership." }, { status: 500 });
   }
 }
 
@@ -78,7 +83,11 @@ export async function DELETE(
     await unlinkPartnership({ eventId, partnershipId, actorUserId });
     return NextResponse.json({ ok: true });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Failed to unlink partnership.";
-    return NextResponse.json({ error: message }, { status: 400 });
+    logger.error("partnership_unlink_failed", {
+      eventId,
+      partnershipId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return NextResponse.json({ error: "Failed to unlink partnership." }, { status: 500 });
   }
 }

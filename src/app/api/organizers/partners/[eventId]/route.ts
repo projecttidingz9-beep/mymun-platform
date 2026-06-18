@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getRequestActor, requireEventOrganizerAccess, requireOrganizer, resolveActorUserId } from "@/lib/server/auth";
+import { logger } from "@/lib/server/logger";
 import { invitePartnerEvent, listEventPartnerships } from "@/lib/server/organizer-partners";
 
 export async function GET(
@@ -24,8 +25,11 @@ export async function GET(
     const partnerships = await listEventPartnerships(eventId);
     return NextResponse.json({ partnerships });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Failed to list partnerships.";
-    return NextResponse.json({ error: message }, { status: 400 });
+    logger.error("partners_list_failed", {
+      eventId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return NextResponse.json({ error: "Failed to list partnerships." }, { status: 500 });
   }
 }
 
@@ -65,7 +69,10 @@ export async function POST(
     });
     return NextResponse.json({ partnership });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Failed to invite partner.";
-    return NextResponse.json({ error: message }, { status: 400 });
+    logger.error("partner_invite_failed", {
+      eventId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return NextResponse.json({ error: "Failed to invite partner." }, { status: 500 });
   }
 }

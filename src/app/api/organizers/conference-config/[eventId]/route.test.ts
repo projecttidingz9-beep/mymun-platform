@@ -3,7 +3,10 @@ import { NextRequest } from "next/server";
 
 vi.mock("@/lib/server/prisma", () => ({
   prisma: {
-    event: { update: vi.fn() },
+    event: {
+      findUnique: vi.fn(async () => ({ ownerUserId: "user-1" })),
+      update: vi.fn(),
+    },
     organizerConferenceConfig: { update: vi.fn() },
   },
 }));
@@ -16,7 +19,11 @@ vi.mock("@/lib/server/auth", () => ({
 }));
 
 vi.mock("@/lib/server/organizer-config-store", () => ({
-  getOrganizerPreviewConfig: vi.fn(async () => ({ registrationCategories: [] })),
+  getOrganizerPreviewConfig: vi.fn(async () => ({
+    registrationCategories: [],
+    ownerUserId: "user-1",
+    ownerEmail: "org@example.com",
+  })),
   mergeOrganizerStoredBlob: vi.fn(),
 }));
 

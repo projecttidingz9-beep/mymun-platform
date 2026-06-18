@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
@@ -11,6 +11,7 @@ import { useAuth } from "@/lib/auth-context";
 export default function NotificationsPage() {
   const router = useRouter();
   const { user, isLoggedIn, authReady, notifications, markNotificationRead } = useAuth();
+  const [markingReadId, setMarkingReadId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!authReady) return;
@@ -85,10 +86,16 @@ export default function NotificationsPage() {
                       </div>
                       {!notification.read && (
                         <button
-                          onClick={() => markNotificationRead(notification.id)}
+                          onClick={() => {
+                            if (markingReadId) return;
+                            setMarkingReadId(notification.id);
+                            markNotificationRead(notification.id);
+                            window.setTimeout(() => setMarkingReadId(null), 400);
+                          }}
+                          disabled={markingReadId === notification.id}
                           className="btn btn-ghost text-xs"
                         >
-                          Mark read
+                          {markingReadId === notification.id ? "Saving…" : "Mark read"}
                         </button>
                       )}
                     </div>

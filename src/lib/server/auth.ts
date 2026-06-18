@@ -3,6 +3,7 @@ import { SessionRole, verifySessionToken } from "./session-token";
 import { env } from "./env";
 import { prisma } from "./prisma";
 import { getOrganizerPreviewConfig } from "./organizer-config-store";
+import { prismaUserRoleToSession } from "./user-role";
 
 export type RequestActor = {
   email: string;
@@ -49,6 +50,7 @@ export async function validateSessionToken(token: string): Promise<RequestActor 
         where: { id: sub, email },
         select: {
           id: true,
+          role: true,
           sessionVersion: true,
           deletedAt: true,
           lockedUntil: true,
@@ -58,6 +60,7 @@ export async function validateSessionToken(token: string): Promise<RequestActor 
         where: { email },
         select: {
           id: true,
+          role: true,
           sessionVersion: true,
           deletedAt: true,
           lockedUntil: true,
@@ -71,7 +74,7 @@ export async function validateSessionToken(token: string): Promise<RequestActor 
 
   return {
     email,
-    role: payload.role,
+    role: prismaUserRoleToSession(user.role),
     name: payload.name,
   };
 }

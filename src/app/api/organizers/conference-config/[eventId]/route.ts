@@ -4,6 +4,7 @@ import { normalizeConferenceScheduleEntries } from "@/lib/conference-schedule";
 import type { RegistrationCategory } from "@/lib/types";
 import { getRequestActor, requireEventOrganizerAccess, requireOrganizer, resolveActorUserId } from "@/lib/server/auth";
 import { getOrganizerPreviewConfig, mergeOrganizerStoredBlob } from "@/lib/server/organizer-config-store";
+import { logger } from "@/lib/server/logger";
 import { persistRegistrationCategories } from "@/lib/server/persist-registration-categories";
 import { MARKETPLACE_CACHE_TAG } from "@/lib/server/marketplace-queries";
 import { prisma } from "@/lib/server/prisma";
@@ -49,13 +50,32 @@ export async function PATCH(
   }
 
   const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
+
+  const event = await prisma.event.findUnique({
+    where: { id: eventId },
+    select: { ownerUserId: true },
+  });
+  const existingConfig = await getOrganizerPreviewConfig(eventId);
+  const ownerUserIdFromConfig = (existingConfig?.ownerUserId || "").trim();
+  const ownerEmailFromConfig = (existingConfig?.ownerEmail || "").trim().toLowerCase();
+  const actorEmail = (actor?.email || "").trim().toLowerCase();
+  const isOwner =
+    (actorUserId && event?.ownerUserId && actorUserId === event.ownerUserId) ||
+    (actorUserId && ownerUserIdFromConfig && actorUserId === ownerUserIdFromConfig) ||
+    (actorEmail && ownerEmailFromConfig && actorEmail === ownerEmailFromConfig);
+
   const previewPatch: Record<string, unknown> = {
     eventId,
-    ownerUserId: typeof body.ownerUserId === "string" ? body.ownerUserId : actorUserId || undefined,
-    ownerEmail: typeof body.ownerEmail === "string" ? body.ownerEmail : actor?.email || undefined,
-    organizerTeamEmails: Array.isArray(body.organizerTeamEmails)
-      ? body.organizerTeamEmails.map((entry) => String(entry).trim().toLowerCase()).filter(Boolean)
-      : undefined,
+    ...(isOwner
+      ? {
+          ownerUserId:
+            typeof body.ownerUserId === "string" ? body.ownerUserId : actorUserId || undefined,
+          ownerEmail: typeof body.ownerEmail === "string" ? body.ownerEmail : actor?.email || undefined,
+          organizerTeamEmails: Array.isArray(body.organizerTeamEmails)
+            ? body.organizerTeamEmails.map((entry) => String(entry).trim().toLowerCase()).filter(Boolean)
+            : undefined,
+        }
+      : {}),
     title: typeof body.title === "string" ? body.title : undefined,
     city: typeof body.city === "string" ? body.city : undefined,
     country: typeof body.country === "string" ? body.country : undefined,
@@ -110,17 +130,18 @@ export async function PATCH(
       : undefined,
   };
 
-  await mergeOrganizerStoredBlob(eventId, previewPatch);
+  try {
+    await mergeOrganizerStoredBlob(eventId, previewPatch);
 
-  if (Array.isArray(previewPatch.registrationCategories)) {
-    await persistRegistrationCategories(
-      eventId,
-      previewPatch.registrationCategories as RegistrationCategory[]
-    );
-    revalidateTag(MARKETPLACE_CACHE_TAG, { expire: 0 });
-  }
+    if (Array.isArray(previewPatch.registrationCategories)) {
+      await persistRegistrationCategories(
+        eventId,
+        previewPatch.registrationCategories as RegistrationCategory[]
+      );
+      revalidateTag(MARKETPLACE_CACHE_TAG, { expire: 0 });
+    }
 
-  const venueFromParts = [previewPatch.city, previewPatch.country]
+    const venueFromParts = [previewPatch.city, previewPatch.country]
     .map((part) => (typeof part === "string" ? part.trim() : ""))
     .filter(Boolean)
     .join(", ");
@@ -210,5 +231,12 @@ export async function PATCH(
 
   const saved = await getOrganizerPreviewConfig(eventId);
 
-  return NextResponse.json({ config: saved });
+    return NextResponse.json({ config: saved });
+  } catch (error) {
+    logger.error("conference_config_patch_failed", {
+      eventId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return NextResponse.json({ error: "Could not save conference settings." }, { status: 500 });
+  }
 }

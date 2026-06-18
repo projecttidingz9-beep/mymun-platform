@@ -8,6 +8,7 @@ import Link from "next/link";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import AppRouteSkeleton from "@/components/AppRouteSkeleton";
+import { useToast } from "@/components/Toast";
 
 const QrScannerPanel = dynamic(() => import("@/components/QrScannerPanel"), {
   ssr: false,
@@ -22,6 +23,7 @@ import { allotApplicantOnConference } from "@/lib/allot-applicant";
 import { netAfterPlatformFee } from "@/lib/platform-finance";
 import { formatMoney } from "@/lib/format-money";
 import { downloadCsv } from "@/lib/client/csv-export";
+import { useDebouncedValue } from "@/lib/client/use-debounced-value";
 import {
   EMAIL_TEMPLATE_PREVIEW_CONTEXT,
   renderEmailTemplate,
@@ -400,6 +402,7 @@ export default function OrganizerDashboardPage() {
     clearOrganizerSyncError,
     refetchMyEvents,
   } = useAuth();
+  const toast = useToast();
 
   const organizerConferences = useMemo(
     () =>
@@ -463,6 +466,9 @@ export default function OrganizerDashboardPage() {
   const [pricingCategoryTypeTab, setPricingCategoryTypeTab] = useState<RegistrationCategoryType>("delegate");
   const [applicantProfileDrawerOpen, setApplicantProfileDrawerOpen] = useState(false);
   const [participantSearchQuery, setParticipantSearchQuery] = useState("");
+  const debouncedParticipantSearch = useDebouncedValue(participantSearchQuery, 180);
+  const [delegationSearchQuery, setDelegationSearchQuery] = useState("");
+  const debouncedDelegationSearch = useDebouncedValue(delegationSearchQuery, 180);
   const [participantStatusFilter, setParticipantStatusFilter] = useState<
     "all" | "Pending" | "Invited" | "Allotted" | "Waitlisted" | "Rejected"
   >("all");
@@ -550,6 +556,7 @@ export default function OrganizerDashboardPage() {
     () => parseConferenceScheduleEntries(organizerConferences[0]?.conferenceSchedule || [])
   );
   const [previewSaveStatus, setPreviewSaveStatus] = useState("");
+  const [previewSettingsSaving, setPreviewSettingsSaving] = useState(false);
   const [pricingSaveStatus, setPricingSaveStatus] = useState("");
   const [pricingSaving, setPricingSaving] = useState(false);
   const [pricingSavedCategoriesJson, setPricingSavedCategoriesJson] = useState("");
@@ -1193,7 +1200,7 @@ export default function OrganizerDashboardPage() {
   }, [globalSearchQuery, organizerConferences, selectedConference]);
 
   const savePreviewSettings = async () => {
-    if (!selectedConference) return;
+    if (!selectedConference || previewSettingsSaving) return;
     const incompleteRows = findIncompleteConferenceScheduleEntries(previewScheduleDraft);
     if (incompleteRows.length > 0) {
       setPreviewSaveStatus(
@@ -1202,6 +1209,7 @@ export default function OrganizerDashboardPage() {
       return;
     }
     const scheduleToSave = normalizeConferenceScheduleEntries(previewScheduleDraft);
+    setPreviewSettingsSaving(true);
     try {
       const response = await fetch(`/api/organizers/conference-config/${selectedConference.id}`, {
         method: "PATCH",
@@ -1270,9 +1278,15 @@ export default function OrganizerDashboardPage() {
         throw new Error(syncResult.error || "Saved locally but could not sync to the public MUN page.");
       }
       setPreviewSaveStatus("Changes saved and are live on the public MUN page.");
+      toast.show("Conference settings saved.", "success");
       window.setTimeout(() => setPreviewSaveStatus(""), 3500);
     } catch (error) {
-      setPreviewSaveStatus(error instanceof Error ? error.message : "Unable to save preview settings. Please try again.");
+      const message =
+        error instanceof Error ? error.message : "Unable to save preview settings. Please try again.";
+      setPreviewSaveStatus(message);
+      toast.show(message, "error");
+    } finally {
+      setPreviewSettingsSaving(false);
     }
   };
 
@@ -1963,7 +1977,7 @@ export default function OrganizerDashboardPage() {
   const selectedApplicantAwardsList = selectedApplicantUserProfile?.munAwards || [];
   const participantAllocationRows = useMemo(() => {
     if (!selectedConference) return [];
-    const searchValue = participantSearchQuery.trim().toLowerCase();
+    const searchValue = debouncedParticipantSearch.trim().toLowerCase();
 
     return [...selectedConference.applicants]
       .filter((applicant) => {
@@ -1990,7 +2004,14 @@ export default function OrganizerDashboardPage() {
         }
         return a.name.localeCompare(b.name);
       });
-  }, [selectedConference, participantSearchQuery, participantStatusFilter, participantSortKey]);
+  }, [selectedConference, debouncedParticipantSearch, participantStatusFilter, participantSortKey]);
+  const filteredEventDelegations = useMemo(() => {
+    const searchValue = debouncedDelegationSearch.trim().toLowerCase();
+    if (!searchValue) return eventDelegations;
+    return eventDelegations.filter((delegation) =>
+      delegation.schoolName.toLowerCase().includes(searchValue)
+    );
+  }, [eventDelegations, debouncedDelegationSearch]);
   const countryMatrixGroups = useMemo(() => {
     if (!selectedConference) return [];
     const searchValue = countryMatrixSearch.trim().toLowerCase();
@@ -2895,9 +2916,10 @@ export default function OrganizerDashboardPage() {
                       <h3 className="text-lg font-bold" style={{ color: "var(--fg)" }}>Conference Page Preview</h3>
                       <button
                         className="btn btn-primary text-xs"
+                        disabled={previewSettingsSaving}
                         onClick={savePreviewSettings}
                       >
-                        Save Preview Settings
+                        {previewSettingsSaving ? "Saving…" : "Save Preview Settings"}
                       </button>
                     </div>
                     <div
@@ -3016,9 +3038,10 @@ export default function OrganizerDashboardPage() {
                         <button
                           type="button"
                           className="btn btn-primary text-xs"
+                          disabled={previewSettingsSaving}
                           onClick={() => void savePreviewSettings()}
                         >
-                          Save schedule
+                          {previewSettingsSaving ? "Saving…" : "Save schedule"}
                         </button>
                         <button
                           type="button"
@@ -3296,8 +3319,13 @@ export default function OrganizerDashboardPage() {
                         </div>
                       </div>
                       <div className="mt-4 flex justify-end">
-                        <button type="button" className="btn btn-primary text-xs" onClick={savePreviewSettings}>
-                          Save stats and tags
+                        <button
+                          type="button"
+                          className="btn btn-primary text-xs"
+                          disabled={previewSettingsSaving}
+                          onClick={savePreviewSettings}
+                        >
+                          {previewSettingsSaving ? "Saving…" : "Save stats and tags"}
                         </button>
                       </div>
                     </div>
@@ -3336,9 +3364,10 @@ export default function OrganizerDashboardPage() {
                         <button
                           type="button"
                           className="btn btn-primary text-xs"
+                          disabled={previewSettingsSaving}
                           onClick={savePreviewSettings}
                         >
-                          Save changes
+                          {previewSettingsSaving ? "Saving…" : "Save changes"}
                         </button>
                       </div>
                     </div>
@@ -3539,7 +3568,8 @@ export default function OrganizerDashboardPage() {
                                         applicationTypeTab === "chair" ? undefined : selectedPortfolioId || undefined,
                                       allowOverride: overrideSeatLimit,
                                     });
-                                    if (!result.ok) alert(result.message);
+                                    if (!result.ok) toast.show(result.message, "error");
+                                    else toast.show("Applicant allotted.", "success");
                                   }}
                                   className="btn btn-primary text-xs"
                                   disabled={!selectedCommitteeId}
@@ -3549,7 +3579,7 @@ export default function OrganizerDashboardPage() {
                                 <button
                                   onClick={() => {
                                     const result = unassignApplicant(selectedConference.id, applicant.id);
-                                    if (!result.ok) alert(result.message);
+                                    if (!result.ok) toast.show(result.message, "error");
                                   }}
                                   className="btn btn-ghost text-xs"
                                 >
@@ -3561,7 +3591,7 @@ export default function OrganizerDashboardPage() {
                                   disabled={applicant.status === "Allotted" || applicant.status === "Rejected"}
                                   onClick={() => {
                                     const result = waitlistApplicant(selectedConference.id, applicant.id);
-                                    if (!result.ok) alert(result.message);
+                                    if (!result.ok) toast.show(result.message, "error");
                                   }}
                                 >
                                   Waitlist
@@ -3574,13 +3604,16 @@ export default function OrganizerDashboardPage() {
                                   }
                                   onClick={() => {
                                     const result = inviteApplicant(selectedConference.id, applicant.id);
-                                    if (!result.ok) alert(result.message);
+                                    if (!result.ok) toast.show(result.message, "error");
                                   }}
                                 >
                                   Invite
                                 </button>
                                 <button
-                                  onClick={() => updateApplicantStatus(selectedConference.id, applicant.id, "Rejected")}
+                                  onClick={() => {
+                                    updateApplicantStatus(selectedConference.id, applicant.id, "Rejected");
+                                    toast.show("Applicant rejected.", "info");
+                                  }}
                                   className="btn btn-ghost text-xs"
                                 >
                                   Reject
@@ -3725,8 +3758,39 @@ export default function OrganizerDashboardPage() {
                   <div className="card p-6 rounded-2xl">
                     <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
                       <h3 className="text-lg font-bold" style={{ color: "var(--fg)" }}>Participants &amp; Allotments</h3>
-                      <div className="text-xs" style={{ color: "var(--fg-muted)" }}>
-                        Showing {participantAllocationRows.length} of {selectedConference.applicants.length} participants
+                      <div className="flex flex-wrap items-center gap-2">
+                        <div className="text-xs" style={{ color: "var(--fg-muted)" }}>
+                          Showing {participantAllocationRows.length} of {selectedConference.applicants.length} participants
+                        </div>
+                        <button
+                          type="button"
+                          className="btn btn-ghost text-xs"
+                          disabled={participantAllocationRows.length === 0}
+                          onClick={() => {
+                            downloadCsv(
+                              `${selectedConference.title.replace(/[^\w.-]+/g, "_")}-participants.csv`,
+                              [
+                                "Name",
+                                "School",
+                                "Category",
+                                "Committee",
+                                "Country/Member",
+                                "Status",
+                              ],
+                              participantAllocationRows.map((applicant) => [
+                                applicant.name,
+                                applicant.school || "",
+                                applicant.categoryName || "",
+                                applicant.assignedCommitteeName || "",
+                                applicant.assignedPortfolioName || "",
+                                applicant.status,
+                              ])
+                            );
+                            toast.show("Participants exported.", "success");
+                          }}
+                        >
+                          Export CSV
+                        </button>
                       </div>
                     </div>
                     <div className="grid md:grid-cols-[1.4fr_180px_160px] gap-2 mb-4">
@@ -3810,14 +3874,52 @@ export default function OrganizerDashboardPage() {
                   </div>
 
                   <div className="card p-6 rounded-2xl mt-6">
-                    <h3 className="text-lg font-bold mb-4" style={{ color: "var(--fg)" }}>Delegations</h3>
+                    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
+                      <h3 className="text-lg font-bold" style={{ color: "var(--fg)" }}>Delegations</h3>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <input
+                          className="input-base text-xs"
+                          placeholder="Search by school name..."
+                          value={delegationSearchQuery}
+                          onChange={(event) => setDelegationSearchQuery(event.target.value)}
+                        />
+                        <button
+                          type="button"
+                          className="btn btn-ghost text-xs"
+                          disabled={filteredEventDelegations.length === 0}
+                          onClick={() => {
+                            downloadCsv(
+                              `${selectedConference.title.replace(/[^\w.-]+/g, "_")}-delegations.csv`,
+                              ["School", "Members", "Paid", "Allotted", "Status", "Invite URL"],
+                              filteredEventDelegations.map((delegation) => [
+                                delegation.schoolName,
+                                String(delegation.memberCount),
+                                String(delegation.paidCount),
+                                String(delegation.allottedCount),
+                                delegation.status,
+                                typeof window !== "undefined"
+                                  ? `${window.location.origin}/join/delegation/${delegation.inviteToken}`
+                                  : `/join/delegation/${delegation.inviteToken}`,
+                              ])
+                            );
+                            toast.show("Delegations exported.", "success");
+                          }}
+                        >
+                          Export CSV
+                        </button>
+                      </div>
+                    </div>
                     {eventDelegations.length === 0 ? (
                       <p className="text-sm" style={{ color: "var(--fg-muted)" }}>
                         No delegations created yet. Delegation heads can create one after registering.
                       </p>
+                    ) : filteredEventDelegations.length === 0 ? (
+                      <p className="text-sm" style={{ color: "var(--fg-muted)" }}>
+                        No delegations matched your search.
+                      </p>
                     ) : (
                       <div className="space-y-2">
-                        {eventDelegations.map((delegation) => (
+                        {filteredEventDelegations.map((delegation) => (
                           <div
                             key={delegation.id}
                             className="p-3 rounded-xl"
@@ -4365,10 +4467,10 @@ export default function OrganizerDashboardPage() {
                                 .then(async (res) => {
                                   const data = (await res.json()) as { error?: string; sent?: number };
                                   if (!res.ok) {
-                                    alert(data.error || "Email broadcast failed.");
+                                    toast.show(data.error || "Email broadcast failed.", "error");
                                     return;
                                   }
-                                  alert(`Emailed ${data.sent ?? 0} delegate(s).`);
+                                  toast.show(`Emailed ${data.sent ?? 0} delegate(s).`, "success");
                                 })
                                 .finally(() => setBroadcastSending(false));
                             } else {
@@ -4631,9 +4733,10 @@ export default function OrganizerDashboardPage() {
                                             const payload = (await res.json().catch(() => ({}))) as {
                                               error?: string;
                                             };
-                                            alert(payload.error || "Refund failed.");
+                                            toast.show(payload.error || "Refund failed.", "error");
                                             return;
                                           }
+                                          toast.show("Refund processed.", "success");
                                           await syncOrganizerConferenceById(selectedConference.id);
                                         })();
                                       }}

@@ -149,7 +149,7 @@ export async function POST(request: NextRequest) {
       error: message,
     });
     return NextResponse.json(
-      { error: message, code: "EVENT_CREATE_FAILED" },
+      { error: "Could not create conference.", code: "EVENT_CREATE_FAILED" },
       { status: 500 }
     );
   }

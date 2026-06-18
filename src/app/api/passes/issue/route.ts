@@ -8,6 +8,7 @@ import { prisma } from "@/lib/server/prisma";
 import { upsertRegistrationFromClient } from "@/lib/server/registration-sync";
 import { getRequestActor, requireEventOrganizerAccess, requireOrganizer } from "@/lib/server/auth";
 import { requireVerifiedEmail } from "@/lib/server/require-verified-email";
+import { logger } from "@/lib/server/logger";
 
 export async function POST(request: NextRequest) {
   try {
@@ -77,7 +78,9 @@ export async function POST(request: NextRequest) {
       alreadyIssued: false,
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Failed to issue delegate pass.";
-    return NextResponse.json({ error: message }, { status: 500 });
+    logger.error("pass_issue_failed", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return NextResponse.json({ error: "Failed to issue delegate pass." }, { status: 500 });
   }
 }

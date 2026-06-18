@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getRequestActor } from "@/lib/server/auth";
+import { logger } from "@/lib/server/logger";
 import { prisma } from "@/lib/server/prisma";
 import { NotificationType } from "@/generated/prisma/client";
 
@@ -58,27 +59,35 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ error: "preferences array required." }, { status: 400 });
   }
 
-  for (const pref of body.preferences) {
-    if (!TYPES.includes(pref.notificationType)) continue;
-    await prisma.userNotificationPreference.upsert({
-      where: {
-        userId_notificationType: {
+  try {
+    for (const pref of body.preferences) {
+      if (!TYPES.includes(pref.notificationType)) continue;
+      await prisma.userNotificationPreference.upsert({
+        where: {
+          userId_notificationType: {
+            userId: user.id,
+            notificationType: pref.notificationType,
+          },
+        },
+        create: {
           userId: user.id,
           notificationType: pref.notificationType,
+          emailEnabled: pref.emailEnabled ?? true,
+          inAppEnabled: pref.inAppEnabled ?? true,
         },
-      },
-      create: {
-        userId: user.id,
-        notificationType: pref.notificationType,
-        emailEnabled: pref.emailEnabled ?? true,
-        inAppEnabled: pref.inAppEnabled ?? true,
-      },
-      update: {
-        ...(typeof pref.emailEnabled === "boolean" ? { emailEnabled: pref.emailEnabled } : {}),
-        ...(typeof pref.inAppEnabled === "boolean" ? { inAppEnabled: pref.inAppEnabled } : {}),
-      },
-    });
-  }
+        update: {
+          ...(typeof pref.emailEnabled === "boolean" ? { emailEnabled: pref.emailEnabled } : {}),
+          ...(typeof pref.inAppEnabled === "boolean" ? { inAppEnabled: pref.inAppEnabled } : {}),
+        },
+      });
+    }
 
-  return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    logger.error("notification_preferences_patch_failed", {
+      email: actor.email,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return NextResponse.json({ error: "Could not save notification preferences." }, { status: 500 });
+  }
 }

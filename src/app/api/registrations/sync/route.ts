@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getRequestActor, requireEventOrganizerAccess } from "@/lib/server/auth";
+import { logger } from "@/lib/server/logger";
 import { upsertRegistrationFromClient } from "@/lib/server/registration-sync";
 
 export async function POST(request: NextRequest) {
@@ -34,7 +35,9 @@ export async function POST(request: NextRequest) {
     });
     return NextResponse.json({ registration });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Failed to sync registration.";
-    return NextResponse.json({ error: message }, { status: 400 });
+    logger.error("registration_sync_failed", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return NextResponse.json({ error: "Failed to sync registration." }, { status: 500 });
   }
 }

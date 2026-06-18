@@ -19,6 +19,7 @@ import { preferenceLabelForCommittee } from "@/lib/india-committee-presets";
 import { getMarketplaceConferences } from "@/lib/marketplace-conferences";
 import { formatMoney } from "@/lib/format-money";
 import { downloadRegistrationInvoicePdf } from "@/lib/client/invoice-pdf";
+import { useToast } from "@/components/Toast";
 
 type Step = 1 | 2 | 3 | 4 | 5;
 
@@ -28,6 +29,7 @@ export default function CheckoutPage() {
   const params = useParams();
   const router = useRouter();
   const { isLoggedIn, user, authReady, addRegistration, organizerConferences } = useAuth();
+  const toast = useToast();
 
   const [step, setStep] = useState<Step>(1);
   const [fullName, setFullName] = useState(user?.name || "");
@@ -288,7 +290,11 @@ export default function CheckoutPage() {
         return;
       }
       if (!res.ok || !payload.clientRegistration) {
-        alert(payload.error || "Registration failed. If this conference was created only on this device, publish it from the organizer dashboard so it exists on the server.");
+        toast.show(
+          payload.error ||
+            "Registration failed. If this conference was created only on this device, publish it from the organizer dashboard so it exists on the server.",
+          "error"
+        );
         return;
       }
       addRegistration(payload.clientRegistration);
@@ -886,12 +892,13 @@ export default function CheckoutPage() {
                               };
                               const token = data.delegation?.inviteToken;
                               if (!res.ok || !token) {
-                                alert(data.error || "Could not create delegation.");
+                                toast.show(data.error || "Could not create delegation.", "error");
                                 return;
                               }
                               setDelegationInviteLink(
                                 `${window.location.origin}/join/delegation/${token}`
                               );
+                              toast.show("Delegation created. Share the invite link with your team.", "success");
                             })
                             .finally(() => setCreatingDelegation(false));
                         }}

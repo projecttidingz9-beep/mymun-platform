@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import type { NotificationType } from "@/generated/prisma/client";
 import type { UserNotification } from "@/lib/types";
 import { getRequestActor } from "@/lib/server/auth";
+import { logger } from "@/lib/server/logger";
 import { prisma } from "@/lib/server/prisma";
 
 function mapNotificationType(t: NotificationType): UserNotification["type"] {
@@ -18,31 +19,39 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized actor." }, { status: 401 });
   }
 
-  const user = await prisma.user.findUnique({
-    where: { email: actor.email },
-  });
-  if (!user) return NextResponse.json({ notifications: [] });
+  try {
+    const user = await prisma.user.findUnique({
+      where: { email: actor.email },
+    });
+    if (!user) return NextResponse.json({ notifications: [] });
 
-  const notifications = await prisma.notification.findMany({
-    where: { userId: user.id },
-    orderBy: { createdAt: "desc" },
-    take: 50,
-  });
+    const notifications = await prisma.notification.findMany({
+      where: { userId: user.id },
+      orderBy: { createdAt: "desc" },
+      take: 50,
+    });
 
-  return NextResponse.json({
-    notifications: notifications.map((notification) => ({
-      id: notification.id,
-      title: notification.title,
-      message: notification.message,
-      type: mapNotificationType(notification.type),
-      read: notification.read,
-      createdAt: notification.createdAt.toISOString(),
-      conferenceId: notification.eventId,
-      eventId: notification.eventId,
-      registrationId: notification.registrationId,
-      userId: notification.userId,
-    })),
-  });
+    return NextResponse.json({
+      notifications: notifications.map((notification) => ({
+        id: notification.id,
+        title: notification.title,
+        message: notification.message,
+        type: mapNotificationType(notification.type),
+        read: notification.read,
+        createdAt: notification.createdAt.toISOString(),
+        conferenceId: notification.eventId,
+        eventId: notification.eventId,
+        registrationId: notification.registrationId,
+        userId: notification.userId,
+      })),
+    });
+  } catch (error) {
+    logger.error("notifications_list_failed", {
+      email: actor.email,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return NextResponse.json({ error: "Could not load notifications." }, { status: 500 });
+  }
 }
 
 export async function PATCH(request: NextRequest) {
@@ -67,10 +76,19 @@ export async function PATCH(request: NextRequest) {
 
   const read = body.read !== false;
 
-  const result = await prisma.notification.updateMany({
-    where: { id, userId: user.id },
-    data: { read },
-  });
+  try {
+    const result = await prisma.notification.updateMany({
+      where: { id, userId: user.id },
+      data: { read },
+    });
 
-  return NextResponse.json({ ok: true, updated: result.count });
+    return NextResponse.json({ ok: true, updated: result.count });
+  } catch (error) {
+    logger.error("notification_mark_read_failed", {
+      email: actor.email,
+      notificationId: id,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return NextResponse.json({ error: "Could not update notification." }, { status: 500 });
+  }
 }

@@ -1031,7 +1031,7 @@ interface AuthContextType {
     munParticipations?: DelegateMunParticipation[];
     munAwards?: DelegateMunAward[];
     profileVisibility?: "private" | "public";
-  }) => void;
+  }) => Promise<boolean>;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -1090,7 +1090,7 @@ const AuthContext = createContext<AuthContextType>({
   overrideSeatLimit: () => {},
   notifications: [],
   markNotificationRead: () => {},
-  updateDelegateProfile: () => {},
+  updateDelegateProfile: async () => false,
 });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -2167,20 +2167,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
   };
 
-  const updateDelegateProfile: AuthContextType["updateDelegateProfile"] = (patch) => {
-    if (!user) return;
-    void (async () => {
+  const updateDelegateProfile: AuthContextType["updateDelegateProfile"] = async (patch) => {
+    if (!user) return false;
+    try {
       const res = await fetch("/api/user/me", {
         method: "PATCH",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(patch),
       });
-      if (!res.ok) return;
+      if (!res.ok) return false;
       const j = (await res.json().catch(() => ({}))) as { user?: unknown };
       const normalized = normalizeUser(j.user);
       if (normalized) setUser(normalized);
-    })();
+      return true;
+    } catch {
+      return false;
+    }
   };
 
   return (

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import ConferenceCard from "@/components/ConferenceCard";
@@ -34,6 +34,8 @@ export default function MarketplacePage() {
   const isOrganizerUser = user?.role === "organizer";
   const [catalog, setCatalog] = useState<Conference[]>([]);
   const [catalogLoading, setCatalogLoading] = useState(true);
+  const [catalogError, setCatalogError] = useState<string | null>(null);
+  const [catalogReloadKey, setCatalogReloadKey] = useState(0);
   const [search, setSearch] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [level, setLevel] = useState("All");
@@ -53,26 +55,36 @@ export default function MarketplacePage() {
   const desktopFilterWrapRef = useRef<HTMLDivElement>(null);
   const mobileFilterWrapRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      setCatalogLoading(true);
-      try {
-        const res = await fetch("/api/marketplace");
-        const data = (await res.json()) as { conferences?: Conference[] };
-        if (!cancelled && Array.isArray(data.conferences)) {
-          setCatalog(data.conferences);
-        }
-      } catch {
-        if (!cancelled) setCatalog([]);
-      } finally {
-        if (!cancelled) setCatalogLoading(false);
+  const loadCatalog = useCallback(async (signal?: AbortSignal) => {
+    setCatalogLoading(true);
+    setCatalogError(null);
+    try {
+      const res = await fetch("/api/marketplace", { signal });
+      if (!res.ok) {
+        throw new Error("Could not load marketplace catalog.");
       }
-    })();
-    return () => {
-      cancelled = true;
-    };
+      const data = (await res.json()) as { conferences?: Conference[] };
+      if (Array.isArray(data.conferences)) {
+        setCatalog(data.conferences);
+      } else {
+        setCatalog([]);
+      }
+    } catch (error) {
+      if (signal?.aborted) return;
+      setCatalog([]);
+      setCatalogError(
+        error instanceof Error ? error.message : "Could not load marketplace catalog."
+      );
+    } finally {
+      if (!signal?.aborted) setCatalogLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void loadCatalog(controller.signal);
+    return () => controller.abort();
+  }, [catalogReloadKey, loadCatalog]);
 
   const allConferences = catalog;
   const indexedConferences = useMemo(
@@ -703,6 +715,26 @@ export default function MarketplacePage() {
               <p className="mt-4 text-lg font-medium" style={{ color: "var(--fg)" }}>
                 Fetching published conferences…
               </p>
+            </div>
+          ) : catalogError ? (
+            <div className="lux-card py-24 text-center" style={{ borderStyle: "dashed" }}>
+              <p className="lux-eyebrow" style={{ color: "var(--fg-muted)" }}>
+                Could not load catalog
+              </p>
+              <p className="mt-4 text-2xl font-semibold" style={{ color: "var(--fg)" }}>
+                Something went wrong
+              </p>
+              <p className="mt-3 max-w-md mx-auto" style={{ color: "var(--fg-muted)" }}>
+                {catalogError}
+              </p>
+              <button
+                type="button"
+                onClick={() => setCatalogReloadKey((key) => key + 1)}
+                className="lux-button-primary text-sm mt-8"
+                style={{ padding: "12px 22px" }}
+              >
+                Try again
+              </button>
             </div>
           ) : filtered.length > 0 ? (
             <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-6">

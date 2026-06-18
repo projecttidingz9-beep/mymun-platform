@@ -1,7 +1,9 @@
+import { Prisma } from "@/generated/prisma/client";
 import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { prisma } from "@/lib/server/prisma";
 import { getRequestActor } from "@/lib/server/auth";
+import { logger } from "@/lib/server/logger";
 import { requireVerifiedEmail } from "@/lib/server/require-verified-email";
 import {
   createRegistrationAndPayment,
@@ -160,7 +162,16 @@ export async function POST(request: NextRequest) {
     if (error instanceof RegistrationValidationError) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
-    const message = error instanceof Error ? error.message : "Registration failed.";
-    return NextResponse.json({ error: message }, { status: 400 });
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      return NextResponse.json(
+        { error: "You already have an active registration for this conference." },
+        { status: 409 }
+      );
+    }
+    logger.error("registration_create_failed", {
+      email: actor.email,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return NextResponse.json({ error: "Registration failed." }, { status: 500 });
   }
 }

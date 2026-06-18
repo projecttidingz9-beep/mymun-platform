@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { PositionPaperStatus } from "@/generated/prisma/enums";
 import { getRequestActor } from "@/lib/server/auth";
+import { logger } from "@/lib/server/logger";
 import { prisma } from "@/lib/server/prisma";
 import { requireRegistrationOwner } from "@/lib/server/require-registration-owner";
 import { resolveCommitteeForEvent } from "@/lib/server/resolve-event-committee";
@@ -46,38 +47,46 @@ export async function POST(
     return NextResponse.json({ error: "Committee not found for this conference." }, { status: 400 });
   }
 
-  const paper = await prisma.positionPaper.upsert({
-    where: {
-      registrationId_committeeId: { registrationId, committeeId },
-    },
-    create: {
-      registrationId,
-      eventId: registration.eventId,
-      committeeId,
-      textContent,
-      fileUrl,
-      status: PositionPaperStatus.PENDING,
-      submittedAt: new Date(),
-    },
-    update: {
-      textContent,
-      fileUrl,
-      status: PositionPaperStatus.PENDING,
-      reviewerNotes: null,
-      reviewedAt: null,
-      submittedAt: new Date(),
-    },
-    select: {
-      id: true,
-      committeeId: true,
-      textContent: true,
-      fileUrl: true,
-      status: true,
-      submittedAt: true,
-    },
-  });
+  try {
+    const paper = await prisma.positionPaper.upsert({
+      where: {
+        registrationId_committeeId: { registrationId, committeeId },
+      },
+      create: {
+        registrationId,
+        eventId: registration.eventId,
+        committeeId,
+        textContent,
+        fileUrl,
+        status: PositionPaperStatus.PENDING,
+        submittedAt: new Date(),
+      },
+      update: {
+        textContent,
+        fileUrl,
+        status: PositionPaperStatus.PENDING,
+        reviewerNotes: null,
+        reviewedAt: null,
+        submittedAt: new Date(),
+      },
+      select: {
+        id: true,
+        committeeId: true,
+        textContent: true,
+        fileUrl: true,
+        status: true,
+        submittedAt: true,
+      },
+    });
 
-  return NextResponse.json({ ok: true, positionPaper: paper });
+    return NextResponse.json({ ok: true, positionPaper: paper });
+  } catch (error) {
+    logger.error("position_paper_submit_failed", {
+      registrationId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return NextResponse.json({ error: "Could not submit position paper." }, { status: 500 });
+  }
 }
 
 export async function GET(

@@ -1,10 +1,12 @@
 import { randomUUID } from "crypto";
+import { Prisma } from "@/generated/prisma/client";
 import { PassStatus, RegistrationStatus } from "@/generated/prisma/enums";
 import {
   hashToken,
   passTokenExpiresAt,
   signPassToken,
 } from "@/lib/server/pass-token";
+import { logger } from "@/lib/server/logger";
 import { prisma } from "@/lib/server/prisma";
 
 export function resolveReleaseAt(startDate: Date, requestedReleaseAt?: string) {
@@ -117,16 +119,29 @@ export async function issueDelegatePassForRegistration(
     });
     passId = updated.id;
   } else {
-    const created = await prisma.delegatePass.create({
-      data: {
-        registrationId: registration.id,
-        eventId: registration.eventId,
-        releaseAt,
-        qrNonce,
-        qrTokenHash: "pending",
-      },
-    });
-    passId = created.id;
+    try {
+      const created = await prisma.delegatePass.create({
+        data: {
+          registrationId: registration.id,
+          eventId: registration.eventId,
+          releaseAt,
+          qrNonce,
+          qrTokenHash: "pending",
+        },
+      });
+      passId = created.id;
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+        const concurrent = await prisma.delegatePass.findUnique({
+          where: { registrationId: registration.id },
+          select: { id: true },
+        });
+        if (!concurrent) throw error;
+        passId = concurrent.id;
+      } else {
+        throw error;
+      }
+    }
   }
 
   const token = await bindPassQrToken({
@@ -146,18 +161,25 @@ export async function issueDelegatePassForRegistration(
       day: "numeric",
       year: "numeric",
     });
-    await prisma.notification.create({
-      data: {
-        userId: registration.userId,
-        eventId: registration.eventId,
+    try {
+      await prisma.notification.create({
+        data: {
+          userId: registration.userId,
+          eventId: registration.eventId,
+          registrationId: registration.id,
+          title: "Digital pass issued",
+          message: released
+            ? `Your digital delegate pass for ${registration.event.title} is now available.`
+            : `Your delegate pass for ${registration.event.title} will be available ${releaseLabel}.`,
+          type: "PASS_RELEASED",
+        },
+      });
+    } catch (notifyError) {
+      logger.warn("pass_issue_notification_failed", {
         registrationId: registration.id,
-        title: "Digital pass issued",
-        message: released
-          ? `Your digital delegate pass for ${registration.event.title} is now available.`
-          : `Your delegate pass for ${registration.event.title} will be available ${releaseLabel}.`,
-        type: "PASS_RELEASED",
-      },
-    });
+        error: notifyError instanceof Error ? notifyError.message : String(notifyError),
+      });
+    }
   }
 
   return {

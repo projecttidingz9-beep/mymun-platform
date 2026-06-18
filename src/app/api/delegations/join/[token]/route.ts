@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@/generated/prisma/client";
 import { DelegationStatus } from "@/generated/prisma/enums";
 import { getRequestActor, resolveActorUserId } from "@/lib/server/auth";
 import { prisma } from "@/lib/server/prisma";
@@ -109,45 +110,79 @@ export async function POST(
     return NextResponse.json({ error: "You are already the delegation owner." }, { status: 409 });
   }
 
-  const existingMember = await prisma.delegationMember.findUnique({
-    where: { delegationId_userId: { delegationId: delegation.id, userId } },
-    select: { id: true },
-  });
-  if (existingMember) {
-    return NextResponse.json({ error: "You have already joined this delegation." }, { status: 409 });
-  }
+  try {
+    const member = await prisma.$transaction(
+      async (tx) => {
+        const existingMember = await tx.delegationMember.findUnique({
+          where: { delegationId_userId: { delegationId: delegation.id, userId } },
+          select: { id: true },
+        });
+        if (existingMember) {
+          throw new Error("ALREADY_MEMBER");
+        }
 
-  if (delegation.maxMembers !== null) {
-    const memberCount = await prisma.delegationMember.count({
-      where: { delegationId: delegation.id },
+        if (delegation.maxMembers !== null) {
+          const memberCount = await tx.delegationMember.count({
+            where: { delegationId: delegation.id },
+          });
+          if (memberCount >= delegation.maxMembers) {
+            throw new Error("DELEGATION_FULL");
+          }
+        }
+
+        return tx.delegationMember.create({
+          data: {
+            delegationId: delegation.id,
+            userId,
+            role: "member",
+          },
+          select: {
+            id: true,
+            delegationId: true,
+            userId: true,
+            role: true,
+            joinedAt: true,
+          },
+        });
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }
+    );
+
+    return NextResponse.json({
+      ok: true,
+      member,
+      delegation: {
+        id: delegation.id,
+        schoolName: delegation.schoolName,
+        eventId: delegation.eventId,
+      },
     });
-    if (memberCount + 1 >= delegation.maxMembers) {
-      return NextResponse.json({ error: "This delegation is full." }, { status: 409 });
+  } catch (error) {
+    if (error instanceof Error) {
+      if (error.message === "ALREADY_MEMBER") {
+        return NextResponse.json(
+          { error: "You have already joined this delegation." },
+          { status: 409 }
+        );
+      }
+      if (error.message === "DELEGATION_FULL") {
+        return NextResponse.json({ error: "This delegation is full." }, { status: 409 });
+      }
     }
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      if (error.code === "P2002") {
+        return NextResponse.json(
+          { error: "You have already joined this delegation." },
+          { status: 409 }
+        );
+      }
+      if (error.code === "P2034") {
+        return NextResponse.json(
+          { error: "Delegation capacity changed. Please retry." },
+          { status: 409 }
+        );
+      }
+    }
+    throw error;
   }
-
-  const member = await prisma.delegationMember.create({
-    data: {
-      delegationId: delegation.id,
-      userId,
-      role: "member",
-    },
-    select: {
-      id: true,
-      delegationId: true,
-      userId: true,
-      role: true,
-      joinedAt: true,
-    },
-  });
-
-  return NextResponse.json({
-    ok: true,
-    member,
-    delegation: {
-      id: delegation.id,
-      schoolName: delegation.schoolName,
-      eventId: delegation.eventId,
-    },
-  });
 }

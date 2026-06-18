@@ -1,3 +1,4 @@
+import type { Prisma } from "@/generated/prisma/client";
 import { RegistrationStatus } from "@/generated/prisma/enums";
 import { prisma } from "@/lib/server/prisma";
 
@@ -15,10 +16,13 @@ export async function validateAllotmentAssignment(params: {
   portfolioName: string | null;
   portfolioId?: string | null;
   allowOverride?: boolean;
+  tx?: Prisma.TransactionClient;
 }) {
+  const db = params.tx ?? prisma;
+
   if (!params.committeeName?.trim()) return;
 
-  const committee = await prisma.committeeConfig.findFirst({
+  const committee = await db.committeeConfig.findFirst({
     where: {
       organizerConfig: { eventId: params.eventId },
       name: { equals: params.committeeName.trim(), mode: "insensitive" },
@@ -31,7 +35,7 @@ export async function validateAllotmentAssignment(params: {
   }
 
   if (!params.allowOverride) {
-    const filled = await prisma.registration.count({
+    const filled = await db.registration.count({
       where: {
         eventId: params.eventId,
         status: RegistrationStatus.ALLOTTED,
@@ -49,7 +53,7 @@ export async function validateAllotmentAssignment(params: {
 
   let portfolioId = params.portfolioId ?? undefined;
   if (!portfolioId && params.portfolioName) {
-    const portfolio = await prisma.portfolio.findFirst({
+    const portfolio = await db.portfolio.findFirst({
       where: {
         committeeId: committee.id,
         name: { equals: params.portfolioName.trim(), mode: "insensitive" },
@@ -63,7 +67,7 @@ export async function validateAllotmentAssignment(params: {
   }
 
   if (portfolioId) {
-    const portfolio = await prisma.portfolio.findUnique({
+    const portfolio = await db.portfolio.findUnique({
       where: { id: portfolioId },
       select: { id: true, name: true, seatCount: true, committeeId: true },
     });
@@ -71,7 +75,7 @@ export async function validateAllotmentAssignment(params: {
       throw new AllotmentValidationError("Invalid portfolio assignment.");
     }
 
-    const taken = await prisma.registration.count({
+    const taken = await db.registration.count({
       where: {
         eventId: params.eventId,
         status: RegistrationStatus.ALLOTTED,

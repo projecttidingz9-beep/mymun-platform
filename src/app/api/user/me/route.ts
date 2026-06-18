@@ -49,12 +49,13 @@ export async function PATCH(request: NextRequest) {
 
   const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
 
-  const nextProfile =
-    user.delegateProfile && typeof user.delegateProfile === "object"
-      ? ({ ...(user.delegateProfile as Record<string, unknown>) } as Record<string, unknown>)
-      : {};
+  try {
+    const nextProfile =
+      user.delegateProfile && typeof user.delegateProfile === "object"
+        ? ({ ...(user.delegateProfile as Record<string, unknown>) } as Record<string, unknown>)
+        : {};
 
-  const profileKeys = [
+    const profileKeys = [
     "profileImageUrl",
     "firstName",
     "lastName",
@@ -83,22 +84,29 @@ export async function PATCH(request: NextRequest) {
     }
   }
 
-  const updated = await prisma.user.update({
-    where: { id: user.id },
-    data: {
-      ...(typeof body.name === "string" && body.name.trim() ? { name: body.name.trim() } : {}),
-      delegateProfile: nextProfile as Prisma.InputJsonValue,
-    },
-    include: {
-      registrations: {
-        where: { deletedAt: null },
-        include: {
-          event: { select: { title: true } },
-          delegation: { select: { id: true, schoolName: true, inviteToken: true } },
+    const updated = await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        ...(typeof body.name === "string" && body.name.trim() ? { name: body.name.trim() } : {}),
+        delegateProfile: nextProfile as Prisma.InputJsonValue,
+      },
+      include: {
+        registrations: {
+          where: { deletedAt: null },
+          include: {
+            event: { select: { title: true } },
+            delegation: { select: { id: true, schoolName: true, inviteToken: true } },
+          },
         },
       },
-    },
-  });
+    });
 
-  return NextResponse.json({ user: prismaUserToClientUser(updated) });
+    return NextResponse.json({ user: prismaUserToClientUser(updated) });
+  } catch (err) {
+    logger.error("user_me_patch_failed", {
+      email: actor.email,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return NextResponse.json({ error: "Could not update your profile." }, { status: 500 });
+  }
 }

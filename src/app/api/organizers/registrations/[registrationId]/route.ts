@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@/generated/prisma/client";
 import { RegistrationStatus } from "@/generated/prisma/enums";
 import { getRequestActor, requireEventOrganizerAccess, requireOrganizer } from "@/lib/server/auth";
 import {
@@ -92,25 +93,63 @@ export async function PATCH(
         : undefined;
 
   let resolvedPortfolioId: string | null | undefined = portfolioId;
-  if (statusDb === RegistrationStatus.ALLOTTED) {
-    try {
-      const validated = await validateAllotmentAssignment({
-        eventId: registration.eventId,
-        registrationId,
-        committeeName: committeeName ?? null,
-        portfolioName: portfolioName ?? null,
-        portfolioId,
-        allowOverride,
+
+  const updateData = {
+    ...(statusDb !== undefined ? { status: statusDb } : {}),
+    ...(committeeName !== undefined ? { committeeName } : {}),
+    ...(portfolioName !== undefined ? { portfolioName } : {}),
+    ...(resolvedPortfolioId !== undefined ? { portfolioId: resolvedPortfolioId } : {}),
+    ...(paid !== undefined ? { paid } : {}),
+    ...(nextAllottedAt !== undefined ? { allottedAt: nextAllottedAt } : {}),
+  };
+
+  try {
+    if (statusDb === RegistrationStatus.ALLOTTED) {
+      await prisma.$transaction(
+        async (tx) => {
+          const validated = await validateAllotmentAssignment({
+            eventId: registration.eventId,
+            registrationId,
+            committeeName: committeeName ?? null,
+            portfolioName: portfolioName ?? null,
+            portfolioId,
+            allowOverride,
+            tx,
+          });
+          if (validated?.portfolioId) {
+            resolvedPortfolioId = validated.portfolioId;
+          }
+          await tx.registration.update({
+            where: { id: registrationId },
+            data: {
+              ...updateData,
+              ...(validated?.portfolioId !== undefined
+                ? { portfolioId: validated.portfolioId }
+                : resolvedPortfolioId !== undefined
+                  ? { portfolioId: resolvedPortfolioId }
+                  : {}),
+            },
+          });
+        },
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }
+      );
+    } else if (Object.keys(updateData).length > 0) {
+      await prisma.registration.update({
+        where: { id: registrationId },
+        data: updateData,
       });
-      if (validated?.portfolioId) {
-        resolvedPortfolioId = validated.portfolioId;
-      }
-    } catch (error) {
-      if (error instanceof AllotmentValidationError) {
-        return NextResponse.json({ error: error.message }, { status: 400 });
-      }
-      throw error;
     }
+  } catch (error) {
+    if (error instanceof AllotmentValidationError) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034") {
+      return NextResponse.json(
+        { error: "Committee capacity changed. Please retry." },
+        { status: 409 }
+      );
+    }
+    throw error;
   }
 
   const organizerUser = actor
@@ -121,18 +160,6 @@ export async function PATCH(
     : null;
 
   const wasPaid = registration.paid;
-
-  await prisma.registration.update({
-    where: { id: registrationId },
-    data: {
-      ...(statusDb !== undefined ? { status: statusDb } : {}),
-      ...(committeeName !== undefined ? { committeeName } : {}),
-      ...(portfolioName !== undefined ? { portfolioName } : {}),
-      ...(resolvedPortfolioId !== undefined ? { portfolioId: resolvedPortfolioId } : {}),
-      ...(paid !== undefined ? { paid } : {}),
-      ...(nextAllottedAt !== undefined ? { allottedAt: nextAllottedAt } : {}),
-    },
-  });
 
   if (paid === true && !wasPaid && organizerUser) {
     await prisma.paymentIntent.updateMany({

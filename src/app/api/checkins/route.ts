@@ -1,6 +1,7 @@
 import { Prisma } from "@/generated/prisma/client";
 import { NextRequest, NextResponse } from "next/server";
 import { getRequestActor } from "@/lib/server/auth";
+import { logger } from "@/lib/server/logger";
 import { requireVerifiedEmail } from "@/lib/server/require-verified-email";
 import { consumeRateLimitBucket } from "@/lib/server/rate-limit-db";
 import { prisma } from "@/lib/server/prisma";
@@ -133,7 +134,14 @@ export async function POST(request: NextRequest) {
       }
       throw error;
     }
-  } catch {
-    return NextResponse.json({ error: PASS_ALREADY_USED_ERROR }, { status: 409 });
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      return NextResponse.json({ error: PASS_ALREADY_USED_ERROR }, { status: 409 });
+    }
+    logger.error("checkin_failed", {
+      email: actor.email,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return NextResponse.json({ error: "Check-in failed." }, { status: 500 });
   }
 }

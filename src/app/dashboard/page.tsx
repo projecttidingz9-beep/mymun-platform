@@ -7,6 +7,7 @@ import Image from "next/image";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import AppRouteSkeleton from "@/components/AppRouteSkeleton";
+import { useToast } from "@/components/Toast";
 import { ensureServerSession } from "@/lib/client/session";
 import { useAuth } from "@/lib/auth-context";
 import { formatMoney } from "@/lib/format-money";
@@ -67,6 +68,7 @@ const formatInvoiceAddress = (registration: Registration, userAddress?: {
 export default function DashboardPage() {
   const { user, isLoggedIn, authReady, notifications, markNotificationRead, updateDelegateProfile, logout, addRegistration } =
     useAuth();
+  const toast = useToast();
   const router = useRouter();
   const searchParams = useSearchParams();
   const [delegatePasses, setDelegatePasses] = useState<Array<{
@@ -454,21 +456,22 @@ export default function DashboardPage() {
     setDraftAwards((prev) => prev.filter((entry) => entry.id !== id));
   };
 
-  const saveProfile = () => {
+  const saveProfile = async () => {
     if (!draftPhone.trim()) {
-      alert("Phone number is mandatory.");
+      toast.show("Phone number is mandatory.", "error");
       return;
     }
     const missingCertificateEntry = draftParticipations.find(
       (entry) => entry.conferenceName.trim() && !entry.certificateUrl
     );
     if (missingCertificateEntry) {
-      alert(
-        `Please upload a participation certificate for "${missingCertificateEntry.conferenceName.trim()}".`
+      toast.show(
+        `Please upload a participation certificate for "${missingCertificateEntry.conferenceName.trim()}".`,
+        "error"
       );
       return;
     }
-    updateDelegateProfile({
+    const ok = await updateDelegateProfile({
       profileImageUrl: draftProfileImageUrl,
       firstName: draftFirstName.trim(),
       lastName: draftLastName.trim(),
@@ -523,7 +526,12 @@ export default function DashboardPage() {
           year: entry.year,
         })),
     });
-    setIsEditingProfile(false);
+    if (ok) {
+      toast.show("Profile saved successfully.", "success");
+      setIsEditingProfile(false);
+    } else {
+      toast.show("Could not save profile. Please try again.", "error");
+    }
   };
 
   const onDownloadInvoicePdf = async (registration: Registration) => {
@@ -565,13 +573,13 @@ export default function DashboardPage() {
       });
       const payload = (await response.json().catch(() => ({}))) as { error?: string };
       if (!response.ok) {
-        alert(payload.error || "Could not change password.");
+        toast.show(payload.error || "Could not change password.", "error");
         return;
       }
       setChangePasswordCurrent("");
       setChangePasswordNext("");
       setChangePasswordConfirm("");
-      alert("Password updated successfully.");
+      toast.show("Password updated successfully.", "success");
     } finally {
       setChangePasswordLoading(false);
     }
@@ -596,7 +604,7 @@ export default function DashboardPage() {
       });
       const payload = (await response.json().catch(() => ({}))) as { error?: string };
       if (!response.ok) {
-        alert(payload.error || "Could not delete account.");
+        toast.show(payload.error || "Could not delete account.", "error");
         return;
       }
       await fetch("/api/auth/session", { method: "DELETE", credentials: "include" });
@@ -1173,10 +1181,10 @@ export default function DashboardPage() {
                                   }).then(async (res) => {
                                     if (!res.ok) {
                                       const data = (await res.json()) as { error?: string };
-                                      alert(data.error || "Could not submit position paper.");
+                                      toast.show(data.error || "Could not submit position paper.", "error");
                                       return;
                                     }
-                                    alert("Position paper submitted.");
+                                    toast.show("Position paper submitted.", "success");
                                   });
                                 }}
                               >
@@ -1226,7 +1234,7 @@ export default function DashboardPage() {
                                     { credentials: "include" }
                                   );
                                   if (!res.ok) {
-                                    alert("Participation certificate not issued yet.");
+                                    toast.show("Participation certificate not issued yet.", "error");
                                     return;
                                   }
                                   const data = (await res.json()) as {
