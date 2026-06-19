@@ -922,11 +922,9 @@ export default function DashboardPage() {
                               <span className={`badge ${
                                 reg.organizerStatus === "Allotted"
                                   ? "badge-green"
-                                  : reg.organizerStatus === "Waitlisted"
-                                    ? "badge-gold"
-                                    : reg.organizerStatus === "Rejected"
-                                      ? "badge-gray"
-                                      : "badge-blue"
+                                  : reg.organizerStatus === "Rejected"
+                                    ? "badge-gray"
+                                    : "badge-blue"
                               }`}>
                                 Organizer Status: {reg.organizerStatus || "Pending"}
                               </span>

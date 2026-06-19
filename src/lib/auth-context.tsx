@@ -1004,8 +1004,6 @@ interface AuthContextType {
     portfolioId?: string;
   }) => { ok: boolean; message: string };
   unassignApplicant: (conferenceId: string, applicantId: string) => { ok: boolean; message: string };
-  waitlistApplicant: (conferenceId: string, applicantId: string) => { ok: boolean; message: string };
-  inviteApplicant: (conferenceId: string, applicantId: string) => { ok: boolean; message: string };
   overrideSeatLimit: (conferenceId: string, committeeId: string, seatCount: number) => void;
   notifications: UserNotification[];
   markNotificationRead: (notificationId: string) => void;
@@ -1092,14 +1090,6 @@ const AuthContext = createContext<AuthContextType>({
   unassignApplicant: () => ({
     ok: false,
     message: "Use the Applications tab in your organizer dashboard to unassign applicants.",
-  }),
-  waitlistApplicant: () => ({
-    ok: false,
-    message: "Use the Applications tab in your organizer dashboard to waitlist applicants.",
-  }),
-  inviteApplicant: () => ({
-    ok: false,
-    message: "Use the Applications tab in your organizer dashboard to invite applicants.",
   }),
   overrideSeatLimit: () => {},
   notifications: [],
@@ -1716,66 +1706,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const addConferenceAward: AuthContextType["addConferenceAward"] = (conferenceId, award) => {
-    const createDelegateAwardEntry = (conferenceTitle: string) => {
-      const awardTitle = award.prizeTitle?.trim() || award.category.trim() || "Conference Award";
-      const year = new Date().getFullYear();
-      return {
-        id: `mun-award-${Date.now()}`,
-        title: awardTitle,
-        conferenceName: conferenceTitle,
-        year,
-        category: award.category || undefined,
-        committee: undefined,
-        logoUrl: award.sponsorLogoUrl || undefined,
-      };
-    };
-    const syncAwardIntoProfile = (conferenceTitle: string) => {
-      const targetUserId = award.participantUserId?.trim();
-      const targetUserEmail = award.participantUserEmail?.trim().toLowerCase();
-      if (!targetUserId && !targetUserEmail) return;
-
-      const matchesTarget = (candidate: { id?: string; email?: string }) =>
-        (targetUserId && candidate.id === targetUserId) ||
-        (targetUserEmail && candidate.email?.toLowerCase() === targetUserEmail);
-
-      if (!user || !matchesTarget(user)) return;
-
-      const nextAward = createDelegateAwardEntry(conferenceTitle);
-      const nextAwards = [...(user.munAwards || []), nextAward];
-      const nextSummary =
-        `${user.munAwardsSummary || ""}${user.munAwardsSummary ? "\n" : ""}` +
-        `${nextAward.title} - ${conferenceTitle}`;
-
-      void fetch("/api/user/me", {
-        method: "PATCH",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          munAwards: nextAwards,
-          munAwardsSummary: nextSummary,
-        }),
-      }).then(() => {
-        void refreshUserAndNotifications();
-      });
-    };
-
     const current = organizerConferences;
+    const targetConference = current.find((conference) => conference.id === conferenceId);
+    const awardTitle = award.prizeTitle?.trim() || award.category.trim() || "Conference Award";
+    const conferenceTitle = targetConference?.title || "Conference";
+
     const next = current.map((conference) => {
       if (conference.id !== conferenceId) return conference;
       const createdAward = {
         ...award,
         id: `award-${Date.now()}`,
       };
-      syncAwardIntoProfile(conference.title);
       return {
         ...conference,
-        awards: [
-          ...(conference.awards || []),
-          createdAward,
-        ],
+        awards: [...(conference.awards || []), createdAward],
       };
     });
     persistOrganizerConferences(next, conferenceId);
+
+    if (award.participantUserId?.trim() || award.participantUserEmail?.trim()) {
+      void fetch(`/api/organizers/conferences/${encodeURIComponent(conferenceId)}/sync-award`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          recipientUserId: award.participantUserId,
+          recipientUserEmail: award.participantUserEmail,
+          awardTitle,
+          conferenceName: conferenceTitle,
+          category: award.category || undefined,
+          logoUrl: award.sponsorLogoUrl || undefined,
+        }),
+      });
+    }
   };
 
   const removeConferenceAward: AuthContextType["removeConferenceAward"] = (conferenceId, awardId) => {
@@ -1816,6 +1779,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ organizerStatus: status }),
         });
+        if (status === "Allotted") {
+          await fetch(`/api/organizers/registrations/${registrationId}/sync-participation`, {
+            method: "POST",
+            credentials: "include",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({}),
+          });
+        }
       }
       await refetchMyEvents({ id: user?.id, email: user?.email });
     })();
@@ -1928,6 +1899,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             allottedAt: new Date().toISOString(),
           }),
         });
+        await fetch(`/api/organizers/registrations/${priorApplicant.registrationId}/sync-participation`, {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({}),
+        });
       }
 
       updateUserRegistrationAssignment(priorApplicant?.registrationId, {
@@ -2037,6 +2014,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             portfolioId: null,
             allottedAt: new Date().toISOString(),
           }),
+        });
+        await fetch(`/api/organizers/registrations/${applicant.registrationId}/sync-participation`, {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ role: trimmedRole }),
         });
       }
 
@@ -2155,132 +2138,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { ok: true, message: "Applicant unassigned." };
   };
 
-  const waitlistApplicant: AuthContextType["waitlistApplicant"] = (conferenceId, applicantId) => {
-    const current = organizerConferences;
-    const conference = current.find((entry) => entry.id === conferenceId);
-    if (!conference) return { ok: false, message: "Conference not found." };
-    const applicant = conference.applicants.find((entry) => entry.id === applicantId);
-    if (!applicant) return { ok: false, message: "Applicant not found." };
-
-    const clearAssignment = unassignApplicant(conferenceId, applicantId);
-    if (!clearAssignment.ok) return clearAssignment;
-
-    const refreshed = organizerConferences;
-    const next: OrganizerConference[] = refreshed.map((entry) => {
-      if (entry.id !== conferenceId) return entry;
-      return {
-        ...entry,
-        applicants: entry.applicants.map((item) => {
-          if (item.id !== applicantId) return item;
-          const updatedApplicant: OrganizerApplicant = {
-            ...item,
-            status: "Waitlisted",
-            assignmentStatus: "Waitlisted",
-            assignmentHistory: [
-              ...(item.assignmentHistory ?? []),
-              { id: `asg-${Date.now()}`, action: "waitlisted", createdAt: new Date().toISOString() },
-            ],
-          };
-          return updatedApplicant;
-        }),
-      };
-    });
-    persistOrganizerConferences(next, conferenceId);
-    void (async () => {
-      if (applicant.registrationId) {
-        await fetch(`/api/organizers/registrations/${applicant.registrationId}`, {
-          method: "PATCH",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ organizerStatus: "Waitlisted" }),
-        });
-      }
-    })();
-    updateUserRegistrationAssignment(applicant.registrationId, {
-      status: "Waitlisted",
-      organizerStatus: "Waitlisted",
-    });
-    addNotification({
-      id: `ntf-${Date.now()}`,
-      conferenceId,
-      registrationId: applicant.registrationId,
-      userId: applicant.userId,
-      userEmail: applicant.userEmail,
-      title: "Application Waitlisted",
-      message: `Your application for ${conference.title} has been moved to waitlist.`,
-      type: "waitlist",
-      createdAt: new Date().toISOString(),
-      read: false,
-    });
-    const updatedConference = next.find((entry) => entry.id === conferenceId);
-    const updatedApplicant = updatedConference?.applicants.find((entry) => entry.id === applicantId);
-    if (updatedConference && updatedApplicant) {
-      triggerStatusEmail({ conference: updatedConference, applicant: updatedApplicant, status: "Waitlisted" });
-    }
-    return { ok: true, message: "Applicant waitlisted." };
-  };
-
-  const inviteApplicant: AuthContextType["inviteApplicant"] = (conferenceId, applicantId) => {
-    const current = organizerConferences;
-    const conference = current.find((entry) => entry.id === conferenceId);
-    if (!conference) return { ok: false, message: "Conference not found." };
-    const applicant = conference.applicants.find((entry) => entry.id === applicantId);
-    if (!applicant) return { ok: false, message: "Applicant not found." };
-
-    const next: OrganizerConference[] = current.map((entry) => {
-      if (entry.id !== conferenceId) return entry;
-      return {
-        ...entry,
-        applicants: entry.applicants.map((item) =>
-          item.id === applicantId
-            ? {
-                ...item,
-                status: "Invited",
-                assignmentStatus: "Invited",
-                assignmentHistory: [
-                  ...(item.assignmentHistory ?? []),
-                  { id: `asg-${Date.now()}`, action: "invited", createdAt: new Date().toISOString() },
-                ],
-              }
-            : item
-        ),
-      };
-    });
-    persistOrganizerConferences(next, conferenceId);
-    void (async () => {
-      if (applicant.registrationId) {
-        await fetch(`/api/organizers/registrations/${applicant.registrationId}`, {
-          method: "PATCH",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ organizerStatus: "Invited" }),
-        });
-      }
-    })();
-    updateUserRegistrationAssignment(applicant.registrationId, {
-      organizerStatus: "Invited",
-      status: "Pending",
-    });
-    addNotification({
-      id: `ntf-${Date.now()}`,
-      conferenceId,
-      registrationId: applicant.registrationId,
-      userId: applicant.userId,
-      userEmail: applicant.userEmail,
-      title: "Application Invited",
-      message: `You are invited to proceed with ${conference.title}. Complete your steps to secure a seat.`,
-      type: "status",
-      createdAt: new Date().toISOString(),
-      read: false,
-    });
-    const updatedConference = next.find((entry) => entry.id === conferenceId);
-    const updatedApplicant = updatedConference?.applicants.find((entry) => entry.id === applicantId);
-    if (updatedConference && updatedApplicant) {
-      triggerStatusEmail({ conference: updatedConference, applicant: updatedApplicant, status: "Invited" });
-    }
-    return { ok: true, message: "Applicant marked as invited." };
-  };
-
   const overrideSeatLimit: AuthContextType["overrideSeatLimit"] = (
     conferenceId,
     committeeId,
@@ -2370,8 +2227,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         commitOrganizerConferences,
         moveApplicant,
         unassignApplicant,
-        waitlistApplicant,
-        inviteApplicant,
         overrideSeatLimit,
         notifications,
         markNotificationRead,

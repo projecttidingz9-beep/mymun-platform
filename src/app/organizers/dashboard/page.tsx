@@ -39,14 +39,12 @@ import {
   OrganizerStatusEmailTemplateKey,
 } from "@/lib/types";
 import {
-  applyPhaseBasePriceToAllCommittees,
   buildDefaultCommitteePrices,
   findIncompletePricingPhases,
   formatIncompletePricingPhasesMessage,
   getActivePhase,
   isPricingPhaseComplete,
   mergeNewCommitteesIntoPhases,
-  upsertPhaseCommitteePrice,
 } from "@/lib/pricing";
 import {
   getCategoryRegistrationLabel,
@@ -411,8 +409,6 @@ export default function OrganizerDashboardPage() {
     removeOrganizerCommittee,
     updateRegistrationCategoryConfig,
     addRegistrationCategory,
-    waitlistApplicant,
-    inviteApplicant,
     addConferenceAward,
     removeConferenceAward,
     updateOrganizerConferenceStatus,
@@ -477,7 +473,7 @@ export default function OrganizerDashboardPage() {
   const [selectedApplicantId, setSelectedApplicantId] = useState<string>("");
   const [applicationTypeTab, setApplicationTypeTab] = useState<
     "delegate" | "chair" | "organizer" | "delegation"
-  >("delegate");
+  >("organizer");
   const [autoAssigning, setAutoAssigning] = useState(false);
   const [autoAssignProgress, setAutoAssignProgress] = useState("");
   const [pricingCategoryTypeTab, setPricingCategoryTypeTab] = useState<RegistrationCategoryType>("delegate");
@@ -492,7 +488,7 @@ export default function OrganizerDashboardPage() {
   const [delegationSearchQuery, setDelegationSearchQuery] = useState("");
   const debouncedDelegationSearch = useDebouncedValue(delegationSearchQuery, 180);
   const [participantStatusFilter, setParticipantStatusFilter] = useState<
-    "all" | "Pending" | "Invited" | "Allotted" | "Waitlisted" | "Rejected"
+    "all" | "Pending" | "Allotted" | "Rejected"
   >("all");
   const [participantSortKey, setParticipantSortKey] = useState<"name" | "status" | "committee">("name");
   const [selectedStatusEmailTemplate, setSelectedStatusEmailTemplate] =
@@ -506,7 +502,7 @@ export default function OrganizerDashboardPage() {
   const [transactionPaymentFilter, setTransactionPaymentFilter] = useState<"all" | "paid" | "pending">("all");
   const [transactionRefundFilter, setTransactionRefundFilter] = useState<"all" | "active" | "refunded">("all");
   const [transactionApplicantStatusFilter, setTransactionApplicantStatusFilter] = useState<
-    "all" | "Pending" | "Invited" | "Allotted" | "Waitlisted" | "Rejected"
+    "all" | "Pending" | "Allotted" | "Rejected"
   >("all");
   const [bankingSaveStatus, setBankingSaveStatus] = useState("");
   const [teamDraft, setTeamDraft] = useState({
@@ -1725,9 +1721,7 @@ export default function OrganizerDashboardPage() {
 
   const handleAutoAssign = async () => {
     if (!selectedConference || autoAssigning) return;
-    const pending = filteredApplications.filter(
-      (applicant) => applicant.status === "Pending" || applicant.status === "Invited"
-    );
+    const pending = filteredApplications.filter((applicant) => applicant.status === "Pending");
     if (pending.length === 0) {
       alert("No pending applications to assign on this tab.");
       return;
@@ -2146,39 +2140,6 @@ export default function OrganizerDashboardPage() {
       },
     ];
     updateRegistrationCategoryConfig(conferenceId, category.id, { pricingPhases: nextPhases });
-  };
-  const updatePhaseCommitteePrice = (
-    conferenceId: string,
-    category: OrganizerConference["registrationCategories"][number],
-    phaseId: string,
-    committeeId: string,
-    committeeName: string,
-    priceInput: string
-  ) => {
-    const phase = (category.pricingPhases || []).find((entry) => entry.id === phaseId);
-    if (!phase) return;
-    const parsed = Number(priceInput);
-    const nextPhase = upsertPhaseCommitteePrice(
-      phase,
-      committeeId,
-      committeeName,
-      Number.isFinite(parsed) && parsed >= 0 ? parsed : 0
-    );
-    updateCategoryPricingPhase(conferenceId, category, phaseId, {
-      committeePrices: nextPhase.committeePrices,
-    });
-  };
-  const applyPhaseBasePriceToCommittees = (
-    conferenceId: string,
-    category: OrganizerConference["registrationCategories"][number],
-    phaseId: string
-  ) => {
-    const phase = (category.pricingPhases || []).find((entry) => entry.id === phaseId);
-    if (!phase || !selectedConference) return;
-    const nextPhase = applyPhaseBasePriceToAllCommittees(phase, selectedConference.committees);
-    updateCategoryPricingPhase(conferenceId, category, phaseId, {
-      committeePrices: nextPhase.committeePrices,
-    });
   };
   const updateCategoryPricingPhase = (
     conferenceId: string,
@@ -2715,11 +2676,10 @@ export default function OrganizerDashboardPage() {
                   {selectedConference.title} · API regs {serverOverview?.totalRegistrations ?? selectedConference.applicants.length}
                 </span>
               </div>
-              <div className="grid md:grid-cols-4 gap-3 mb-6">
+              <div className="grid md:grid-cols-3 gap-3 mb-6">
                 {[
                   { label: "Accepted", value: selectedConferenceAnalytics.accepted },
                   { label: "Pending", value: selectedConferenceAnalytics.pending },
-                  { label: "Waitlisted", value: selectedConferenceAnalytics.waitlisted },
                   { label: "Rejected", value: selectedConferenceAnalytics.rejected },
                 ].map((item) => (
                   <div key={item.label} className="rounded-xl p-3" style={{ background: "var(--bg-subtle)" }}>
@@ -3407,10 +3367,10 @@ export default function OrganizerDashboardPage() {
                     <h3 className="text-2xl font-bold mb-4" style={{ color: "var(--fg)" }}>Applications</h3>
                     <div className="flex flex-wrap gap-2 mb-4">
                       {([
-                        { id: "delegate", label: "Delegate Applications" },
-                        { id: "chair", label: "Chair Applications" },
-                        { id: "organizer", label: "Organiser Applications" },
+                        { id: "organizer", label: "Organiser Committee Applications" },
+                        { id: "chair", label: "EB Applications" },
                         { id: "delegation", label: "Delegation Applications" },
+                        { id: "delegate", label: "Delegate Applications" },
                       ] as const).map((tab) => (
                         <button
                           key={tab.id}
@@ -3423,8 +3383,8 @@ export default function OrganizerDashboardPage() {
                         </button>
                       ))}
                     </div>
-                    <div className="grid md:grid-cols-5 gap-2 mb-4">
-                      {(["Pending", "Waitlisted", "Invited", "Allotted", "Rejected"] as const).map((status) => {
+                    <div className="grid md:grid-cols-3 gap-2 mb-4">
+                      {(["Pending", "Allotted", "Rejected"] as const).map((status) => {
                         const count = filteredApplications.filter((entry) => entry.status === status).length;
                         return (
                           <div key={status} className="rounded-xl p-3" style={{ background: "var(--bg-subtle)" }}>
@@ -3521,11 +3481,7 @@ export default function OrganizerDashboardPage() {
                                     ? "badge-green"
                                     : applicant.status === "Rejected"
                                       ? "badge-gray"
-                                      : applicant.status === "Waitlisted"
-                                        ? "badge-gold"
-                                    : applicant.status === "Invited"
-                                        ? "badge-blue"
-                                        : "badge-blue"
+                                      : "badge-blue"
                                 }`}>
                                   {statusLabel}
                                 </span>
@@ -3654,30 +3610,6 @@ export default function OrganizerDashboardPage() {
                                   className="btn btn-ghost text-xs"
                                 >
                                   Unassign
-                                </button>
-                                <button
-                                  type="button"
-                                  className="btn btn-ghost text-xs"
-                                  disabled={applicant.status === "Allotted" || applicant.status === "Rejected"}
-                                  onClick={() => {
-                                    const result = waitlistApplicant(selectedConference.id, applicant.id);
-                                    if (!result.ok) toast.show(result.message, "error");
-                                  }}
-                                >
-                                  Waitlist
-                                </button>
-                                <button
-                                  type="button"
-                                  className="btn btn-ghost text-xs"
-                                  disabled={
-                                    applicant.status !== "Waitlisted" && applicant.status !== "Pending"
-                                  }
-                                  onClick={() => {
-                                    const result = inviteApplicant(selectedConference.id, applicant.id);
-                                    if (!result.ok) toast.show(result.message, "error");
-                                  }}
-                                >
-                                  Invite
                                 </button>
                                 <button
                                   onClick={() => {
@@ -3998,15 +3930,13 @@ export default function OrganizerDashboardPage() {
                         value={participantStatusFilter}
                         onChange={(event) =>
                           setParticipantStatusFilter(
-                            event.target.value as "all" | "Pending" | "Invited" | "Allotted" | "Waitlisted" | "Rejected"
+                            event.target.value as "all" | "Pending" | "Allotted" | "Rejected"
                           )
                         }
                       >
                         <option value="all">All statuses</option>
                         <option value="Pending">Pending</option>
-                        <option value="Invited">Invited</option>
                         <option value="Allotted">Allotted</option>
-                        <option value="Waitlisted">Waitlisted</option>
                         <option value="Rejected">Rejected</option>
                       </select>
                       <select
@@ -4819,15 +4749,13 @@ export default function OrganizerDashboardPage() {
                                 value={transactionApplicantStatusFilter}
                                 onChange={(event) =>
                                   setTransactionApplicantStatusFilter(
-                                    event.target.value as "all" | "Pending" | "Invited" | "Allotted" | "Waitlisted" | "Rejected"
+                                    event.target.value as "all" | "Pending" | "Allotted" | "Rejected"
                                   )
                                 }
                               >
                                 <option value="all">All applicant statuses</option>
                                 <option value="Pending">Pending</option>
-                                <option value="Invited">Invited</option>
                                 <option value="Allotted">Allotted</option>
-                                <option value="Waitlisted">Waitlisted</option>
                                 <option value="Rejected">Rejected</option>
                               </select>
                             </div>
@@ -4870,9 +4798,7 @@ export default function OrganizerDashboardPage() {
                                             ? "badge-green"
                                             : row.applicantStatus === "Rejected"
                                               ? "badge-gray"
-                                              : row.applicantStatus === "Waitlisted"
-                                                ? "badge-gold"
-                                                : "badge-blue"
+                                              : "badge-blue"
                                         }`}>
                                           {row.applicantStatus}
                                         </span>
@@ -5879,86 +5805,6 @@ export default function OrganizerDashboardPage() {
                                           Complete the phase name, start date, and end date before saving.
                                         </p>
                                       )}
-                                      {!isNoPhasesCategory && (
-                                        <div className="mt-3 space-y-2">
-                                          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                                            <div>
-                                              <p className="text-xs font-semibold" style={{ color: "var(--fg)" }}>
-                                                Committee prices
-                                              </p>
-                                              <p className="text-[11px] mt-0.5" style={{ color: "var(--fg-muted)" }}>
-                                                Delegates pay these amounts when they select a committee during this phase.
-                                                Prices are saved with your conference sync (not committee base price fields).
-                                              </p>
-                                            </div>
-                                            <button
-                                              type="button"
-                                              className="btn btn-ghost text-xs shrink-0 self-start"
-                                              onClick={() =>
-                                                applyPhaseBasePriceToCommittees(
-                                                  selectedConference.id,
-                                                  category,
-                                                  phase.id
-                                                )
-                                              }
-                                              disabled={selectedConference.committees.length === 0}
-                                            >
-                                              Apply phase base to all
-                                            </button>
-                                          </div>
-                                          {selectedConference.committees.length === 0 ? (
-                                            <p className="text-xs" style={{ color: "var(--fg-muted)" }}>
-                                              Add committees under Committees &amp; Matrix first.
-                                            </p>
-                                          ) : (
-                                            <div className="space-y-2">
-                                              <div
-                                                className="hidden sm:grid gap-2 text-[11px] font-semibold px-1"
-                                                style={{
-                                                  color: "var(--fg-muted)",
-                                                  gridTemplateColumns: "minmax(0, 1.5fr) minmax(7rem, 1fr)",
-                                                }}
-                                              >
-                                                <span>Committee</span>
-                                                <span>Price</span>
-                                              </div>
-                                              {selectedConference.committees.map((committee) => {
-                                                const row =
-                                                  phase.committeePrices.find(
-                                                    (entry) => entry.committeeId === committee.id
-                                                  ) ??
-                                                  buildDefaultCommitteePrices([committee], phase.basePrice)[0];
-                                                return (
-                                                  <div
-                                                    key={`${phase.id}-${committee.id}`}
-                                                    className="grid grid-cols-1 sm:grid-cols-[minmax(0,1.5fr)_minmax(7rem,1fr)] gap-2 items-center"
-                                                  >
-                                                    <p className="text-xs font-medium truncate" style={{ color: "var(--fg)" }}>
-                                                      {committee.name}
-                                                    </p>
-                                                    <input
-                                                      className="input-base text-xs"
-                                                      type="number"
-                                                      min={0}
-                                                      value={row?.price ?? phase.basePrice}
-                                                      onChange={(event) =>
-                                                        updatePhaseCommitteePrice(
-                                                          selectedConference.id,
-                                                          category,
-                                                          phase.id,
-                                                          committee.id,
-                                                          committee.name,
-                                                          event.target.value
-                                                        )
-                                                      }
-                                                    />
-                                                  </div>
-                                                );
-                                              })}
-                                            </div>
-                                          )}
-                                        </div>
-                                      )}
                                       <div className="flex justify-end mt-2">
                                         <button
                                           className="btn btn-ghost text-xs mr-2"
@@ -6135,7 +5981,7 @@ export default function OrganizerDashboardPage() {
                       )}
                     </div>
                     <p className="text-xs mb-3" style={{ color: "var(--fg-muted)" }}>
-                      These emails are sent automatically when an applicant is marked as Allotted, Rejected, Waitlisted, or Invited.
+                      These emails are sent automatically when an applicant is marked as Allotted or Rejected.
                     </p>
                     <div className="grid md:grid-cols-[180px_1fr] gap-3">
                       <select
@@ -6147,8 +5993,6 @@ export default function OrganizerDashboardPage() {
                       >
                         <option value="allotted">Accepted / Allotted</option>
                         <option value="rejected">Rejected</option>
-                        <option value="waitlisted">Waitlisted</option>
-                        <option value="invited">Invited</option>
                       </select>
                       <div className="space-y-2">
                         <input
@@ -6181,13 +6025,7 @@ export default function OrganizerDashboardPage() {
                                 ...EMAIL_TEMPLATE_PREVIEW_CONTEXT,
                                 conferenceTitle: selectedConference?.title || EMAIL_TEMPLATE_PREVIEW_CONTEXT.conferenceTitle,
                                 status:
-                                  selectedStatusEmailTemplate === "allotted"
-                                    ? "Allotted"
-                                    : selectedStatusEmailTemplate === "rejected"
-                                      ? "Rejected"
-                                      : selectedStatusEmailTemplate === "waitlisted"
-                                        ? "Waitlisted"
-                                        : "Invited",
+                                  selectedStatusEmailTemplate === "allotted" ? "Allotted" : "Rejected",
                               }
                             ) || "—"}
                           </p>
@@ -6201,13 +6039,7 @@ export default function OrganizerDashboardPage() {
                                 ...EMAIL_TEMPLATE_PREVIEW_CONTEXT,
                                 conferenceTitle: selectedConference?.title || EMAIL_TEMPLATE_PREVIEW_CONTEXT.conferenceTitle,
                                 status:
-                                  selectedStatusEmailTemplate === "allotted"
-                                    ? "Allotted"
-                                    : selectedStatusEmailTemplate === "rejected"
-                                      ? "Rejected"
-                                      : selectedStatusEmailTemplate === "waitlisted"
-                                        ? "Waitlisted"
-                                        : "Invited",
+                                  selectedStatusEmailTemplate === "allotted" ? "Allotted" : "Rejected",
                               }
                             ) || "Email body preview will appear here."}
                           </pre>

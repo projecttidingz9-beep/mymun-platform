@@ -718,6 +718,8 @@ export default function CheckoutPage() {
                           ))}
                         </select>
                       </div>
+                      {!isPressCategory && (
+                        <>
                       <div>
                         <label className="block text-sm font-semibold mb-1.5" style={{ color: "var(--fg)" }}>Portfolio Preference 1</label>
                         <select value={portfolioPreferencePrimary} onChange={(event) => setPortfolioPreferencePrimary(event.target.value)} className="input-base">
@@ -736,6 +738,8 @@ export default function CheckoutPage() {
                           ))}
                         </select>
                       </div>
+                        </>
+                      )}
                     </>
                   )}
                 </div>
