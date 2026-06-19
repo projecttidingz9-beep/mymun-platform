@@ -6,8 +6,30 @@ import { getRequestActor, requireEventOrganizerAccess, requireOrganizer, resolve
 import { getOrganizerPreviewConfig, mergeOrganizerStoredBlob } from "@/lib/server/organizer-config-store";
 import { logger } from "@/lib/server/logger";
 import { persistRegistrationCategories } from "@/lib/server/persist-registration-categories";
+import { formatOrganizerSyncError } from "@/lib/server/persist-organizer-conference-sync";
 import { MARKETPLACE_CACHE_TAG } from "@/lib/server/marketplace-queries";
 import { prisma } from "@/lib/server/prisma";
+
+function safeRevalidateMarketplaceCache(): void {
+  try {
+    revalidateTag(MARKETPLACE_CACHE_TAG, { expire: 0 });
+  } catch (error) {
+    logger.error("marketplace_cache_revalidate_failed", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
+function isClientConfigError(message: string): boolean {
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes("organizerconferenceconfig missing") ||
+    normalized.includes("event not found") ||
+    normalized.includes("pricing phase") ||
+    normalized.includes("complete every pricing phase") ||
+    normalized.includes("incomplete:")
+  );
+}
 
 export async function GET(
   request: NextRequest,
@@ -138,7 +160,7 @@ export async function PATCH(
         eventId,
         previewPatch.registrationCategories as RegistrationCategory[]
       );
-      revalidateTag(MARKETPLACE_CACHE_TAG, { expire: 0 });
+      safeRevalidateMarketplaceCache();
     }
 
     const venueFromParts = [previewPatch.city, previewPatch.country]
@@ -222,23 +244,37 @@ export async function PATCH(
       Object.entries(configFields).filter(([, value]) => value !== undefined)
     );
     if (Object.keys(configUpdate).length > 0) {
-      await prisma.organizerConferenceConfig.update({
+      await prisma.organizerConferenceConfig.upsert({
         where: { eventId },
-        data: configUpdate,
+        update: configUpdate,
+        create: {
+          eventId,
+          ...configUpdate,
+        },
       });
     }
   }
 
   const saved = await getOrganizerPreviewConfig(eventId);
 
-    revalidateTag(MARKETPLACE_CACHE_TAG, { expire: 0 });
+    safeRevalidateMarketplaceCache();
 
     return NextResponse.json({ config: saved });
   } catch (error) {
+    const message = formatOrganizerSyncError(error);
     logger.error("conference_config_patch_failed", {
       eventId,
-      error: error instanceof Error ? error.message : String(error),
+      error: message,
     });
-    return NextResponse.json({ error: "Could not save conference settings." }, { status: 500 });
+    const status = isClientConfigError(message) ? 400 : 500;
+    return NextResponse.json(
+      {
+        error:
+          status === 400
+            ? message
+            : "Could not save conference settings.",
+      },
+      { status }
+    );
   }
 }

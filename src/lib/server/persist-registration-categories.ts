@@ -1,12 +1,21 @@
 import type { RegistrationCategory } from "@/lib/types";
 import type { Prisma } from "@/generated/prisma/client";
+import {
+  findIncompletePricingPhases,
+  formatIncompletePricingPhasesMessage,
+} from "@/lib/pricing";
 import { mergeOrganizerStoredBlob } from "@/lib/server/organizer-config-store";
-import { prisma } from "@/lib/server/prisma";
+import { runPrismaTransaction } from "@/lib/server/prisma";
 
 export const REGISTRATION_CATEGORIES_TX_OPTIONS = {
   maxWait: 10_000,
   timeout: 20_000,
 } as const;
+
+function coercePrice(value: unknown): number {
+  const n = Number(value);
+  return Number.isFinite(n) ? Math.max(0, n) : 0;
+}
 
 function parseDeadline(cat: RegistrationCategory): Date | null {
   if (cat.registrationDeadline) {
@@ -20,12 +29,33 @@ function parseDeadline(cat: RegistrationCategory): Date | null {
   return null;
 }
 
+function parsePhaseDate(value: string, phaseName: string, fieldLabel: string): Date {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    throw new Error(
+      `Pricing phase "${phaseName}" is missing a ${fieldLabel}. Complete every pricing phase or remove empty phases before saving.`
+    );
+  }
+  const parsed = new Date(trimmed);
+  if (Number.isNaN(parsed.getTime())) {
+    throw new Error(
+      `Pricing phase "${phaseName}" has an invalid ${fieldLabel}. Complete every pricing phase or remove empty phases before saving.`
+    );
+  }
+  return parsed;
+}
+
 /** Replace category + pricing phase rows within an existing transaction. */
 export async function syncRegistrationCategoriesToDb(
   tx: Prisma.TransactionClient,
   organizerConfigId: string,
   registrationCategories: RegistrationCategory[]
 ): Promise<void> {
+  const incompletePhases = findIncompletePricingPhases(registrationCategories);
+  if (incompletePhases.length > 0) {
+    throw new Error(formatIncompletePricingPhasesMessage(incompletePhases));
+  }
+
   await tx.registrationCategoryConfig.deleteMany({
     where: { organizerConfigId },
   });
@@ -39,7 +69,7 @@ export async function syncRegistrationCategoriesToDb(
         applicationType: cat.applicationType || "delegate",
         description: cat.description ?? null,
         isOpen: cat.isOpen !== false,
-        basePrice: cat.basePrice ?? 0,
+        basePrice: coercePrice(cat.basePrice),
         requiresCommitteeSelection: cat.requiresCommitteeSelection !== false,
         registrationDeadline: parseDeadline(cat),
         maxDelegatesPerDelegation: cat.maxDelegatesPerDelegation ?? null,
@@ -67,9 +97,9 @@ export async function syncRegistrationCategoriesToDb(
         return {
           organizerConfigId,
           name: phase.name,
-          startDate: new Date(phase.startDate),
-          endDate: new Date(phase.endDate),
-          basePrice: phase.basePrice,
+          startDate: parsePhaseDate(phase.startDate, phase.name, "start date"),
+          endDate: parsePhaseDate(phase.endDate, phase.name, "end date"),
+          basePrice: coercePrice(phase.basePrice),
           committeePriceJson: JSON.stringify(committeePriceObj),
         };
       }),
@@ -84,7 +114,7 @@ export async function persistRegistrationCategories(
 ): Promise<void> {
   await mergeOrganizerStoredBlob(eventId, { registrationCategories });
 
-  await prisma.$transaction(async (tx) => {
+  await runPrismaTransaction(async (tx) => {
     const configRow = await tx.organizerConferenceConfig.findUnique({
       where: { eventId },
       select: { id: true },

@@ -23,6 +23,10 @@ import {
   UserNotification,
 } from "./types";
 import { allotApplicantOnConference } from "./allot-applicant";
+import {
+  findIncompletePricingPhases,
+  formatIncompletePricingPhasesMessage,
+} from "./pricing";
 import AuthModal from "@/components/AuthModal";
 
 const PROTECTED_API_PREFIXES = [
@@ -1248,6 +1252,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       conference: OrganizerConference,
       options?: OrganizerConferenceSyncOptions
     ): Promise<{ ok: boolean; error?: string }> => {
+      const incompletePhases = findIncompletePricingPhases(conference.registrationCategories || []);
+      if (incompletePhases.length > 0) {
+        const error = formatIncompletePricingPhasesMessage(incompletePhases);
+        setLastOrganizerSyncError(error);
+        return { ok: false, error };
+      }
       try {
         const res = await fetch(`/api/organizers/conferences/${conference.id}/sync`, {
           method: "PUT",

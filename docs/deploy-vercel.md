@@ -17,7 +17,7 @@ Critical:
 | Variable | Notes |
 |----------|--------|
 | `DATABASE_URL` | Transaction pooler `:6543` + `pgbouncer=true` + `sslmode=require`. |
-| `DIRECT_URL` | Session pooler `:5432` (IPv4-friendly) or direct DB — used by Prisma CLI / migrations locally and in CI. |
+| `DIRECT_URL` | Session pooler `:5432` (IPv4-friendly) or direct DB — used by Prisma CLI / migrations locally and in CI, and at **runtime** for organizer save transactions (interactive Prisma `$transaction`). Must be set on Vercel Production, not only in CI. |
 | `AUTH_SESSION_SECRET` | Long random string; rotate invalidates sessions unless you migrate tokens. |
 | `PASS_QR_SECRET` | Separate secret for QR signing. |
 | `ADMIN_EMAIL` | Super-admin email; must match the `User` row you set to `ADMIN` for `/admin` and `/api/admin/*`. |
@@ -27,6 +27,8 @@ Critical:
 Optional: `RESEND_*`, **`NEXT_PUBLIC_SUPABASE_URL`** + **`NEXT_PUBLIC_SUPABASE_ANON_KEY`** (Supabase Auth — Google OAuth via redirect to `/auth/callback`; configure providers and redirect URLs in the Supabase dashboard), legacy Google GIS (`GOOGLE_CLIENT_ID` / `NEXT_PUBLIC_GOOGLE_CLIENT_ID` only if Supabase Auth is not configured), `SENTRY_DSN` (server/edge) and `NEXT_PUBLIC_SENTRY_DSN`. Set `SENTRY_AUTH_TOKEN` in CI or Vercel when you want **source maps uploaded** during build (`next.config` disables upload when this is unset).
 
 Set `DB_POOL_MAX` low per isolate (e.g. **5–10**) if you see Supabase connection limits under load.
+
+Set `DB_SESSION_POOL_MAX` low (e.g. **3**) for the session-pool client used by organizer save transactions.
 
 ## 3. Build command
 

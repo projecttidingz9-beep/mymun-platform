@@ -10,6 +10,43 @@ const dateToDayNumber = (value: string) => {
   return new Date(value).setHours(0, 0, 0, 0);
 };
 
+function isValidDateString(value: string): boolean {
+  if (!value.trim()) return false;
+  const parsed = new Date(value);
+  return !Number.isNaN(parsed.getTime());
+}
+
+export function isPricingPhaseComplete(phase: PricingPhase): boolean {
+  const name = phase.name.trim();
+  return (
+    name.length > 0 &&
+    isValidDateString(phase.startDate) &&
+    isValidDateString(phase.endDate)
+  );
+}
+
+export function findIncompletePricingPhases(
+  categories: Pick<RegistrationCategory, "pricingPhases">[]
+): PricingPhase[] {
+  const incomplete: PricingPhase[] = [];
+  for (const category of categories) {
+    for (const phase of category.pricingPhases || []) {
+      if (!isPricingPhaseComplete(phase)) {
+        incomplete.push(phase);
+      }
+    }
+  }
+  return incomplete;
+}
+
+export function formatIncompletePricingPhasesMessage(phases: PricingPhase[]): string {
+  if (phases.length === 0) {
+    return "Complete every pricing phase (name, start date, end date) or remove empty phases before saving.";
+  }
+  const names = phases.map((phase) => phase.name.trim() || "Unnamed phase").join(", ");
+  return `Complete every pricing phase (name, start date, end date) or remove empty phases before saving. Incomplete: ${names}.`;
+}
+
 export function buildDefaultCommitteePrices(
   committees: Pick<OrganizerCommittee, "id" | "name">[],
   defaultPrice: number

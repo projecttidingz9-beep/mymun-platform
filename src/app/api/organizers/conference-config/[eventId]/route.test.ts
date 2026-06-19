@@ -31,6 +31,11 @@ vi.mock("@/lib/server/persist-registration-categories", () => ({
   persistRegistrationCategories: vi.fn(),
 }));
 
+vi.mock("@/lib/server/persist-organizer-conference-sync", () => ({
+  formatOrganizerSyncError: (error: unknown) =>
+    error instanceof Error ? error.message : String(error),
+}));
+
 vi.mock("next/cache", () => ({
   revalidateTag: vi.fn(),
   unstable_cache: (fn: () => unknown) => fn,

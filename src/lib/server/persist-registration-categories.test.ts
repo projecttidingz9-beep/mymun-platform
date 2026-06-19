@@ -13,24 +13,22 @@ vi.mock("./organizer-config-store", () => ({
 }));
 
 vi.mock("./prisma", () => ({
-  prisma: {
-    $transaction: vi.fn(async (fn: (tx: unknown) => Promise<void>) => {
-      const tx = {
-        organizerConferenceConfig: {
-          findUnique: findUniqueConfig,
-        },
-        registrationCategoryConfig: {
-          deleteMany: deleteManyCategories,
-          createMany: createManyCategories,
-        },
-        pricingPhaseConfig: {
-          deleteMany: deleteManyPhases,
-          createMany: createManyPhases,
-        },
-      };
-      await fn(tx);
-    }),
-  },
+  runPrismaTransaction: vi.fn(async (fn: (tx: unknown) => Promise<void>) => {
+    const tx = {
+      organizerConferenceConfig: {
+        findUnique: findUniqueConfig,
+      },
+      registrationCategoryConfig: {
+        deleteMany: deleteManyCategories,
+        createMany: createManyCategories,
+      },
+      pricingPhaseConfig: {
+        deleteMany: deleteManyPhases,
+        createMany: createManyPhases,
+      },
+    };
+    await fn(tx);
+  }),
 }));
 
 import { persistRegistrationCategories } from "./persist-registration-categories";
@@ -77,5 +75,33 @@ describe("persistRegistrationCategories", () => {
     await expect(persistRegistrationCategories("evt-missing", [chairCategory])).rejects.toThrow(
       "OrganizerConferenceConfig missing for event."
     );
+  });
+
+  it("throws a readable error when pricing phases have invalid dates", async () => {
+    const categoryWithIncompletePhase: RegistrationCategory = {
+      id: "cat-delegate",
+      name: "Delegate Registration",
+      description: "",
+      applicationType: "delegate",
+      isOpen: true,
+      basePrice: 3000,
+      requiresCommitteeSelection: true,
+      formFields: [],
+      pricingPhases: [
+        {
+          id: "phase-1",
+          name: "New Phase",
+          startDate: "",
+          endDate: "",
+          basePrice: 3000,
+          committeePrices: [],
+        },
+      ],
+    };
+
+    await expect(
+      persistRegistrationCategories("evt-1", [categoryWithIncompletePhase])
+    ).rejects.toThrow(/New Phase/);
+    expect(createManyPhases).not.toHaveBeenCalled();
   });
 });

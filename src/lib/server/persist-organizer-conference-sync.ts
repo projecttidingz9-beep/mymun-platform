@@ -1,6 +1,6 @@
 import type { OrganizerConference } from "@/lib/types";
 import type { EventStatus } from "@/generated/prisma/enums";
-import { prisma } from "./prisma";
+import { prisma, runPrismaTransaction } from "./prisma";
 import { mergeOrganizerStoredBlob } from "./organizer-config-store";
 import { syncRegistrationCategoriesToDb } from "./persist-registration-categories";
 import { env } from "./env";
@@ -109,7 +109,7 @@ export async function persistOrganizerConferenceSync(
   let resolvedEventStatus: EventStatus = mapConferenceStatusToEvent(conference.status, options);
   let previousEventStatus: EventStatus | null = null;
 
-  await prisma.$transaction(async (tx) => {
+  await runPrismaTransaction(async (tx) => {
     const existing = await tx.event.findUnique({
       where: { id: eventId },
       select: { status: true },

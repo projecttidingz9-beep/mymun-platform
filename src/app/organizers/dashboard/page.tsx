@@ -41,7 +41,10 @@ import {
 import {
   applyPhaseBasePriceToAllCommittees,
   buildDefaultCommitteePrices,
+  findIncompletePricingPhases,
+  formatIncompletePricingPhasesMessage,
   getActivePhase,
+  isPricingPhaseComplete,
   mergeNewCommitteesIntoPhases,
   upsertPhaseCommitteePrice,
 } from "@/lib/pricing";
@@ -78,6 +81,9 @@ const STATUS_STYLES: Record<OrganizerConference["status"], string> = {
   Review: "badge-gold",
   Published: "badge-green",
 };
+
+const isErrorStatusMessage = (message: string) =>
+  /unable|fail|error|could not|incomplete|missing|invalid/i.test(message);
 
 const buildPreviewDraft = (conference?: OrganizerConference | null) => ({
   title: conference?.title || "",
@@ -1910,6 +1916,11 @@ export default function OrganizerDashboardPage() {
   ) => {
     if (!selectedConference || pricingSaving) return;
     const categoriesToSave = categoriesOverride ?? selectedConference.registrationCategories;
+    const incompletePhases = findIncompletePricingPhases(categoriesToSave);
+    if (incompletePhases.length > 0) {
+      setPricingSaveStatus(formatIncompletePricingPhasesMessage(incompletePhases));
+      return;
+    }
     setPricingSaving(true);
     setPricingSaveStatus("");
     try {
@@ -1938,9 +1949,10 @@ export default function OrganizerDashboardPage() {
       setPricingSaveStatus("Categories and pricing saved.");
       window.setTimeout(() => setPricingSaveStatus(""), 3500);
     } catch (error) {
-      setPricingSaveStatus(
-        error instanceof Error ? error.message : "Unable to save categories and pricing."
-      );
+      const message =
+        error instanceof Error ? error.message : "Unable to save categories and pricing.";
+      setPricingSaveStatus(message);
+      toast.show(message, "error");
     } finally {
       setPricingSaving(false);
     }
@@ -2097,13 +2109,20 @@ export default function OrganizerDashboardPage() {
   const addCategoryPricingPhase = (conferenceId: string, category: OrganizerConference["registrationCategories"][number]) => {
     const phaseBase = category.basePrice || 0;
     const committees = selectedConference?.committees ?? [];
+    const existingPhases = category.pricingPhases || [];
+    const lastPhase = existingPhases[existingPhases.length - 1];
+    const conferenceStart = selectedConference?.startDate || "";
+    const conferenceEnd = selectedConference?.endDate || "";
+    const today = new Date().toISOString().slice(0, 10);
+    const defaultStart = lastPhase?.endDate?.trim() || conferenceStart || today;
+    const defaultEnd = conferenceEnd || defaultStart;
     const nextPhases = [
-      ...(category.pricingPhases || []),
+      ...existingPhases,
       {
         id: `phase-${Date.now()}`,
         name: "New Phase",
-        startDate: "",
-        endDate: "",
+        startDate: defaultStart,
+        endDate: defaultEnd,
         basePrice: phaseBase,
         committeePrices: buildDefaultCommitteePrices(committees, phaseBase),
       },
@@ -3334,7 +3353,7 @@ export default function OrganizerDashboardPage() {
 
                   {activeSection === "preview" && previewSaveStatus && (
                     <div
-                      className={`alert ${/unable|fail|error/i.test(previewSaveStatus) ? "alert-danger" : "alert-success"}`}
+                      className={`alert ${isErrorStatusMessage(previewSaveStatus) ? "alert-danger" : "alert-success"}`}
                       role="status"
                     >
                       <span>{previewSaveStatus}</span>
@@ -5469,7 +5488,7 @@ export default function OrganizerDashboardPage() {
                     </div>
                     {pricingSaveStatus ? (
                       <div
-                        className={`alert mb-4 ${/unable|fail|error/i.test(pricingSaveStatus) ? "alert-danger" : "alert-success"}`}
+                        className={`alert mb-4 ${isErrorStatusMessage(pricingSaveStatus) ? "alert-danger" : "alert-success"}`}
                         role="status"
                       >
                         <span>{pricingSaveStatus}</span>
@@ -5682,6 +5701,11 @@ export default function OrganizerDashboardPage() {
                                           }
                                         />
                                       </div>
+                                      {!isPricingPhaseComplete(phase) && (
+                                        <p className="text-[11px] mt-1" style={{ color: "var(--fg-muted)" }}>
+                                          Complete the phase name, start date, and end date before saving.
+                                        </p>
+                                      )}
                                       {!isChairCategory && (
                                         <div className="mt-3 space-y-2">
                                           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">

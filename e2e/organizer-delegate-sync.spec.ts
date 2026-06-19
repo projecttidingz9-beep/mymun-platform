@@ -118,6 +118,36 @@ test.describe("organiser updates propagate to delegates", () => {
     expect(listBody.conferences.some((c) => c.id === SEED_EVENT_ID && c.title === updatedTitle)).toBe(true);
   });
 
+  test("organiser registration categories patch succeeds", async ({ request }) => {
+    const login = await loginWithCredentials(request, SEED_ORGANIZER_EMAIL, SEED_PASSWORD);
+    expect(login.ok()).toBeTruthy();
+
+    const categoryName = `E2E Delegate ${Date.now()}`;
+    const patch = await request.patch(`/api/organizers/conference-config/${SEED_EVENT_ID}`, {
+      data: {
+        registrationCategories: [
+          {
+            id: "cat-default",
+            name: categoryName,
+            description: "E2E pricing category save.",
+            applicationType: "delegate",
+            isOpen: true,
+            basePrice: 2500,
+            requiresCommitteeSelection: false,
+            formFields: [],
+            pricingPhases: [],
+          },
+        ],
+      },
+    });
+    expect(patch.ok()).toBeTruthy();
+
+    const body = (await patch.json()) as {
+      config?: { registrationCategories?: Array<{ name: string }> };
+    };
+    expect(body.config?.registrationCategories?.some((c) => c.name === categoryName)).toBe(true);
+  });
+
   test("published conference stays on marketplace after organiser full sync", async ({ request }) => {
     const login = await loginWithCredentials(request, SEED_ORGANIZER_EMAIL, SEED_PASSWORD);
     expect(login.ok()).toBeTruthy();

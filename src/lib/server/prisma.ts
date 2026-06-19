@@ -1,11 +1,14 @@
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@/generated/prisma/client";
+import type { Prisma } from "@/generated/prisma/client";
 import { Pool } from "pg";
 import { env } from "./env";
 
 declare global {
   var __prisma__: PrismaClient | undefined;
   var __pg_pool__: Pool | undefined;
+  var __prisma_session__: PrismaClient | undefined;
+  var __pg_session_pool__: Pool | undefined;
 }
 
 function sslRejectUnauthorizedDisabled(): boolean {
@@ -17,8 +20,13 @@ function sslRejectUnauthorizedDisabled(): boolean {
  * Pooled URL for runtime queries. When dev TLS bypass is enabled, rewrite sslmode:
  * pg v8+ treats `sslmode=require` as verify-full and ignores `rejectUnauthorized: false`.
  */
-function connectionStringForPool(): string {
-  let url = env.databaseUrl();
+function normalizeConnectionString(rawUrl: string, options?: { stripPgBouncer?: boolean }): string {
+  let url = rawUrl;
+  if (options?.stripPgBouncer) {
+    url = url
+      .replace(/([?&])pgbouncer=true&?/gi, "$1")
+      .replace(/[?&]$/, "");
+  }
   if (sslRejectUnauthorizedDisabled()) {
     if (/[?&]sslmode=/i.test(url)) {
       return url.replace(/([?&])sslmode=[^&]*/i, "$1sslmode=no-verify");
@@ -44,27 +52,62 @@ function pgSslOption(
   return undefined;
 }
 
-const connectionString = connectionStringForPool();
-
-/** Single pool per Node/Vercel isolate — avoids exhausting Supabase connection limits. */
-const pool =
-  globalThis.__pg_pool__ ??
-  new Pool({
+function createPool(connectionString: string, max: number): Pool {
+  return new Pool({
     connectionString,
-    max: Math.min(Number(process.env.DB_POOL_MAX ?? 10), 25),
+    max,
     idleTimeoutMillis: 30_000,
     connectionTimeoutMillis: 10_000,
     ssl: pgSslOption(connectionString),
   });
-globalThis.__pg_pool__ = pool;
+}
 
-const adapter = new PrismaPg(pool);
-
-export const prisma =
-  globalThis.__prisma__ ??
-  new PrismaClient({
+function createPrismaClient(pool: Pool): PrismaClient {
+  const adapter = new PrismaPg(pool);
+  return new PrismaClient({
     adapter,
     log: process.env.NODE_ENV === "development" ? ["warn", "error"] : ["error"],
   });
+}
 
+const connectionString = normalizeConnectionString(env.databaseUrl());
+
+/** Single pool per Node/Vercel isolate — avoids exhausting Supabase connection limits. */
+const pool =
+  globalThis.__pg_pool__ ??
+  createPool(connectionString, Math.min(Number(process.env.DB_POOL_MAX ?? 10), 25));
+globalThis.__pg_pool__ = pool;
+
+export const prisma = globalThis.__prisma__ ?? createPrismaClient(pool);
 globalThis.__prisma__ = prisma;
+
+/** Session pooler / direct URL — required for interactive Prisma transactions on Supabase. */
+const sessionConnectionString = normalizeConnectionString(env.directDatabaseUrl(), {
+  stripPgBouncer: true,
+});
+
+const sessionPool =
+  globalThis.__pg_session_pool__ ??
+  createPool(
+    sessionConnectionString,
+    Math.min(Number(process.env.DB_SESSION_POOL_MAX ?? 3), 10)
+  );
+globalThis.__pg_session_pool__ = sessionPool;
+
+export const prismaSession =
+  globalThis.__prisma_session__ ?? createPrismaClient(sessionPool);
+globalThis.__prisma_session__ = prismaSession;
+
+export type PrismaTransactionOptions = {
+  maxWait?: number;
+  timeout?: number;
+  isolationLevel?: Prisma.TransactionIsolationLevel;
+};
+
+/** Run an interactive transaction on the session pool (not the transaction pooler). */
+export function runPrismaTransaction<T>(
+  fn: (tx: Prisma.TransactionClient) => Promise<T>,
+  options?: PrismaTransactionOptions
+): Promise<T> {
+  return prismaSession.$transaction(fn, options);
+}
