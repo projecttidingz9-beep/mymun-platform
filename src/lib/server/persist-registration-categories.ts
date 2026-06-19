@@ -63,7 +63,7 @@ export async function syncRegistrationCategoriesToDb(
   if (registrationCategories.length > 0) {
     await tx.registrationCategoryConfig.createMany({
       data: registrationCategories.map((cat) => ({
-        id: cat.id,
+        categoryKey: cat.id,
         organizerConfigId,
         name: cat.name,
         applicationType: cat.applicationType || "delegate",

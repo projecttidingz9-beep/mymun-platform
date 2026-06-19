@@ -61,7 +61,7 @@ describe("persistRegistrationCategories", () => {
     expect(createManyCategories).toHaveBeenCalledWith({
       data: [
         expect.objectContaining({
-          id: "cat-chair",
+          categoryKey: "cat-chair",
           applicationType: "chair",
           name: "Chair Registration",
         }),

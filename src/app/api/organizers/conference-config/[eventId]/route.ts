@@ -227,8 +227,8 @@ export async function PATCH(
   }
 
   if (Object.keys(relationalPatch).length > 0) {
-    const { title, startDate, endDate, coverImageUrl, ...configFields } = relationalPatch;
-    if (title || startDate || endDate || coverImageUrl !== undefined || relationalPatch.currency) {
+    const { title, startDate, endDate, coverImageUrl, currency, ...configFields } = relationalPatch;
+    if (title || startDate || endDate || coverImageUrl !== undefined || currency) {
       await prisma.event.update({
         where: { id: eventId },
         data: {
@@ -236,7 +236,7 @@ export async function PATCH(
           ...(startDate ? { startDate } : {}),
           ...(endDate ? { endDate } : {}),
           ...(coverImageUrl !== undefined ? { coverImageUrl } : {}),
-          ...(relationalPatch.currency ? { currency: relationalPatch.currency } : {}),
+          ...(currency ? { currency } : {}),
         },
       });
     }

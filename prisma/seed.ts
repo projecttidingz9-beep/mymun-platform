@@ -223,7 +223,7 @@ async function main() {
   await prisma.registrationCategoryConfig.createMany({
     data: [
       {
-        id: "cat-delegate",
+        categoryKey: "cat-delegate",
         organizerConfigId: organizerConfig.id,
         name: "Delegate",
         applicationType: "delegate",
@@ -234,7 +234,7 @@ async function main() {
         registrationDeadline: new Date("2026-08-25T23:59:59.000Z"),
       },
       {
-        id: "cat-chair",
+        categoryKey: "cat-chair",
         organizerConfigId: organizerConfig.id,
         name: "Chair",
         applicationType: "chair",
@@ -318,7 +318,7 @@ async function main() {
 
   await prisma.registrationCategoryConfig.create({
     data: {
-      id: "cat-press",
+      categoryKey: "cat-press",
       organizerConfigId: organizerConfig.id,
       name: "International Press",
       applicationType: "press",
@@ -331,7 +331,7 @@ async function main() {
 
   await prisma.registrationCategoryConfig.create({
     data: {
-      id: "cat-delegation",
+      categoryKey: "cat-delegation",
       organizerConfigId: organizerConfig.id,
       name: "Delegation Head",
       applicationType: "delegation",

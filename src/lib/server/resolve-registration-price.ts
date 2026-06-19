@@ -118,7 +118,7 @@ export async function resolveServerRegistrationAmount(params: {
   const categoryId = params.categoryId?.trim();
 
   const categoryFromDb = categoryId
-    ? event?.organizerConfig?.registrationCategories.find((c) => c.id === categoryId)
+    ? event?.organizerConfig?.registrationCategories.find((c) => c.categoryKey === categoryId)
     : undefined;
 
   let categoryFromBlob: RegistrationCategory | undefined;
@@ -130,7 +130,7 @@ export async function resolveServerRegistrationAmount(params: {
   if (categoryFromDb) {
     const catPhases = event?.organizerConfig?.pricingPhases ?? [];
     const syntheticCategory: RegistrationCategory = {
-      id: categoryFromDb.id,
+      id: categoryFromDb.categoryKey,
       name: categoryFromDb.name,
       description: categoryFromDb.description ?? "",
       applicationType: categoryFromDb.applicationType as RegistrationCategory["applicationType"],
@@ -264,9 +264,9 @@ export async function loadRegistrationCategoryForValidation(
       organizerConfig: {
         select: {
           registrationCategories: {
-            where: { id: categoryId },
+            where: { categoryKey: categoryId },
             select: {
-              id: true,
+              categoryKey: true,
               name: true,
               isOpen: true,
               requiresCommitteeSelection: true,
@@ -282,7 +282,7 @@ export async function loadRegistrationCategoryForValidation(
   const fromDb = event?.organizerConfig?.registrationCategories[0];
   if (fromDb) {
     return {
-      id: fromDb.id,
+      id: fromDb.categoryKey,
       name: fromDb.name,
       isOpen: fromDb.isOpen,
       requiresCommitteeSelection: fromDb.requiresCommitteeSelection,
