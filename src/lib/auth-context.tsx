@@ -990,6 +990,12 @@ interface AuthContextType {
     committeeId: string;
     portfolioId?: string;
   }) => { ok: boolean; message: string };
+  allotChairWithRole: (payload: {
+    conferenceId: string;
+    applicantId: string;
+    committeeId: string;
+    role: string;
+  }) => { ok: boolean; message: string };
   commitOrganizerConferences: (next: OrganizerConference[], syncConferenceId: string) => void;
   moveApplicant: (payload: {
     conferenceId: string;
@@ -1073,6 +1079,10 @@ const AuthContext = createContext<AuthContextType>({
   assignApplicant: () => ({
     ok: false,
     message: "Use the Applications tab in your organizer dashboard to allot committees.",
+  }),
+  allotChairWithRole: () => ({
+    ok: false,
+    message: "Use the Applications tab in your organizer dashboard to assign EB members.",
   }),
   moveApplicant: () => ({
     ok: false,
@@ -1960,6 +1970,115 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { ok: true, message: "Applicant allotted successfully." };
   };
 
+  const allotChairWithRole: AuthContextType["allotChairWithRole"] = ({
+    conferenceId,
+    applicantId,
+    committeeId,
+    role,
+  }) => {
+    const trimmedRole = role.trim();
+    if (!trimmedRole) {
+      return { ok: false, message: "Role is required." };
+    }
+
+    const current = organizerConferences;
+    const conference = current.find((entry) => entry.id === conferenceId);
+    const applicant = conference?.applicants.find((entry) => entry.id === applicantId);
+    if (!conference || !applicant) {
+      return { ok: false, message: "Applicant not found." };
+    }
+
+    const { next, result } = allotApplicantOnConference(current, {
+      conferenceId,
+      applicantId,
+      committeeId,
+      portfolioId: undefined,
+    });
+    if (!result.ok) return { ok: false, message: result.message ?? "Allotment failed." };
+
+    const withChairs: OrganizerConference[] = next.map((entry) => {
+      if (entry.id !== conferenceId) return entry;
+      return {
+        ...entry,
+        committees: entry.committees.map((committee) => {
+          const withoutApplicant = {
+            ...committee,
+            chairs: (committee.chairs ?? []).filter((chair) => chair.id !== applicantId),
+          };
+          if (committee.id !== committeeId) return withoutApplicant;
+          return {
+            ...withoutApplicant,
+            chairs: [
+              ...(withoutApplicant.chairs ?? []),
+              {
+                id: applicantId,
+                name: applicant.name,
+                email: applicant.userEmail,
+                role: trimmedRole,
+              },
+            ],
+          };
+        }),
+      };
+    });
+
+    persistOrganizerConferences(withChairs, conferenceId);
+
+    void (async () => {
+      if (applicant.registrationId) {
+        await fetch(`/api/organizers/registrations/${applicant.registrationId}`, {
+          method: "PATCH",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            organizerStatus: "Allotted",
+            committeeName: result.committeeName,
+            portfolioName: null,
+            portfolioId: null,
+            allottedAt: new Date().toISOString(),
+          }),
+        });
+      }
+
+      updateUserRegistrationAssignment(applicant.registrationId, {
+        status: "Confirmed",
+        organizerStatus: "Allotted",
+        assignedCommitteeId: committeeId,
+        assignedCommitteeName: result.committeeName,
+        assignedPortfolioId: undefined,
+        assignedPortfolioName: undefined,
+        assignedAt: new Date().toISOString(),
+      });
+
+      addNotification({
+        id: `ntf-${Date.now()}`,
+        conferenceId,
+        registrationId: applicant.registrationId,
+        userId: applicant.userId,
+        userEmail: applicant.userEmail,
+        title: "Committee Allocation Confirmed",
+        message: `You have been allotted to ${result.committeeName} as ${trimmedRole}.`,
+        type: "assignment",
+        createdAt: new Date().toISOString(),
+        read: false,
+      });
+
+      const updatedConference = withChairs.find((entry) => entry.id === conferenceId);
+      const updatedApplicant = updatedConference?.applicants.find((entry) => entry.id === applicantId);
+      if (updatedConference && updatedApplicant) {
+        triggerStatusEmail({
+          conference: updatedConference,
+          applicant: updatedApplicant,
+          status: "Allotted",
+          assignedCommitteeName: result.committeeName,
+          assignedPortfolioName: undefined,
+        });
+      }
+    })();
+
+    return { ok: true, message: "EB member assigned successfully." };
+  };
+
   const moveApplicant: AuthContextType["moveApplicant"] = (payload) => {
     return assignApplicant(payload);
   };
@@ -1971,12 +2090,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const applicant = conference.applicants.find((entry) => entry.id === applicantId);
     if (!applicant) return { ok: false, message: "Applicant not found." };
 
+    const categoryType =
+      conference.registrationCategories.find((category) => category.id === applicant.categoryId)
+        ?.applicationType || "delegate";
+    const isChairApplicant = categoryType === "chair";
+
     const next: OrganizerConference[] = current.map((entry) => {
       if (entry.id !== conferenceId) return entry;
       return {
         ...entry,
         committees: entry.committees.map((committee) => ({
           ...committee,
+          chairs: isChairApplicant
+            ? (committee.chairs ?? []).filter((chair) => chair.id !== applicantId)
+            : committee.chairs,
           portfolios: (committee.portfolios ?? []).map((portfolio) => ({
             ...portfolio,
             assignedApplicantIds: portfolio.assignedApplicantIds.filter((id) => id !== applicantId),
@@ -2239,6 +2366,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         toggleApplicantPayment,
         addAnnouncement,
         assignApplicant,
+        allotChairWithRole,
         commitOrganizerConferences,
         moveApplicant,
         unassignApplicant,

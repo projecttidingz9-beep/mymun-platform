@@ -82,6 +82,17 @@ const STATUS_STYLES: Record<OrganizerConference["status"], string> = {
   Published: "badge-green",
 };
 
+const CHAIR_ROLE_PRESETS = [
+  "Chair",
+  "Vice Chair",
+  "Rapporteur",
+  "Secretary General",
+  "Director",
+  "Co-Chair",
+  "Deputy Chair",
+  "Other",
+] as const;
+
 const isErrorStatusMessage = (message: string) =>
   /unable|fail|error|could not|incomplete|missing|invalid/i.test(message);
 
@@ -388,6 +399,7 @@ export default function OrganizerDashboardPage() {
     updateApplicantStatus,
     addAnnouncement,
     assignApplicant,
+    allotChairWithRole,
     commitOrganizerConferences,
     unassignApplicant,
     updateOrganizerConferenceConfig,
@@ -470,6 +482,11 @@ export default function OrganizerDashboardPage() {
   const [autoAssignProgress, setAutoAssignProgress] = useState("");
   const [pricingCategoryTypeTab, setPricingCategoryTypeTab] = useState<RegistrationCategoryType>("delegate");
   const [applicantProfileDrawerOpen, setApplicantProfileDrawerOpen] = useState(false);
+  const [chairAllotModalOpen, setChairAllotModalOpen] = useState(false);
+  const [chairAllotApplicantId, setChairAllotApplicantId] = useState("");
+  const [chairAllotCommitteeId, setChairAllotCommitteeId] = useState("");
+  const [chairAllotRole, setChairAllotRole] = useState("Chair");
+  const [chairAllotCustomRole, setChairAllotCustomRole] = useState("");
   const [participantSearchQuery, setParticipantSearchQuery] = useState("");
   const debouncedParticipantSearch = useDebouncedValue(participantSearchQuery, 180);
   const [delegationSearchQuery, setDelegationSearchQuery] = useState("");
@@ -3418,16 +3435,18 @@ export default function OrganizerDashboardPage() {
                       })}
                     </div>
                     <div className="mb-4 flex flex-wrap items-center gap-3">
-                      <button
-                        type="button"
-                        className="btn btn-outline-blue text-xs"
-                        onClick={() => void handleAutoAssign()}
-                        disabled={autoAssigning}
-                      >
-                        {autoAssigning
-                          ? `Auto-assigning… (${autoAssignProgress})`
-                          : "Auto-assign all pending"}
-                      </button>
+                      {applicationTypeTab !== "organizer" && (
+                        <button
+                          type="button"
+                          className="btn btn-outline-blue text-xs"
+                          onClick={() => void handleAutoAssign()}
+                          disabled={autoAssigning}
+                        >
+                          {autoAssigning
+                            ? `Auto-assigning… (${autoAssignProgress})`
+                            : "Auto-assign all pending"}
+                        </button>
+                      )}
                       <button
                         type="button"
                         className="btn btn-ghost text-xs"
@@ -3469,10 +3488,14 @@ export default function OrganizerDashboardPage() {
                     ) : (
                       <div className="space-y-3">
                         {filteredApplications.map((applicant) => {
+                          const isOcTab = applicationTypeTab === "organizer";
+                          const isChairTab = applicationTypeTab === "chair";
                           const suggestedCommittee = applicant.committeePreferences?.[0] || applicant.committeePreference;
                           const selectedCommitteeId = assignmentCommittee[applicant.id] || applicant.assignedCommitteeId || "";
                           const selectedCommittee = selectedConference.committees.find((committee) => committee.id === selectedCommitteeId);
                           const selectedPortfolioId = assignmentPortfolio[applicant.id] || applicant.assignedPortfolioId || "";
+                          const statusLabel =
+                            isOcTab && applicant.status === "Allotted" ? "Accepted" : applicant.status;
 
                           return (
                             <div
@@ -3487,7 +3510,7 @@ export default function OrganizerDashboardPage() {
                                   <p className="text-base mt-1" style={{ color: "var(--fg-muted)" }}>
                                     Category: {applicant.categoryName || "N/A"} · Country: {applicant.countryPreference || "N/A"}
                                   </p>
-                                  {suggestedCommittee && (
+                                  {suggestedCommittee && !isOcTab && (
                                     <p className="text-base mt-1" style={{ color: "var(--blue)" }}>
                                       Suggested allotment: {suggestedCommittee}
                                     </p>
@@ -3504,11 +3527,12 @@ export default function OrganizerDashboardPage() {
                                         ? "badge-blue"
                                         : "badge-blue"
                                 }`}>
-                                  {applicant.status}
+                                  {statusLabel}
                                 </span>
                               </div>
 
-                              <div className={`grid gap-2 mt-3 ${applicationTypeTab === "chair" ? "md:grid-cols-1" : "md:grid-cols-2"}`}>
+                              {!isOcTab && (
+                              <div className={`grid gap-2 mt-3 ${isChairTab ? "md:grid-cols-1" : "md:grid-cols-2"}`}>
                                 <select
                                   className="input-base text-sm app-select-modern"
                                   value={selectedCommitteeId}
@@ -3550,8 +3574,36 @@ export default function OrganizerDashboardPage() {
                                   </select>
                                 )}
                               </div>
+                              )}
 
                               <div className="flex gap-2 mt-3 flex-wrap">
+                                {isOcTab ? (
+                                  <>
+                                    <button
+                                      type="button"
+                                      className="btn btn-primary text-xs"
+                                      disabled={applicant.status === "Allotted"}
+                                      onClick={() => {
+                                        updateApplicantStatus(selectedConference.id, applicant.id, "Allotted");
+                                        toast.show("Organiser application accepted.", "success");
+                                      }}
+                                    >
+                                      Accept
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="btn btn-ghost text-xs"
+                                      disabled={applicant.status === "Rejected"}
+                                      onClick={() => {
+                                        updateApplicantStatus(selectedConference.id, applicant.id, "Rejected");
+                                        toast.show("Organiser application rejected.", "info");
+                                      }}
+                                    >
+                                      Reject
+                                    </button>
+                                  </>
+                                ) : (
+                                  <>
                                 <button
                                   onClick={() => {
                                     setSelectedApplicantId(applicant.id);
@@ -3561,14 +3613,29 @@ export default function OrganizerDashboardPage() {
                                 >
                                   Open Profile
                                 </button>
+                                {isChairTab ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setChairAllotApplicantId(applicant.id);
+                                      setChairAllotCommitteeId(selectedCommitteeId);
+                                      setChairAllotRole("Chair");
+                                      setChairAllotCustomRole("");
+                                      setChairAllotModalOpen(true);
+                                    }}
+                                    className="btn btn-primary text-xs"
+                                    disabled={!selectedCommitteeId}
+                                  >
+                                    Assign to Committee…
+                                  </button>
+                                ) : (
                                 <button
                                   onClick={() => {
                                     const result = assignApplicant({
                                       conferenceId: selectedConference.id,
                                       applicantId: applicant.id,
                                       committeeId: selectedCommitteeId,
-                                      portfolioId:
-                                        applicationTypeTab === "chair" ? undefined : selectedPortfolioId || undefined,
+                                      portfolioId: selectedPortfolioId || undefined,
                                     });
                                     if (!result.ok) toast.show(result.message, "error");
                                     else toast.show("Applicant allotted.", "success");
@@ -3578,6 +3645,7 @@ export default function OrganizerDashboardPage() {
                                 >
                                   Allot
                                 </button>
+                                )}
                                 <button
                                   onClick={() => {
                                     const result = unassignApplicant(selectedConference.id, applicant.id);
@@ -3650,6 +3718,8 @@ export default function OrganizerDashboardPage() {
                                 >
                                   Issue Certificate
                                 </button>
+                                  </>
+                                )}
                               </div>
                             </div>
                           );
@@ -3657,6 +3727,127 @@ export default function OrganizerDashboardPage() {
                       </div>
                     )}
                   </div>
+
+                  {chairAllotModalOpen && selectedConference && applicationTypeTab === "chair" && (
+                    <div
+                      className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-4"
+                      role="dialog"
+                      aria-modal="true"
+                      aria-labelledby="chair-allot-title"
+                    >
+                      <button
+                        type="button"
+                        className="absolute inset-0 bg-black/50"
+                        aria-label="Close dialog"
+                        onClick={() => {
+                          setChairAllotModalOpen(false);
+                          setChairAllotApplicantId("");
+                          setChairAllotCommitteeId("");
+                          setChairAllotRole("Chair");
+                          setChairAllotCustomRole("");
+                        }}
+                      />
+                      <div className="relative w-full max-w-md max-h-[90dvh] overflow-y-auto rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-6 shadow-xl">
+                        <h2 id="chair-allot-title" className="text-lg font-semibold text-[var(--fg)]">
+                          Assign EB Member
+                        </h2>
+                        <p className="mt-2 text-sm text-[var(--fg-muted)]">
+                          {selectedConference.applicants.find((entry) => entry.id === chairAllotApplicantId)?.name ||
+                            "Applicant"}{" "}
+                          will appear under the selected committee with the chosen role.
+                        </p>
+                        <div className="mt-5 space-y-4">
+                          <div>
+                            <label className="text-xs font-semibold block mb-1" style={{ color: "var(--fg-muted)" }}>
+                              Committee
+                            </label>
+                            <select
+                              className="input-base text-sm w-full app-select-modern"
+                              value={chairAllotCommitteeId}
+                              onChange={(event) => setChairAllotCommitteeId(event.target.value)}
+                            >
+                              <option value="">Select committee</option>
+                              {selectedConference.committees.map((committee) => (
+                                <option key={committee.id} value={committee.id}>
+                                  {committee.name}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="text-xs font-semibold block mb-1" style={{ color: "var(--fg-muted)" }}>
+                              Role
+                            </label>
+                            <select
+                              className="input-base text-sm w-full app-select-modern"
+                              value={chairAllotRole}
+                              onChange={(event) => setChairAllotRole(event.target.value)}
+                            >
+                              {CHAIR_ROLE_PRESETS.map((role) => (
+                                <option key={role} value={role}>
+                                  {role}
+                                </option>
+                              ))}
+                            </select>
+                            {chairAllotRole === "Other" && (
+                              <input
+                                className="input-base text-sm w-full mt-2"
+                                value={chairAllotCustomRole}
+                                onChange={(event) => setChairAllotCustomRole(event.target.value)}
+                                placeholder="Enter custom role"
+                              />
+                            )}
+                          </div>
+                        </div>
+                        <div className="mt-6 flex flex-wrap gap-2 justify-end">
+                          <button
+                            type="button"
+                            className="btn btn-ghost text-sm"
+                            onClick={() => {
+                              setChairAllotModalOpen(false);
+                              setChairAllotApplicantId("");
+                              setChairAllotCommitteeId("");
+                              setChairAllotRole("Chair");
+                              setChairAllotCustomRole("");
+                            }}
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-primary text-sm"
+                            disabled={!chairAllotCommitteeId}
+                            onClick={() => {
+                              const resolvedRole =
+                                chairAllotRole === "Other" ? chairAllotCustomRole.trim() : chairAllotRole.trim();
+                              if (!resolvedRole) {
+                                toast.show("Enter a role for this EB member.", "error");
+                                return;
+                              }
+                              const result = allotChairWithRole({
+                                conferenceId: selectedConference.id,
+                                applicantId: chairAllotApplicantId,
+                                committeeId: chairAllotCommitteeId,
+                                role: resolvedRole,
+                              });
+                              if (!result.ok) {
+                                toast.show(result.message, "error");
+                                return;
+                              }
+                              toast.show("EB member assigned.", "success");
+                              setChairAllotModalOpen(false);
+                              setChairAllotApplicantId("");
+                              setChairAllotCommitteeId("");
+                              setChairAllotRole("Chair");
+                              setChairAllotCustomRole("");
+                            }}
+                          >
+                            Confirm Allotment
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
                   <div className="card p-6 rounded-2xl mt-6">
                     <h3 className="text-lg font-bold mb-4" style={{ color: "var(--fg)" }}>Position Papers</h3>
@@ -5524,7 +5715,7 @@ export default function OrganizerDashboardPage() {
                         const category = selectedPricingCategory;
                         const activePhase = getActivePhase(category.pricingPhases);
                         const categoryType = category.applicationType || "delegate";
-                        const isChairCategory = categoryType === "chair";
+                        const isNoPhasesCategory = categoryType === "chair" || categoryType === "organizer";
                         const categoryLabel = getCategoryRegistrationLabel(categoryType);
                         return (
                           <div key={category.id} className="p-4 rounded-xl" style={{ background: "var(--bg-subtle)" }}>
@@ -5605,7 +5796,7 @@ export default function OrganizerDashboardPage() {
                             <div className="rounded-lg p-3 mt-3 space-y-2" style={{ background: "var(--bg)" }}>
                               <div className="flex items-center justify-between">
                                 <p className="text-xs font-semibold" style={{ color: "var(--fg)" }}>Category Pricing</p>
-                                {!isChairCategory && (
+                                {!isNoPhasesCategory && (
                                   <button
                                     className="btn btn-ghost text-xs"
                                     onClick={() => addCategoryPricingPhase(selectedConference.id, category)}
@@ -5628,9 +5819,9 @@ export default function OrganizerDashboardPage() {
                                   />
                                 </label>
                               </div>
-                              {isChairCategory ? (
+                              {isNoPhasesCategory ? (
                                 <p className="text-xs" style={{ color: "var(--fg-muted)" }}>
-                                  Pricing phases are disabled for Chair Registration.
+                                  Pricing phases are not available for this category type.
                                 </p>
                               ) : category.pricingPhases.length === 0 ? (
                                 <p className="text-xs" style={{ color: "var(--fg-muted)" }}>
@@ -5688,7 +5879,7 @@ export default function OrganizerDashboardPage() {
                                           Complete the phase name, start date, and end date before saving.
                                         </p>
                                       )}
-                                      {!isChairCategory && (
+                                      {!isNoPhasesCategory && (
                                         <div className="mt-3 space-y-2">
                                           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                                             <div>
