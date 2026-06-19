@@ -57,7 +57,6 @@ export async function PATCH(
   }
 
   const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
-  const allowOverride = body.allowOverride === true;
 
   const statusDb =
     typeof body.organizerStatus === "string"
@@ -113,7 +112,6 @@ export async function PATCH(
             committeeName: committeeName ?? null,
             portfolioName: portfolioName ?? null,
             portfolioId,
-            allowOverride,
             tx,
           });
           if (validated?.portfolioId) {

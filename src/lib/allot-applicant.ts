@@ -5,7 +5,6 @@ export type AssignApplicantParams = {
   applicantId: string;
   committeeId: string;
   portfolioId?: string;
-  allowOverride?: boolean;
 };
 
 export type AssignApplicantResult = {
@@ -21,7 +20,7 @@ export function allotApplicantOnConference(
   conferences: OrganizerConference[],
   params: AssignApplicantParams
 ): { next: OrganizerConference[]; result: AssignApplicantResult } {
-  const { conferenceId, applicantId, committeeId, portfolioId, allowOverride = false } = params;
+  const { conferenceId, applicantId, committeeId, portfolioId } = params;
   const conference = conferences.find((entry) => entry.id === conferenceId);
   if (!conference) {
     return { next: conferences, result: { ok: false, message: "Conference not found." } };
@@ -40,8 +39,8 @@ export function allotApplicantOnConference(
   const filledSeats = conference.applicants.filter(
     (entry) => entry.status === "Allotted" && entry.assignedCommitteeId === committeeId
   ).length;
-  if (filledSeats >= committee.seatCount && !allowOverride) {
-    return { next: conferences, result: { ok: false, message: "Committee is full. Enable override to continue." } };
+  if (filledSeats >= committee.seatCount) {
+    return { next: conferences, result: { ok: false, message: "Committee is full." } };
   }
 
   let portfolioName: string | undefined;
@@ -52,16 +51,15 @@ export function allotApplicantOnConference(
     }
     if (
       portfolio.assignedApplicantIds.length >= portfolio.seatCount &&
-      !portfolio.assignedApplicantIds.includes(applicantId) &&
-      !allowOverride
+      !portfolio.assignedApplicantIds.includes(applicantId)
     ) {
       return { next: conferences, result: { ok: false, message: "Portfolio is full." } };
     }
     portfolioName = portfolio.name;
-  } else if ((committee.portfolios?.length ?? 0) > 0 && !allowOverride) {
+  } else if ((committee.portfolios?.length ?? 0) > 0) {
     return {
       next: conferences,
-      result: { ok: false, message: "Select a portfolio/country for this committee or enable override." },
+      result: { ok: false, message: "Select a portfolio/country for this committee." },
     };
   }
 
@@ -97,7 +95,6 @@ export function allotApplicantOnConference(
           assignedPortfolioId: portfolioId,
           assignedPortfolioName: portfolioName,
           assignedAt: new Date().toISOString(),
-          overrideUsed: allowOverride,
           assignmentHistory: [
             ...(item.assignmentHistory ?? []),
             {
@@ -107,7 +104,6 @@ export function allotApplicantOnConference(
               committeeName: committee.name,
               portfolioId,
               portfolioName,
-              overrideUsed: allowOverride,
               createdAt: new Date().toISOString(),
             },
           ],

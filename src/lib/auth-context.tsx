@@ -989,7 +989,6 @@ interface AuthContextType {
     applicantId: string;
     committeeId: string;
     portfolioId?: string;
-    allowOverride?: boolean;
   }) => { ok: boolean; message: string };
   commitOrganizerConferences: (next: OrganizerConference[], syncConferenceId: string) => void;
   moveApplicant: (payload: {
@@ -997,7 +996,6 @@ interface AuthContextType {
     applicantId: string;
     committeeId: string;
     portfolioId?: string;
-    allowOverride?: boolean;
   }) => { ok: boolean; message: string };
   unassignApplicant: (conferenceId: string, applicantId: string) => { ok: boolean; message: string };
   waitlistApplicant: (conferenceId: string, applicantId: string) => { ok: boolean; message: string };
@@ -1891,7 +1889,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     applicantId,
     committeeId,
     portfolioId,
-    allowOverride = false,
   }) => {
     const current = organizerConferences;
     const priorApplicant = current
@@ -1902,7 +1899,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       applicantId,
       committeeId,
       portfolioId,
-      allowOverride,
     });
     if (!result.ok) return { ok: false, message: result.message ?? "Allotment failed." };
 
@@ -1920,7 +1916,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             portfolioName: result.portfolioName ?? null,
             portfolioId: portfolioId ?? null,
             allottedAt: new Date().toISOString(),
-            allowOverride,
           }),
         });
       }
@@ -1933,7 +1928,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         assignedPortfolioId: portfolioId,
         assignedPortfolioName: result.portfolioName,
         assignedAt: new Date().toISOString(),
-        overrideUsed: allowOverride,
       });
 
       if (priorApplicant) {

@@ -15,7 +15,6 @@ export async function validateAllotmentAssignment(params: {
   committeeName: string | null;
   portfolioName: string | null;
   portfolioId?: string | null;
-  allowOverride?: boolean;
   tx?: Prisma.TransactionClient;
 }) {
   const db = params.tx ?? prisma;
@@ -34,19 +33,17 @@ export async function validateAllotmentAssignment(params: {
     throw new AllotmentValidationError("Committee does not belong to this conference.");
   }
 
-  if (!params.allowOverride) {
-    const filled = await db.registration.count({
-      where: {
-        eventId: params.eventId,
-        status: RegistrationStatus.ALLOTTED,
-        committeeName: committee.name,
-        deletedAt: null,
-        NOT: { id: params.registrationId },
-      },
-    });
-    if (filled >= committee.seatCount) {
-      throw new AllotmentValidationError("Committee is full.");
-    }
+  const filled = await db.registration.count({
+    where: {
+      eventId: params.eventId,
+      status: RegistrationStatus.ALLOTTED,
+      committeeName: committee.name,
+      deletedAt: null,
+      NOT: { id: params.registrationId },
+    },
+  });
+  if (filled >= committee.seatCount) {
+    throw new AllotmentValidationError("Committee is full.");
   }
 
   if (!params.portfolioName?.trim() && !params.portfolioId) return;
@@ -84,7 +81,7 @@ export async function validateAllotmentAssignment(params: {
         NOT: { id: params.registrationId },
       },
     });
-    if (!params.allowOverride && taken >= portfolio.seatCount) {
+    if (taken >= portfolio.seatCount) {
       throw new AllotmentValidationError("Portfolio is already full.");
     }
 

@@ -468,7 +468,6 @@ export default function OrganizerDashboardPage() {
   >("delegate");
   const [autoAssigning, setAutoAssigning] = useState(false);
   const [autoAssignProgress, setAutoAssignProgress] = useState("");
-  const [overrideSeatLimit, setOverrideSeatLimit] = useState(false);
   const [pricingCategoryTypeTab, setPricingCategoryTypeTab] = useState<RegistrationCategoryType>("delegate");
   const [applicantProfileDrawerOpen, setApplicantProfileDrawerOpen] = useState(false);
   const [participantSearchQuery, setParticipantSearchQuery] = useState("");
@@ -1769,7 +1768,7 @@ export default function OrganizerDashboardPage() {
             const filled = liveConference.applicants.filter(
               (entry) => entry.status === "Allotted" && entry.assignedCommitteeId === committee.id
             ).length;
-            return filled < committee.seatCount || overrideSeatLimit;
+            return filled < committee.seatCount;
           });
         };
 
@@ -1794,7 +1793,7 @@ export default function OrganizerDashboardPage() {
           for (const portfolio of portfolioCandidates) {
             if (seenPortfolio.has(portfolio.id)) continue;
             seenPortfolio.add(portfolio.id);
-            if (portfolio.assignedApplicantIds.length < portfolio.seatCount || overrideSeatLimit) {
+            if (portfolio.assignedApplicantIds.length < portfolio.seatCount) {
               portfolioId = portfolio.id;
               break;
             }
@@ -1806,7 +1805,6 @@ export default function OrganizerDashboardPage() {
           applicantId: applicant.id,
           committeeId: committee.id,
           portfolioId,
-          allowOverride: overrideSeatLimit,
         });
         if (!result.ok) {
           failed += 1;
@@ -1838,7 +1836,6 @@ export default function OrganizerDashboardPage() {
                 portfolioName: job.portfolioName ?? null,
                 portfolioId: job.portfolioId ?? null,
                 allottedAt: new Date().toISOString(),
-                allowOverride: overrideSeatLimit,
               }),
             })
           )
@@ -3421,14 +3418,6 @@ export default function OrganizerDashboardPage() {
                       })}
                     </div>
                     <div className="mb-4 flex flex-wrap items-center gap-3">
-                      <label className="flex items-center gap-2 text-xs" style={{ color: "var(--fg-muted)" }}>
-                        <input
-                          type="checkbox"
-                          checked={overrideSeatLimit}
-                          onChange={(event) => setOverrideSeatLimit(event.target.checked)}
-                        />
-                        Allow seat override when allotting
-                      </label>
                       <button
                         type="button"
                         className="btn btn-outline-blue text-xs"
@@ -3580,7 +3569,6 @@ export default function OrganizerDashboardPage() {
                                       committeeId: selectedCommitteeId,
                                       portfolioId:
                                         applicationTypeTab === "chair" ? undefined : selectedPortfolioId || undefined,
-                                      allowOverride: overrideSeatLimit,
                                     });
                                     if (!result.ok) toast.show(result.message, "error");
                                     else toast.show("Applicant allotted.", "success");
