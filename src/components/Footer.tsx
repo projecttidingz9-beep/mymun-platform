@@ -84,7 +84,7 @@ export default function Footer() {
         </div>
 
         <div className="mt-10 pt-6 border-t footer-bottom-row">
-          <p className="text-xs footer-copy">© 2026 Tidingz Technologies. All rights reserved.</p>
+          <p className="text-xs footer-copy">© 2026 Tidingz Event Solutions Private Limited. All rights reserved.</p>
           <p className="text-xs footer-copy">Built for global delegates and organizers.</p>
         </div>
       </div>
