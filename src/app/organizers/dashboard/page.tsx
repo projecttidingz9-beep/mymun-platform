@@ -2507,9 +2507,6 @@ export default function OrganizerDashboardPage() {
               <Link href="/organizers/create" className="btn btn-primary text-sm w-full sm:w-[320px] justify-center">
                 + Create New Conference
               </Link>
-              <Link href="/organizers/payments" className="btn btn-ghost text-sm w-full sm:w-[320px] justify-center">
-                Manual payments
-              </Link>
               {canAccessSuperDashboard(user?.role, user?.email) && (
                 <Link
                   href={SUPER_ADMIN_HREF}
@@ -2605,13 +2602,6 @@ export default function OrganizerDashboardPage() {
                   })}
                 </div>
               ))}
-              <div className="app-sidebar-section">
-                <span className="app-sidebar-section-label">Finance</span>
-                <Link href="/organizers/payments" className="app-sidebar-item">
-                  <span className="app-sidebar-item-icon" aria-hidden>💳</span>
-                  <span className="app-sidebar-item-label">Manual Payments</span>
-                </Link>
-              </div>
             </aside>
 
             <main className="min-w-0">
@@ -6127,17 +6117,6 @@ export default function OrganizerDashboardPage() {
                 })}
               </div>
             ))}
-            <div className="app-sidebar-section">
-              <span className="app-sidebar-section-label">Finance</span>
-              <Link
-                href="/organizers/payments"
-                className="app-sidebar-item"
-                onClick={() => setMobileNavOpen(false)}
-              >
-                <span className="app-sidebar-item-icon" aria-hidden>💳</span>
-                <span className="app-sidebar-item-label">Manual Payments</span>
-              </Link>
-            </div>
           </aside>
         </div>
       )}
