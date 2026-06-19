@@ -46,6 +46,39 @@ const PILLARS = [
   },
 ];
 
+const HERO_FEATURES = [
+  {
+    title: "Conference Marketplace",
+    body: "Discover and compare published MUN conferences worldwide.",
+    tag: "Delegates",
+  },
+  {
+    title: "Smart Registration",
+    body: "Apply by category, track status, and manage your season in one place.",
+    tag: "Delegates",
+  },
+  {
+    title: "Organizer Dashboard",
+    body: "Applications, committees, pricing phases, and team tools — unified.",
+    tag: "Organizers",
+  },
+  {
+    title: "Committee Builder",
+    body: "Agendas, documents, chairs, and allotments without spreadsheets.",
+    tag: "Organizers",
+  },
+  {
+    title: "QR Delegate Passes",
+    body: "Issue digital passes delegates can show at the gate instantly.",
+    tag: "Both",
+  },
+  {
+    title: "On-site Check-in",
+    body: "Scan passes from any browser — no extra hardware required.",
+    tag: "Organizers",
+  },
+] as const;
+
 const MARQUEE = [
   "THE HAGUE",
   "HARVARD MUN",
@@ -247,7 +280,7 @@ export default function HomePage() {
 
         <main className="flex-1">
         {/* ───── Hero ───── */}
-        <section className="relative lux-section min-h-[100dvh] flex items-center overflow-hidden">
+        <section className="relative lux-section min-h-[100dvh] overflow-hidden">
           <div className="absolute inset-0 lux-grain pointer-events-none" />
           <div
             aria-hidden
@@ -258,7 +291,7 @@ export default function HomePage() {
             }}
           />
 
-          <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 w-full pt-[calc(7rem+env(safe-area-inset-top,0px))] pb-16 sm:pb-20">
+          <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 w-full pt-[calc(7rem+env(safe-area-inset-top,0px))] pb-24 sm:pb-28">
             <motion.div
               initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
@@ -306,10 +339,10 @@ export default function HomePage() {
                 delay: 0.35,
                 ease: [0.2, 0.7, 0.2, 1],
               }}
-              className="lux-subdisplay max-w-xl mt-8"
+              className="lux-subdisplay max-w-2xl mt-8"
             >
-              A platform for the next generation of delegates and organizers.
-              Designed with restraint, engineered for performance.
+              Browse conferences, register as a delegate, or run your entire MUN — from
+              applications and committees to QR passes and check-in.
             </motion.p>
 
             <motion.div
@@ -353,6 +386,59 @@ export default function HomePage() {
                 Browse conferences
               </Link>
             </motion.div>
+
+            <motion.div
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{
+                duration: 1.1,
+                delay: 0.65,
+                ease: [0.2, 0.7, 0.2, 1],
+              }}
+              className="mt-14 max-w-5xl"
+            >
+              <p
+                className="lux-eyebrow mb-6"
+                style={{ color: "rgba(243,237,224,0.55)" }}
+              >
+                Everything in one platform
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+                {HERO_FEATURES.map((feature, i) => (
+                  <motion.div
+                    key={feature.title}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{
+                      duration: 0.85,
+                      delay: reduced ? 0 : 0.72 + i * 0.07,
+                      ease: [0.2, 0.7, 0.2, 1],
+                    }}
+                    className="lux-card p-4 sm:p-5 h-full"
+                    style={{ background: "rgba(11,13,18,0.72)" }}
+                  >
+                    <p
+                      className="text-[10px] font-semibold uppercase tracking-[0.22em]"
+                      style={{ color: "var(--accent-warm)" }}
+                    >
+                      {feature.tag === "Both" ? "Delegates & Organizers" : feature.tag}
+                    </p>
+                    <h3
+                      className="mt-2 text-sm sm:text-base font-semibold"
+                      style={{ color: "var(--fg-immersive)" }}
+                    >
+                      {feature.title}
+                    </h3>
+                    <p
+                      className="mt-2 text-xs sm:text-sm leading-relaxed"
+                      style={{ color: "rgba(243,237,224,0.68)" }}
+                    >
+                      {feature.body}
+                    </p>
+                  </motion.div>
+                ))}
+              </div>
+            </motion.div>
           </div>
 
           <motion.div
@@ -360,7 +446,7 @@ export default function HomePage() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 1.4, duration: 1 }}
-            className="absolute bottom-10 left-1/2 -translate-x-1/2 text-xs tracking-[0.3em] uppercase z-10"
+            className="absolute bottom-6 sm:bottom-10 left-1/2 -translate-x-1/2 text-xs tracking-[0.3em] uppercase z-10 pointer-events-none"
             style={{ color: "rgba(243,237,224,0.44)" }}
           >
             Scroll
