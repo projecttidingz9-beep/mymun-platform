@@ -8,7 +8,11 @@ import { resolve } from "node:path";
 dotenv.config({ path: resolve(process.cwd(), ".env.local") });
 dotenv.config();
 
+import { assertDestructiveSeedAllowed } from "./seed-guard";
+
 async function main() {
+  assertDestructiveSeedAllowed();
+
   const { prisma } = await import("../src/lib/server/prisma");
   const { hashPassword } = await import("../src/lib/server/password");
   const { issueDelegatePassForRegistration } = await import("../src/lib/server/issue-delegate-pass");
@@ -555,6 +559,31 @@ async function main() {
     delegates: delegates.map((d) => d.email),
     conference: `${eventId} /global-summit-mun-2026`,
   });
+
+  const envAdminEmail = (process.env.ADMIN_EMAIL || "").trim().toLowerCase();
+  if (envAdminEmail && envAdminEmail !== admin.email.toLowerCase()) {
+    const existing = await prisma.user.findUnique({
+      where: { email: envAdminEmail },
+      select: { id: true },
+    });
+    if (!existing) {
+      const seedAdminPassword = process.env.SEED_ADMIN_PASSWORD?.trim() || "TidingzDemo1";
+      const envAdminHash = await hashPassword(seedAdminPassword);
+      await prisma.user.create({
+        data: {
+          email: envAdminEmail,
+          name: envAdminEmail.split("@")[0] || "Admin",
+          role: "ADMIN",
+          passwordHash: envAdminHash,
+          emailVerified: true,
+        },
+      });
+      console.log(`Also created super-admin from ADMIN_EMAIL: ${envAdminEmail}`);
+      console.log(`  Password: ${seedAdminPassword} (set SEED_ADMIN_PASSWORD to override)`);
+    } else {
+      console.log(`ADMIN_EMAIL user already exists (not modified): ${envAdminEmail}`);
+    }
+  }
 
   await prisma.$disconnect();
 }

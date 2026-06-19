@@ -95,6 +95,7 @@ The workflow runs `npx prisma migrate deploy` then `npm run build`. Add a Vercel
 - [ ] `DATABASE_URL` and `DIRECT_URL` set in Vercel **and** local `.env` / `.env.local`.
 - [ ] `AUTH_SESSION_SECRET` / `PASS_QR_SECRET` are long random strings (not committed).
 - [ ] `ADMIN_EMAIL` is set (same value as in local; must match the account you use for `/admin`).
+- [ ] `NEXT_PUBLIC_ADMIN_EMAIL` matches `ADMIN_EMAIL` (Super Dashboard link in the UI).
 - [ ] **Do not** set `DATABASE_SSL_REJECT_UNAUTHORIZED` in Vercel **Production** (omit it so Postgres TLS is verified). Use that flag **only** in local `.env.local` if you hit corporate SSL inspection errors.
 - [ ] Mirror other keys from [`.env.example`](../.env.example) (`RESEND_*`, `PAYMENTS_MODE`, optional Supabase OAuth, Sentry) so preview/prod match launch needs.
 - [ ] `postinstall` runs `prisma generate` (see `package.json`).
@@ -113,6 +114,8 @@ BOOTSTRAP_ADMIN_EMAIL=you@example.com BOOTSTRAP_ADMIN_PASSWORD='your-secure-pass
 Optional: `BOOTSTRAP_ADMIN_NAME`. Do **not** commit `BOOTSTRAP_ADMIN_PASSWORD` or store it in Vercel env. After upsert, set `ADMIN_EMAIL` to the same address, redeploy, sign in on production, then open `/admin`.
 
 **Moderation workflow:** Organizers publish → `REVIEW` in the database. Super-admin uses `/admin` (Review queue) to **Approve** (`PUBLISHED`, marketplace-visible) or **Reject** (returns to `DRAFT` with optional feedback). Configure `RESEND_*` to email organizers on decisions.
+
+**Never run `npm run db:seed` against production `DATABASE_URL`.** The seed script deletes all users and events. Use a separate dev database for E2E, or pass `ALLOW_DESTRUCTIVE_SEED=true` only when you intentionally reset a non-production database. To restore super-admin after accidental wipe: `npm run bootstrap:admin` (see above).
 
 ## 10. Rollback
 
