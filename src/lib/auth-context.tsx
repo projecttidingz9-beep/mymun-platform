@@ -832,6 +832,8 @@ export type OrganizerConferenceSyncOptions = {
   syncStatus?: boolean;
   /** Override status sent to server (e.g. Published for publish while UI shows Review). */
   serverStatus?: OrganizerConference["status"];
+  /** When true, skip incomplete pricing phase validation before sync. */
+  skipPricingValidation?: boolean;
 };
 
 interface AuthContextType {
@@ -1252,11 +1254,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       conference: OrganizerConference,
       options?: OrganizerConferenceSyncOptions
     ): Promise<{ ok: boolean; error?: string }> => {
-      const incompletePhases = findIncompletePricingPhases(conference.registrationCategories || []);
-      if (incompletePhases.length > 0) {
-        const error = formatIncompletePricingPhasesMessage(incompletePhases);
-        setLastOrganizerSyncError(error);
-        return { ok: false, error };
+      if (!options?.skipPricingValidation) {
+        const incompletePhases = findIncompletePricingPhases(conference.registrationCategories || []);
+        if (incompletePhases.length > 0) {
+          const error = formatIncompletePricingPhasesMessage(incompletePhases);
+          setLastOrganizerSyncError(error);
+          return { ok: false, error };
+        }
       }
       try {
         const res = await fetch(`/api/organizers/conferences/${conference.id}/sync`, {
@@ -1307,7 +1311,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       syncOptions?.serverStatus !== undefined
         ? { ...target, status: syncOptions.serverStatus }
         : target;
-    void syncConferenceToServer(conferenceForSync, syncOptions);
+    void syncConferenceToServer(conferenceForSync, {
+      ...syncOptions,
+      skipPricingValidation: true,
+    });
   };
 
   const syncOrganizerConferenceById: AuthContextType["syncOrganizerConferenceById"] = async (
@@ -1354,7 +1361,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         options?.serverStatus !== undefined
           ? { ...target, status: options.serverStatus }
           : target;
-      return syncConferenceToServer(conferenceForSync, options);
+      return syncConferenceToServer(conferenceForSync, {
+        ...options,
+        skipPricingValidation: true,
+      });
     };
 
   const clearOrganizerSyncError = () => setLastOrganizerSyncError(null);

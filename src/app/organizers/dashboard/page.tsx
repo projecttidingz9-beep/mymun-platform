@@ -1246,7 +1246,7 @@ export default function OrganizerDashboardPage() {
         ? normalizeConferenceScheduleEntries(payload.config.conferenceSchedule)
         : scheduleToSave;
       setPreviewScheduleDraft(savedSchedule);
-      updateOrganizerConferenceConfig(selectedConference.id, {
+      const syncResult = await updateOrganizerConferenceConfigAsync(selectedConference.id, {
         title: previewDraft.title,
         city: previewDraft.city,
         country: previewDraft.country,
@@ -1279,9 +1279,13 @@ export default function OrganizerDashboardPage() {
           .filter(Boolean),
         conferenceSchedule: savedSchedule,
       });
-      const syncResult = await syncOrganizerConferenceById(selectedConference.id);
       if (!syncResult.ok) {
-        throw new Error(syncResult.error || "Saved locally but could not sync to the public MUN page.");
+        const isPricingIssue =
+          syncResult.error?.toLowerCase().includes("pricing") ||
+          syncResult.error?.toLowerCase().includes("phase");
+        if (!isPricingIssue) {
+          throw new Error(syncResult.error || "Saved locally but could not sync to the public MUN page.");
+        }
       }
       setPreviewSaveStatus("Changes saved and are live on the public MUN page.");
       toast.show("Conference settings saved.", "success");
@@ -1388,7 +1392,7 @@ export default function OrganizerDashboardPage() {
         }
       })
       .catch(() => null);
-  }, [selectedConference]);
+  }, [selectedConference?.id]);
 
   useEffect(() => {
     setPreviewScheduleDraft(parseConferenceScheduleEntries(selectedConference?.conferenceSchedule || []));
