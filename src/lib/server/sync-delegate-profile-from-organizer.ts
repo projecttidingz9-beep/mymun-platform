@@ -55,7 +55,7 @@ export function upsertParticipationInProfile(
   return {
     ...profile,
     munParticipations: nextParticipations,
-  } as Prisma.InputJsonValue;
+  } as unknown as Prisma.InputJsonValue;
 }
 
 export function appendAwardToProfile(
@@ -74,7 +74,7 @@ export function appendAwardToProfile(
       ...profile,
       munAwards: nextAwards,
       munAwardsSummary: nextSummary,
-    } as Prisma.InputJsonValue,
+    } as unknown as Prisma.InputJsonValue,
     summary: nextSummary,
   };
 }
