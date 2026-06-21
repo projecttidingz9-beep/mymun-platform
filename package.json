@@ -25,6 +25,7 @@
     "test:e2e": "playwright test",
     "test:e2e:prod": "playwright test e2e/production-smoke.spec.ts",
     "verify:env": "node scripts/verify-production-env.mjs",
+    "verify:prod-deploy": "node scripts/verify-production-deploy.mjs",
     "pre-launch:check": "node scripts/pre-launch-check.mjs",
     "brand:generate": "node scripts/generate-brand-pngs.mjs",
     "favicon:generate": "node scripts/generate-favicon.mjs",

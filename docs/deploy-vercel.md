@@ -71,14 +71,23 @@ Use `DIRECT_URL` in CI/local per [`prisma.config.ts`](../prisma.config.ts).
 ## 6. Post-deploy smoke test
 
 1. `GET /api/health` — must return `"ok":true` with `dbLatencyMs` (if `ok:false`, check `DATABASE_URL` / `AUTH_SESSION_SECRET` on Vercel and redeploy).
-2. Sign up / login / marketplace load.
-3. Forgot-password only sends mail when `RESEND_*` set (no reset URLs in logs).
+2. Run automated bundle check (confirms dashboard feature pack UI is live):
+
+```bash
+npm run verify:prod-deploy
+```
+
+This fetches `https://tidingz.com/organizers/dashboard` JS and asserts **Organiser Committee Applications**, **EB Applications**, and **no Waitlist button** are present. Override host with `PRODUCTION_URL=https://your-domain.com`.
+
+3. Sign up / login / marketplace load.
+4. Forgot-password only sends mail when `RESEND_*` set (no reset URLs in logs).
 
 Re-sync secrets from local after editing `.env.local`:
 
 ```bash
 node scripts/sync-vercel-env.mjs
 vercel deploy --prod --yes
+npm run verify:prod-deploy
 ```
 
 ## 7. GitHub tag release (migrations)
@@ -122,6 +131,31 @@ Optional: `BOOTSTRAP_ADMIN_NAME`. Do **not** commit `BOOTSTRAP_ADMIN_PASSWORD` o
 ## 10. Rollback
 
 Revert deployment in Vercel dashboard or redeploy previous Git tag. Schema rollback requires a **forward** migration — avoid destructive down migrations in prod.
+
+## 10a. Production branch and failed deploys
+
+- **Domain:** `tidingz.com` is aliased to the **`mymun-platform`** Vercel project (not the separate legacy `tidingz` project).
+- **Production branch:** must be **`master`** (this repo has no `main` branch). Settings → Git → Production Branch.
+- **Failed builds do not update the live site.** If a push shows **Error** in Vercel Deployments, production stays on the last **Ready** deployment until a later build succeeds. Always check deployment status after pushing — do not assume Git push = live site update.
+- **After every production deploy:** run `npm run verify:prod-deploy` and confirm Vercel shows **Ready** with `tidingz.com` in Aliases.
+
+### Deployment failure alerts (one-time setup)
+
+In **Vercel → mymun-platform → Settings → Notifications**:
+
+1. Enable email (or Slack) notifications for **Failed Production Deployment**.
+2. Optionally enable notifications for **Successful Production Deployment** during active release windows.
+
+### Required CI before merge (one-time setup)
+
+In **GitHub → braveshravan-cmd/mymun-platform → Settings → Branches → Branch protection rules** for `master`:
+
+1. Require status checks to pass before merging.
+2. Require the **CI** workflow (`validate` job) — runs lint, typecheck, tests, and `npm run build` on every push.
+
+This prevents TypeScript/build failures (like the `fdd396e` deploy error) from reaching `master` without a green CI run.
+
+Manual verification: **GitHub → Actions → CI** — latest run on commit `86d2f8e` (or current `master` HEAD) should be green.
 
 ## 11. Email verification (v1)
 
