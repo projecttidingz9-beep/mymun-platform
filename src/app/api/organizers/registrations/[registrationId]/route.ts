@@ -160,6 +160,17 @@ export async function PATCH(
   const wasPaid = registration.paid;
 
   if (paid === true && !wasPaid && organizerUser) {
+    const intent = await prisma.paymentIntent.findUnique({
+      where: { registrationId },
+      select: { provider: true },
+    });
+    if (intent?.provider === "CASHFREE") {
+      return NextResponse.json(
+        { error: "Cashfree payments are confirmed automatically and cannot be marked paid manually." },
+        { status: 400 }
+      );
+    }
+
     await prisma.paymentIntent.updateMany({
       where: { registrationId, status: "PENDING" },
       data: {

@@ -19,6 +19,8 @@ import { preferenceLabelForCommittee } from "@/lib/india-committee-presets";
 import { getMarketplaceConferences } from "@/lib/marketplace-conferences";
 import { formatMoney } from "@/lib/format-money";
 import { downloadRegistrationInvoicePdf } from "@/lib/client/invoice-pdf";
+import { createCashfreeOrder, openCashfreeCheckout } from "@/lib/client/cashfree-checkout";
+import { CONFERENCES_PATH } from "@/lib/paths";
 import { useToast } from "@/components/Toast";
 
 type Step = 1 | 2 | 3 | 4 | 5;
@@ -55,6 +57,8 @@ export default function CheckoutPage() {
   } | null>(null);
   const [checkoutConfigLoaded, setCheckoutConfigLoaded] = useState(false);
   const [submittedRegistration, setSubmittedRegistration] = useState<Registration | null>(null);
+  const [submittedPaymentIntentId, setSubmittedPaymentIntentId] = useState<string | null>(null);
+  const [payingOnline, setPayingOnline] = useState(false);
   const [delegationSchoolName, setDelegationSchoolName] = useState("");
   const [delegationMaxMembers, setDelegationMaxMembers] = useState("");
   const [delegationInviteLink, setDelegationInviteLink] = useState("");
@@ -220,6 +224,23 @@ export default function CheckoutPage() {
     );
   })();
 
+  const startOnlinePayment = async (paymentIntentId: string, amount: number) => {
+    if (amount <= 0) return;
+    setPayingOnline(true);
+    try {
+      const order = await createCashfreeOrder({
+        paymentIntentId,
+        eventId: organizerConference?.id ?? checkoutConfig?.eventId ?? String(params.id),
+        customerPhone: phone.trim(),
+      });
+      await openCashfreeCheckout(order.paymentSessionId);
+    } catch (error) {
+      toast.show(error instanceof Error ? error.message : "Could not start payment.", "error");
+    } finally {
+      setPayingOnline(false);
+    }
+  };
+
   const handlePay = async () => {
     if (!selectedCategory) return;
     setLoading(true);
@@ -261,6 +282,11 @@ export default function CheckoutPage() {
         code?: string;
         clientRegistration?: Registration;
         existingRegistrationId?: string;
+        registration?: {
+          paymentIntentId?: string;
+          paid?: boolean;
+          amount?: number;
+        };
       };
       if (res.status === 403 && payload.code === "EMAIL_NOT_VERIFIED") {
         setEmailVerifyBlocked(true);
@@ -299,6 +325,18 @@ export default function CheckoutPage() {
       }
       addRegistration(payload.clientRegistration);
       setSubmittedRegistration(payload.clientRegistration);
+      const paymentIntentId = payload.registration?.paymentIntentId ?? null;
+      setSubmittedPaymentIntentId(paymentIntentId);
+
+      const shouldPayOnline =
+        priceResult.amount > 0 &&
+        !payload.clientRegistration.paid &&
+        Boolean(paymentIntentId);
+
+      if (shouldPayOnline && paymentIntentId) {
+        await startOnlinePayment(paymentIntentId, priceResult.amount);
+      }
+
       setStep(5);
     } finally {
       setLoading(false);
@@ -345,8 +383,8 @@ export default function CheckoutPage() {
                 This conference may not be live yet or the link is invalid.
               </p>
               <div className="mt-6">
-                <Link href="/marketplace" className="btn btn-primary">
-                  Back to Marketplace
+                <Link href={CONFERENCES_PATH} className="btn btn-primary">
+                  Back to conferences
                 </Link>
               </div>
             </div>
@@ -759,7 +797,7 @@ export default function CheckoutPage() {
             <div className="card p-8 rounded-2xl space-y-4">
               <h2 className="text-xl font-bold" style={{ color: "var(--fg)" }}>Preview & confirm</h2>
               <p className="text-xs leading-relaxed" style={{ color: "var(--fg-muted)" }}>
-                Tidingz records your registration on our servers. Paid conferences use manual payment confirmation by default — complete payment using the instructions on the conference page after submitting.
+                Tidingz records your registration on our servers. Paid conferences are completed via secure online payment after you submit.
               </p>
               <div className="rounded-xl p-4 space-y-1" style={{ background: "var(--bg-subtle)", border: "1px solid var(--border)" }}>
                 <p className="text-sm font-semibold" style={{ color: "var(--fg)" }}>Review your submission</p>
@@ -790,7 +828,7 @@ export default function CheckoutPage() {
                     ? "Submitting..."
                     : priceResult.amount <= 0
                       ? "Confirm free registration"
-                      : `Submit registration (${resolvedFeeDisplay})`}
+                      : `Submit & pay (${resolvedFeeDisplay})`}
                 </button>
               </div>
             </div>
@@ -827,6 +865,20 @@ export default function CheckoutPage() {
                   Registered: {submittedRegistration.registeredAt}
                 </p>
               </div>
+              {!submittedRegistration.paid && submittedPaymentIntentId && submittedRegistration.amount > 0 && (
+                <button
+                  type="button"
+                  className="btn btn-primary w-full"
+                  disabled={payingOnline}
+                  onClick={() => {
+                    void startOnlinePayment(submittedPaymentIntentId, submittedRegistration.amount);
+                  }}
+                >
+                  {payingOnline
+                    ? "Opening payment..."
+                    : `Pay now (${formatMoney(submittedRegistration.amount, checkoutCurrency)})`}
+                </button>
+              )}
               <button
                 type="button"
                 className="btn btn-outline-blue w-full"

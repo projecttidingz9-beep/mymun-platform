@@ -8,7 +8,7 @@ import { CANONICAL_SITE_ORIGIN, getSiteUrl } from "@/lib/site-url";
 export function getAppConfig() {
   const rawMode = process.env.PAYMENTS_MODE?.toLowerCase();
   const paymentsMode: PaymentsMode =
-    rawMode === "free" || rawMode === "manual" ? rawMode : "manual";
+    rawMode === "free" || rawMode === "cashfree" ? rawMode : "cashfree";
 
   return {
     paymentsMode,

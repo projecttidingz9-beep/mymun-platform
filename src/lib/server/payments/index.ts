@@ -116,6 +116,29 @@ export async function createRegistrationAndPayment(params: {
     },
   });
 
+  if (paymentsMode === "cashfree") {
+    const pi = await prisma.paymentIntent.create({
+      data: {
+        registrationId: registration.id,
+        provider: "CASHFREE",
+        amount,
+        currency: params.currency,
+        status: "PENDING",
+        notes: "Awaiting Cashfree online payment",
+      },
+    });
+
+    return {
+      registrationId: registration.id,
+      paymentIntentId: pi.id,
+      provider: "CASHFREE",
+      paymentStatus: pi.status,
+      paid: false,
+      amount,
+      currency: params.currency,
+    };
+  }
+
   const pi = await prisma.paymentIntent.create({
     data: {
       registrationId: registration.id,

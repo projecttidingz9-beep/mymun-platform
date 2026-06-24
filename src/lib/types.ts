@@ -278,6 +278,7 @@ export interface OrganizerApplicant {
   paid: boolean;
   amount?: number;
   paymentIntentStatus?: "PENDING" | "CONFIRMED" | "REFUNDED" | "CANCELLED";
+  paymentProvider?: "FREE" | "MANUAL" | "CASHFREE";
   registrationId?: string;
   registeredAt?: string;
   userId?: string;

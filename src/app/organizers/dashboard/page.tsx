@@ -2264,6 +2264,7 @@ export default function OrganizerDashboardPage() {
           registeredAt: applicant.registeredAt || "N/A",
           refundStatus,
           paid: applicant.paid,
+          paymentProvider: applicant.paymentProvider,
         };
       })
       .filter((row) => {
@@ -4809,7 +4810,7 @@ export default function OrganizerDashboardPage() {
                                     </div>
                                   </div>
                                   <div className="flex justify-end gap-2 mt-2">
-                                    {!row.paid && selectedConference && (
+                                    {!row.paid && selectedConference && row.paymentProvider !== "CASHFREE" && (
                                       <button
                                         type="button"
                                         className="btn btn-primary text-xs"

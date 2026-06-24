@@ -211,7 +211,7 @@ export async function mapManagedEventToOrganizerConference(eventId: string): Pro
         where: { deletedAt: null },
         include: {
           user: { select: { name: true, email: true } },
-          paymentIntent: { select: { status: true } },
+          paymentIntent: { select: { status: true, provider: true } },
           applicationAnswers: { include: { question: true } },
         },
       },
@@ -412,6 +412,7 @@ export async function mapManagedEventToOrganizerConference(eventId: string): Pro
       assignedAt: reg.allottedAt?.toISOString(),
       paid: reg.paid,
       paymentIntentStatus: reg.paymentIntent?.status,
+      paymentProvider: reg.paymentIntent?.provider,
       amount: moneyNumber(reg.amount),
       responses,
       registrationId: reg.id,

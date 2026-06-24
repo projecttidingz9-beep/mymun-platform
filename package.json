@@ -34,6 +34,7 @@
     "cf:deploy": "opennextjs-cloudflare build && wrangler deploy"
   },
   "dependencies": {
+    "@cashfreepayments/cashfree-js": "^1.0.7",
     "@prisma/adapter-pg": "^7.7.0",
     "@prisma/client": "^7.7.0",
     "@react-three/drei": "^10.7.7",
@@ -43,6 +44,7 @@
     "@studio-freight/lenis": "^1.0.42",
     "@supabase/ssr": "^0.10.3",
     "@supabase/supabase-js": "^2.105.4",
+    "cashfree-pg": "^6.0.4",
     "framer-motion": "^12.38.0",
     "html5-qrcode": "^2.3.8",
     "jose": "^6.2.2",

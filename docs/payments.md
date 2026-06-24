@@ -5,19 +5,32 @@
 Configured via environment (`PAYMENTS_MODE` / related vars in `.env.example`):
 
 - **FREE**: zero-amount registrations without a payment step beyond confirmation.
-- **MANUAL**: delegates see organizer bank/UPI instructions; a **PaymentIntent** row tracks amount/status until finance confirms.
+- **cashfree**: paid registrations use Cashfree Payment Gateway (hosted checkout). All payments settle to the platform Tidingz merchant account.
 
-There is **no card gateway** in-repo; integrating Stripe/Razorpay would add a provider module under `src/lib/server/payments/` and new webhook routes.
+Legacy **MANUAL** intents may still exist in the database from before Cashfree; new registrations use **CASHFREE** or **FREE** only.
+
+## Cashfree setup
+
+1. Create a Cashfree merchant account and generate Payment Gateway API keys.
+2. Set in `.env.local` / Vercel:
+   - `CASHFREE_CLIENT_ID`
+   - `CASHFREE_CLIENT_SECRET`
+   - `CASHFREE_WEBHOOK_SECRET` (from Developers → Webhooks)
+   - `NEXT_PUBLIC_CASHFREE_MODE=sandbox` or `production`
+   - `PAYMENTS_MODE=cashfree`
+3. Configure webhook URL: `https://<your-domain>/api/webhooks/cashfree`
 
 ## APIs
 
-- **`POST /api/registrations`**: Creates/updates registration + payment intent from server-side pricing (`resolve-registration-price`).
-- **`GET /api/organizers/payment-intents/[eventId]`**: Organizer-only list of manual intents for reconciliation (`/organizers/payments` UI).
+- **`POST /api/registrations`**: Creates registration + payment intent (`FREE` or `CASHFREE`).
+- **`POST /api/payments/cashfree/orders`**: Creates a Cashfree order and returns `payment_session_id` for checkout.
+- **`GET /api/payments/cashfree/orders/[orderId]`**: Polls order status after redirect.
+- **`POST /api/webhooks/cashfree`**: Cashfree payment webhooks (signature-verified).
+- **`GET /api/organizers/payment-intents/[eventId]`**: Organizer payment list for reconciliation.
 
-## Operations
+## Flow
 
-1. Delegate completes checkout → `PaymentIntent` typically `PENDING`.
-2. Organizer verifies bank/UPI receipt offline.
-3. Future step: POST action to mark intent **CONFIRMED** and flip `Registration.paid` (partially automated today depending on branch).
-
-Keep audit-friendly notes in `PaymentIntent.notes` / `reference` when confirming manually.
+1. Delegate submits checkout → `PaymentIntent` with `provider: CASHFREE`, `status: PENDING`.
+2. Client opens Cashfree hosted checkout via `@cashfreepayments/cashfree-js`.
+3. Cashfree webhook (and return-page poll) confirms payment → `CONFIRMED`, `Registration.paid = true`.
+4. Delegate can download invoice; organizer sees payment in dashboard (no manual mark-as-paid for Cashfree).
