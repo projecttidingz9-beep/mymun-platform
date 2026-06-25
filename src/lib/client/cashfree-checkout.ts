@@ -19,11 +19,17 @@ export async function openCashfreeCheckout(paymentSessionId: string) {
   });
 }
 
-export async function createCashfreeOrder(params: {
-  paymentIntentId: string;
+type CashfreeOrderParams = {
   eventId: string;
   customerPhone?: string;
-}): Promise<{ paymentSessionId: string; orderId: string }> {
+} & (
+  | { paymentIntentId: string; registrationId?: never }
+  | { registrationId: string; paymentIntentId?: never }
+);
+
+async function requestCashfreeOrder(
+  params: CashfreeOrderParams
+): Promise<{ paymentSessionId: string; orderId: string }> {
   const res = await fetch("/api/payments/cashfree/orders", {
     method: "POST",
     credentials: "include",
@@ -45,4 +51,21 @@ export async function createCashfreeOrder(params: {
     paymentSessionId: payload.paymentSessionId,
     orderId: payload.orderId,
   };
+}
+
+export async function createCashfreeOrder(params: {
+  paymentIntentId: string;
+  eventId: string;
+  customerPhone?: string;
+}): Promise<{ paymentSessionId: string; orderId: string }> {
+  return requestCashfreeOrder(params);
+}
+
+export async function startPaymentForRegistration(params: {
+  registrationId: string;
+  eventId: string;
+  customerPhone?: string;
+}): Promise<void> {
+  const order = await requestCashfreeOrder(params);
+  await openCashfreeCheckout(order.paymentSessionId);
 }

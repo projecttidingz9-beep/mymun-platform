@@ -40,6 +40,22 @@ async function main() {
   }
   console.log("  /api/health ok");
 
+  const webhookGet = await fetch(`${baseUrl}/api/webhooks/cashfree`);
+  if (!webhookGet.ok) {
+    throw new Error(`/api/webhooks/cashfree GET returned ${webhookGet.status}`);
+  }
+  console.log("  /api/webhooks/cashfree GET ok");
+
+  const webhookPost = await fetch(`${baseUrl}/api/webhooks/cashfree`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: "{}",
+  });
+  if (!webhookPost.ok) {
+    throw new Error(`/api/webhooks/cashfree POST returned ${webhookPost.status}`);
+  }
+  console.log("  /api/webhooks/cashfree POST ok");
+
   const dashboardHtml = await fetchText(`${baseUrl}/organizers/dashboard`);
   const chunkPaths = extractChunkUrls(dashboardHtml);
   if (chunkPaths.length === 0) {

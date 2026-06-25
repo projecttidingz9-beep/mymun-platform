@@ -11,6 +11,8 @@ import { useToast } from "@/components/Toast";
 import { ensureServerSession } from "@/lib/client/session";
 import { useAuth } from "@/lib/auth-context";
 import { formatMoney } from "@/lib/format-money";
+import { startPaymentForRegistration } from "@/lib/client/cashfree-checkout";
+import { CONFERENCES_PATH } from "@/lib/paths";
 import {
   DelegateMunAward,
   DelegateMunParticipation,
@@ -154,6 +156,7 @@ export default function DashboardPage() {
   const [invoicePreviewRegistrationId, setInvoicePreviewRegistrationId] = useState<string | null>(null);
   const [verifyRedirectNotice, setVerifyRedirectNotice] = useState<{ tone: "success" | "error"; message: string } | null>(null);
   const [withdrawingRegistrationId, setWithdrawingRegistrationId] = useState<string | null>(null);
+  const [payingRegistrationId, setPayingRegistrationId] = useState<string | null>(null);
   const [withdrawNotice, setWithdrawNotice] = useState("");
   const [notificationPreferences, setNotificationPreferences] = useState<
     Array<{ notificationType: string; emailEnabled: boolean; inAppEnabled: boolean }>
@@ -725,6 +728,22 @@ export default function DashboardPage() {
     }
   };
 
+  const onPayRegistration = async (registration: Registration) => {
+    if (registration.paid || registration.amount <= 0) return;
+    setPayingRegistrationId(registration.id);
+    try {
+      await startPaymentForRegistration({
+        registrationId: registration.id,
+        eventId: registration.conferenceId,
+        customerPhone: user.phone,
+      });
+    } catch (error) {
+      toast.show(error instanceof Error ? error.message : "Could not start payment.", "error");
+    } finally {
+      setPayingRegistrationId(null);
+    }
+  };
+
   const onSaveNotificationPreferences = async () => {
     setNotificationPrefsStatus("");
     setNotificationPrefsSaving(true);
@@ -762,7 +781,7 @@ export default function DashboardPage() {
               </p>
             </div>
             <div className="app-header-actions">
-              <Link href="/marketplace" className="btn btn-primary text-sm">
+              <Link href={CONFERENCES_PATH} className="btn btn-primary text-sm">
                 + Find Conference
               </Link>
             </div>
@@ -887,7 +906,7 @@ export default function DashboardPage() {
                   <p className="text-5xl mb-4">🎓</p>
                   <h3 className="text-xl font-bold mb-2" style={{ color: "var(--fg)" }}>No conferences yet</h3>
                   <p className="app-subtitle mb-5">Start your MUN journey by finding your first conference.</p>
-                  <Link href="/marketplace" className="btn btn-primary text-sm">Browse Marketplace →</Link>
+                  <Link href={CONFERENCES_PATH} className="btn btn-primary text-sm">Browse conferences →</Link>
                 </div>
               ) : (
                 <div className="space-y-4">
@@ -974,6 +993,17 @@ export default function DashboardPage() {
                             </span>
                           </div>
                           <div className="flex gap-2 flex-wrap">
+                            {!reg.paid && reg.amount > 0 && reg.organizerStatus !== "Rejected" && (
+                              <button
+                                type="button"
+                                className="btn btn-primary text-xs"
+                                style={{ padding: "6px 14px", borderRadius: "8px" }}
+                                disabled={payingRegistrationId === reg.id}
+                                onClick={() => void onPayRegistration(reg)}
+                              >
+                                {payingRegistrationId === reg.id ? "Opening payment…" : "Pay now"}
+                              </button>
+                            )}
                             {!reg.paid && reg.organizerStatus !== "Rejected" && (
                               <button
                                 type="button"
@@ -1030,7 +1060,9 @@ export default function DashboardPage() {
                           </button>
                           {!reg.paid && (
                             <p className="text-xs" style={{ color: "var(--fg-muted)" }}>
-                              Invoice downloads after payment is confirmed.
+                              {reg.amount > 0
+                                ? "Complete payment to download your invoice."
+                                : "Invoice downloads after payment is confirmed."}
                             </p>
                           )}
                           {matchedPass ? (
@@ -1940,6 +1972,16 @@ export default function DashboardPage() {
                         >
                           {registration.paid ? "Download Invoice (PDF)" : "Invoice available after payment"}
                         </button>
+                        {!registration.paid && registration.amount > 0 && (
+                          <button
+                            type="button"
+                            className="btn btn-primary text-xs mt-2 w-full"
+                            disabled={payingRegistrationId === registration.id}
+                            onClick={() => void onPayRegistration(registration)}
+                          >
+                            {payingRegistrationId === registration.id ? "Opening payment…" : "Pay now"}
+                          </button>
+                        )}
                         {registration.paid && (
                           <button
                             className="btn btn-primary text-xs mt-2 w-full"

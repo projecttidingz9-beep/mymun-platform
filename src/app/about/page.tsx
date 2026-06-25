@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
+import { CONFERENCES_PATH } from "@/lib/paths";
 
 export const metadata: Metadata = {
   title: "About — Tidingz",
@@ -35,8 +36,8 @@ export default function AboutPage() {
           <section className="space-y-3">
             <h2 className="text-lg font-semibold">What we ship today</h2>
             <ul className="list-disc pl-5 text-sm space-y-2" style={{ color: "var(--fg-muted)" }}>
-              <li>Public marketplace of published conferences</li>
-              <li>Multi-step delegate registration and manual payment workflows</li>
+              <li>Public catalog of published conferences</li>
+              <li>Multi-step delegate registration and secure online payments via Cashfree</li>
               <li>Organizer dashboards with committee builder, applications, and team tools</li>
               <li>QR delegate passes and camera-based check-in</li>
               <li>Super-admin review queue for conference moderation</li>
@@ -67,7 +68,7 @@ export default function AboutPage() {
           </section>
 
           <div className="flex flex-wrap gap-3">
-            <Link href="/marketplace" className="btn btn-primary inline-flex">
+            <Link href={CONFERENCES_PATH} className="btn btn-primary inline-flex">
               Browse conferences
             </Link>
             <Link href="/organizers" className="btn inline-flex" style={{ border: "1.5px solid var(--border)" }}>

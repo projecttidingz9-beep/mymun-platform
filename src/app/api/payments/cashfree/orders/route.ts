@@ -6,6 +6,8 @@ import {
   CashfreeOrderError,
   createCashfreeOrderForPaymentIntent,
   isCashfreeConfigured,
+  parseCashfreeOrderRequest,
+  resolvePendingCashfreePaymentIntentId,
 } from "@/lib/server/payments/cashfree";
 
 export async function POST(request: NextRequest) {
@@ -23,13 +25,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = (await request.json()) as Record<string, unknown>;
-    const paymentIntentId = String(body.paymentIntentId || "").trim();
-    const eventSlugOrId = String(body.eventId || body.eventSlugOrId || "").trim();
-    const customerPhone = typeof body.customerPhone === "string" ? body.customerPhone : undefined;
-
-    if (!paymentIntentId || !eventSlugOrId) {
-      return NextResponse.json({ error: "paymentIntentId and eventId are required." }, { status: 400 });
-    }
+    const parsed = parseCashfreeOrderRequest(body);
 
     const user = await prisma.user.findUnique({
       where: { email: actor.email },
@@ -39,11 +35,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "User profile not found." }, { status: 400 });
     }
 
+    const paymentIntentId = await resolvePendingCashfreePaymentIntentId({
+      userId: user.id,
+      registrationId: parsed.registrationId,
+      paymentIntentId: parsed.paymentIntentId,
+    });
+
     const order = await createCashfreeOrderForPaymentIntent({
       paymentIntentId,
       userId: user.id,
-      customerPhone,
-      eventSlugOrId,
+      customerPhone: parsed.customerPhone,
+      eventSlugOrId: parsed.eventSlugOrId,
     });
 
     return NextResponse.json({

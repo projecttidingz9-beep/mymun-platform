@@ -8,6 +8,13 @@ export const metadata: Metadata = {
 
 const ENTRIES = [
   {
+    date: "2026-06-25",
+    title: "Cashfree payment gateway",
+    items: [
+      "Hosted Cashfree checkout for paid registrations, webhooks, and Pay now from delegate dashboard",
+    ],
+  },
+  {
     date: "2026-06-02",
     title: "Public launch readiness",
     items: [
@@ -29,7 +36,7 @@ const ENTRIES = [
     date: "2026-05-09",
     title: "Initial production platform",
     items: [
-      "Marketplace, delegate checkout, organizer dashboard, manual payments, QR passes, admin review queue",
+      "Marketplace, delegate checkout, organizer dashboard, QR passes, admin review queue",
     ],
   },
 ];

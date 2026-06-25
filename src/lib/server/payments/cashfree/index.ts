@@ -1,5 +1,11 @@
 export { getCashfreeClient, getCashfreeMode, isCashfreeConfigured, toCashfreeOrderId } from "./client";
-export { createCashfreeOrderForPaymentIntent, fetchCashfreeOrderStatus, CashfreeOrderError } from "./create-order";
+export {
+  createCashfreeOrderForPaymentIntent,
+  fetchCashfreeOrderStatus,
+  resolvePendingCashfreePaymentIntentId,
+  CashfreeOrderError,
+} from "./create-order";
+export { parseCashfreeOrderRequest } from "./order-request";
 export {
   verifyCashfreeWebhook,
   extractOrderIdFromWebhook,

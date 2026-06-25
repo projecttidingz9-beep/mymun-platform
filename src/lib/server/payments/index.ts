@@ -25,7 +25,7 @@ export type RegistrationCheckoutResult = {
 };
 
 /**
- * Creates registration row + payment intent using FREE or MANUAL drivers (no live gateway).
+ * Creates registration row + payment intent (FREE or Cashfree).
  * Payment does not imply allotment — status stays PENDING until organizer allots.
  */
 export async function createRegistrationAndPayment(params: {
@@ -116,44 +116,25 @@ export async function createRegistrationAndPayment(params: {
     },
   });
 
-  if (paymentsMode === "cashfree") {
-    const pi = await prisma.paymentIntent.create({
-      data: {
-        registrationId: registration.id,
-        provider: "CASHFREE",
-        amount,
-        currency: params.currency,
-        status: "PENDING",
-        notes: "Awaiting Cashfree online payment",
-      },
-    });
-
-    return {
-      registrationId: registration.id,
-      paymentIntentId: pi.id,
-      provider: "CASHFREE",
-      paymentStatus: pi.status,
-      paid: false,
-      amount,
-      currency: params.currency,
-    };
+  if (paymentsMode !== "cashfree") {
+    throw new Error(`Unsupported payments mode: ${paymentsMode}. Set PAYMENTS_MODE=cashfree or free.`);
   }
 
   const pi = await prisma.paymentIntent.create({
     data: {
       registrationId: registration.id,
-      provider: "MANUAL",
+      provider: "CASHFREE",
       amount,
       currency: params.currency,
       status: "PENDING",
-      notes: "Awaiting organizer confirmation of offline payment",
+      notes: "Awaiting Cashfree online payment",
     },
   });
 
   return {
     registrationId: registration.id,
     paymentIntentId: pi.id,
-    provider: "MANUAL",
+    provider: "CASHFREE",
     paymentStatus: pi.status,
     paid: false,
     amount,

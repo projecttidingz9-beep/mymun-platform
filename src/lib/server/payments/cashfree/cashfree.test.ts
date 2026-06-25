@@ -1,9 +1,46 @@
 import { describe, expect, it } from "vitest";
 import {
+  CashfreeOrderError,
+  parseCashfreeOrderRequest,
+} from "@/lib/server/payments/cashfree/order-request";
+import {
   extractOrderIdFromWebhook,
   isCashfreePaymentSuccess,
   isCashfreeWebhookConnectivityCheck,
 } from "@/lib/server/payments/cashfree/verify-webhook";
+
+describe("parseCashfreeOrderRequest", () => {
+  it("accepts registrationId and eventId", () => {
+    const parsed = parseCashfreeOrderRequest({
+      registrationId: "reg-123",
+      eventId: "conf-abc",
+      customerPhone: "9876543210",
+    });
+    expect(parsed).toEqual({
+      registrationId: "reg-123",
+      paymentIntentId: undefined,
+      eventSlugOrId: "conf-abc",
+      customerPhone: "9876543210",
+    });
+  });
+
+  it("accepts paymentIntentId as an alternative", () => {
+    const parsed = parseCashfreeOrderRequest({
+      paymentIntentId: "pi-456",
+      eventSlugOrId: "conf-abc",
+    });
+    expect(parsed.paymentIntentId).toBe("pi-456");
+    expect(parsed.eventSlugOrId).toBe("conf-abc");
+  });
+
+  it("requires registrationId or paymentIntentId", () => {
+    expect(() => parseCashfreeOrderRequest({ eventId: "conf-abc" })).toThrow(CashfreeOrderError);
+  });
+
+  it("requires eventId", () => {
+    expect(() => parseCashfreeOrderRequest({ registrationId: "reg-123" })).toThrow(CashfreeOrderError);
+  });
+});
 
 describe("cashfree webhook helpers", () => {
   it("extracts order id from nested webhook payload", () => {

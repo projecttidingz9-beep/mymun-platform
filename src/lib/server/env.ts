@@ -29,7 +29,6 @@ const ENV_KEYS_TO_NORMALIZE = [
   "PAYMENTS_MODE",
   "CASHFREE_CLIENT_ID",
   "CASHFREE_CLIENT_SECRET",
-  "CASHFREE_WEBHOOK_SECRET",
   "GOOGLE_CLIENT_ID",
   "NEXT_PUBLIC_GOOGLE_CLIENT_ID",
   "NEXT_PUBLIC_SUPABASE_URL",
@@ -94,7 +93,6 @@ const envSchema = z.object({
   ),
   CASHFREE_CLIENT_ID: optionalNonEmpty,
   CASHFREE_CLIENT_SECRET: optionalNonEmpty,
-  CASHFREE_WEBHOOK_SECRET: optionalNonEmpty,
   SENTRY_DSN: optionalNonEmpty,
   /** Same project DSN as `SENTRY_DSN` when you want browser error reporting (public). */
   NEXT_PUBLIC_SENTRY_DSN: optionalNonEmpty,
@@ -168,6 +166,5 @@ export const env = {
   sentryDsn: () => getParsedEnv().SENTRY_DSN,
   cashfreeClientId: () => getParsedEnv().CASHFREE_CLIENT_ID,
   cashfreeClientSecret: () => getParsedEnv().CASHFREE_CLIENT_SECRET,
-  cashfreeWebhookSecret: () => getParsedEnv().CASHFREE_WEBHOOK_SECRET,
   isProduction: () => getParsedEnv().NODE_ENV === "production",
 };
