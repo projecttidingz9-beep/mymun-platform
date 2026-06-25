@@ -103,6 +103,8 @@ if (
 
 if (!parsed.PAYMENTS_MODE) {
   parsed.PAYMENTS_MODE = "cashfree";
+} else {
+  parsed.PAYMENTS_MODE = parsed.PAYMENTS_MODE.toLowerCase();
 }
 
 if (parsed.ADMIN_EMAIL && !parsed.NEXT_PUBLIC_ADMIN_EMAIL) {

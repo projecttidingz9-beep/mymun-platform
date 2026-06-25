@@ -87,10 +87,10 @@ const envSchema = z.object({
   RESEND_API_KEY: optionalNonEmpty,
   RESEND_FROM_EMAIL: optionalNonEmpty,
   NEXT_PUBLIC_APP_URL: optionalNonEmpty,
-  PAYMENTS_MODE: z.preprocess(
-    normalizeEnvString,
-    z.enum(["free", "cashfree", "manual"]).optional()
-  ),
+  PAYMENTS_MODE: z.preprocess((val) => {
+    const normalized = normalizeEnvString(val);
+    return typeof normalized === "string" ? normalized.toLowerCase() : normalized;
+  }, z.enum(["free", "cashfree", "manual"]).optional()),
   CASHFREE_CLIENT_ID: optionalNonEmpty,
   CASHFREE_CLIENT_SECRET: optionalNonEmpty,
   SENTRY_DSN: optionalNonEmpty,
