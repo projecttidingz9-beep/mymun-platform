@@ -5,6 +5,15 @@ const nextConfig: NextConfig = {
   experimental: {
     optimizePackageImports: ["framer-motion", "lucide-react"],
   },
+  async redirects() {
+    return [
+      {
+        source: "/marketplace",
+        destination: "/conferences",
+        permanent: true,
+      },
+    ];
+  },
   images: {
     // Next/Image optimization on Vercel (disable again only if host lacks optimizer).
     remotePatterns: [

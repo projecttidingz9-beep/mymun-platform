@@ -343,8 +343,8 @@ export default function AuthModal({
         className="w-full max-w-md max-h-[min(92dvh,calc(100dvh-2rem))] overflow-hidden rounded-3xl my-auto animate-soft-scale"
         style={{
           background: "linear-gradient(180deg, color-mix(in srgb, var(--bg) 86%, #0f1218 14%), var(--bg))",
-          border: "1.5px solid color-mix(in srgb, var(--border) 70%, #d3b07f 30%)",
-          boxShadow: "0 24px 80px rgba(0,0,0,0.32)",
+          border: "1px solid var(--border)",
+          boxShadow: "var(--card-shadow)",
         }}
       >
         <div
@@ -356,7 +356,7 @@ export default function AuthModal({
           className="p-8 pb-6"
           style={{
             background: "linear-gradient(130deg, #151922 0%, #242d3b 65%, #2f3747 100%)",
-            borderBottom: "1px solid rgba(244, 226, 198, 0.2)",
+            borderBottom: "1px solid rgba(255, 255, 255, 0.08)",
           }}
         >
           <div className="flex items-center justify-between mb-6">
@@ -380,7 +380,7 @@ export default function AuthModal({
           </h2>
           <p className="text-[#f8f4ec]/72 text-sm mt-1">
             {tab === "signin"
-              ? "Sign in to your delegate account"
+              ? "Sign in to your Tidingz account"
               : "Create your account and start your MUN journey"}
           </p>
         </div>

@@ -7,6 +7,7 @@ import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { useAuth } from "@/lib/auth-context";
 import type { DelegationInvitePayload } from "@/lib/server/delegation-invite";
+import { CONFERENCES_PATH } from "@/lib/paths";
 
 type JoinDelegationClientProps = {
   token: string;
@@ -63,7 +64,7 @@ export default function JoinDelegationClient({
                 <p className="text-sm" style={{ color: "var(--fg-muted)" }}>
                   {error}
                 </p>
-                <Link href="/marketplace" className="btn btn-primary">
+                <Link href={CONFERENCES_PATH} className="btn btn-primary">
                   Browse conferences
                 </Link>
               </>

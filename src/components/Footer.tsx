@@ -1,10 +1,11 @@
 import Link from "next/link";
 import FooterBrandLogo from "@/components/FooterBrandLogo";
+import { CONFERENCES_PATH } from "@/lib/paths";
 
 const NAV_LINKS = [
   { label: "Home", href: "/" },
   { label: "About", href: "/about" },
-  { label: "Conferences", href: "/marketplace" },
+  { label: "Conferences", href: CONFERENCES_PATH },
   { label: "Contact", href: "/contact" },
 ];
 

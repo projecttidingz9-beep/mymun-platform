@@ -9,6 +9,7 @@ import Footer from "@/components/Footer";
 import AppRouteSkeleton from "@/components/AppRouteSkeleton";
 import { useAuth } from "@/lib/auth-context";
 import { DelegateMunAward, DelegateMunParticipation, User } from "@/lib/types";
+import { CONFERENCES_PATH } from "@/lib/paths";
 
 /** Keyed by delegate id so fetch state resets when the route param changes (no sync setState in effects). */
 export default function DelegateProfilePage() {
@@ -82,8 +83,8 @@ function DelegateProfileInner({ delegateId }: { delegateId: string }) {
                 This delegate profile is unavailable or may have been set to private.
               </p>
               <div className="flex justify-center gap-3 pt-2">
-                <Link href="/marketplace" className="btn btn-primary text-sm">
-                  Browse Marketplace
+                <Link href={CONFERENCES_PATH} className="btn btn-primary text-sm">
+                  Browse conferences
                 </Link>
                 <Link href="/dashboard" className="btn btn-ghost text-sm">
                   ← Back to Dashboard

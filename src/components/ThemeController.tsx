@@ -1,26 +1,19 @@
 "use client";
 
 import { useEffect } from "react";
-
-const THEME_STORAGE_KEY = "tidingz_dark";
-
-const applyTheme = (isDark: boolean) => {
-  document.documentElement.classList.toggle("dark", isDark);
-};
+import { applyThemeClass, readStoredThemeDark, THEME_STORAGE_KEY } from "@/lib/theme";
 
 export default function ThemeController() {
   useEffect(() => {
-    const stored = localStorage.getItem(THEME_STORAGE_KEY);
-    applyTheme(stored === "true");
+    applyThemeClass(readStoredThemeDark());
 
     const onStorage = (event: StorageEvent) => {
       if (event.key !== THEME_STORAGE_KEY) return;
-      applyTheme(event.newValue === "true");
+      applyThemeClass(event.newValue === "true");
     };
 
     const onThemeChanged = () => {
-      const latest = localStorage.getItem(THEME_STORAGE_KEY);
-      applyTheme(latest === "true");
+      applyThemeClass(readStoredThemeDark());
     };
 
     window.addEventListener("storage", onStorage);

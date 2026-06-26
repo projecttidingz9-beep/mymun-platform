@@ -13,6 +13,7 @@ import WebGLLoader from "@/components/3d/WebGLLoader";
 import { useAuth } from "@/lib/auth-context";
 import ConferenceCard from "@/components/ConferenceCard";
 import type { Conference } from "@/lib/types";
+import { CONFERENCES_PATH } from "@/lib/paths";
 
 const HeroScene = dynamic(() => import("@/components/3d/HeroScene"), {
   ssr: false,
@@ -32,34 +33,34 @@ const PILLARS = [
   {
     index: "01",
     title: "Discover",
-    body: "A curated marketplace of global MUN conferences, surfaced through intent, not noise.",
+    body: "Browse published MUN conferences and filter by dates, region, and level.",
   },
   {
     index: "02",
     title: "Prepare",
-    body: "Committee prep, portfolio tracking, and application tools — built for delegates who show up prepared.",
+    body: "Track applications, prep materials, and your registration status in one place.",
   },
   {
     index: "03",
     title: "Perform",
-    body: "Seamless registration, communication, and recognition — from first speech to final gavel.",
+    body: "Run registration, issue QR passes, and check in delegates on site.",
   },
 ];
 
 const HERO_FEATURES = [
   {
-    title: "Conference Marketplace",
+    title: "Conferences",
     body: "Discover and compare published MUN conferences worldwide.",
     tag: "Delegates",
   },
   {
     title: "Smart Registration",
-    body: "Apply by category, track status, and manage your season in one place.",
+    body: "Apply by category and track your status from your dashboard.",
     tag: "Delegates",
   },
   {
     title: "Organizer Dashboard",
-    body: "Applications, committees, pricing phases, and team tools — unified.",
+    body: "Manage applications, committees, pricing, and your team in one place.",
     tag: "Organizers",
   },
   {
@@ -74,20 +75,20 @@ const HERO_FEATURES = [
   },
   {
     title: "On-site Check-in",
-    body: "Scan passes from any browser — no extra hardware required.",
+    body: "Scan passes from any browser. No extra hardware required.",
     tag: "Organizers",
   },
 ] as const;
 
 const MARQUEE = [
-  "THE HAGUE",
-  "HARVARD MUN",
-  "GENEVA",
-  "SINGAPORE",
-  "DUMUN",
-  "BERMUN",
-  "WORLDMUN",
-  "OXFORD",
+  "CONFERENCES",
+  "REGISTRATION",
+  "DELEGATE PASSES",
+  "QR CHECK-IN",
+  "COMMITTEES",
+  "APPLICATIONS",
+  "ORGANIZER TOOLS",
+  "CONFERENCE OPS",
 ];
 
 const VEIL: React.CSSProperties = {
@@ -315,9 +316,7 @@ export default function HomePage() {
               className="lux-display-xl max-w-5xl"
               style={{ color: "var(--fg-immersive)" }}
             >
-              The quiet architecture
-              <br />
-              of{" "}
+              The future of{" "}
               <span
                 style={{
                   background:
@@ -327,7 +326,7 @@ export default function HomePage() {
                   color: "transparent",
                 }}
               >
-                modern diplomacy.
+                Model United Nations
               </span>
             </motion.h1>
 
@@ -341,8 +340,8 @@ export default function HomePage() {
               }}
               className="lux-subdisplay max-w-2xl mt-8"
             >
-              Browse conferences, register as a delegate, or run your entire MUN — from
-              applications and committees to QR passes and check-in.
+              Discover conferences, register as a delegate, or run your MUN from one
+              dashboard.
             </motion.p>
 
             <motion.div
@@ -362,19 +361,25 @@ export default function HomePage() {
                   className="lux-button-primary text-base w-full sm:w-auto inline-flex justify-center items-center min-h-[48px] touch-manipulation"
                   style={{ padding: "16px 34px" }}
                 >
-                  Begin your journey
+                  Create free account
                 </button>
               ) : (
                 <Link
-                  href={isOrganizerUser ? "/organizers/dashboard" : "/marketplace"}
+                  href={CONFERENCES_PATH}
                   className="lux-button-primary text-base w-full sm:w-auto inline-flex justify-center items-center min-h-[48px] touch-manipulation"
                   style={{ padding: "16px 34px" }}
                 >
-                  {isOrganizerUser ? "Go to organizer dashboard" : "Continue to marketplace"}
+                  Browse conferences
                 </Link>
               )}
               <Link
-                href="/marketplace"
+                href={
+                  isLoggedIn
+                    ? isOrganizerUser
+                      ? "/organizers/dashboard"
+                      : "/dashboard"
+                    : CONFERENCES_PATH
+                }
                 className="lux-button-ghost text-base w-full sm:w-auto inline-flex justify-center items-center min-h-[48px] touch-manipulation"
                 style={{
                   padding: "16px 30px",
@@ -383,7 +388,7 @@ export default function HomePage() {
                   background: "rgba(243,237,224,0.03)",
                 }}
               >
-                Browse conferences
+                {isLoggedIn ? "Open dashboard" : "Browse conferences"}
               </Link>
             </motion.div>
 
@@ -470,8 +475,8 @@ export default function HomePage() {
                 className="lux-display mt-6"
                 style={{ color: "var(--fg-immersive)" }}
               >
-                We believe diplomacy is a craft — practiced with patience,
-                precision, and presence.
+                Conference teams should spend time on diplomacy and logistics, not
+                copy-pasting applicant data across spreadsheets and chat apps.
               </h2>
             </Reveal>
             <Reveal delay={0.25}>
@@ -493,7 +498,7 @@ export default function HomePage() {
                 className="lux-display mt-6 max-w-3xl"
                 style={{ color: "var(--fg-immersive)" }}
               >
-                Three movements, one continuous arc.
+                One platform for your whole season
               </h2>
             </Reveal>
 
@@ -592,13 +597,13 @@ export default function HomePage() {
                     className="lux-display mt-6"
                     style={{ color: "var(--fg-immersive)" }}
                   >
-                    Curated conferences.
+                    Featured conferences
                   </h2>
                 </Reveal>
               </div>
               <Reveal delay={0.2}>
                 <Link
-                  href="/marketplace"
+                  href={CONFERENCES_PATH}
                   className="lux-button-ghost text-sm"
                   style={{
                     padding: "12px 22px",
@@ -637,8 +642,7 @@ export default function HomePage() {
                 className="lux-display-xl mt-8"
                 style={{ color: "var(--fg-immersive)" }}
               >
-                Step into the
-                <br />
+                Get started{" "}
                 <span
                   style={{
                     background:
@@ -648,14 +652,13 @@ export default function HomePage() {
                     color: "transparent",
                   }}
                 >
-                  next chapter.
+                  today
                 </span>
               </h2>
             </Reveal>
             <Reveal delay={0.2}>
               <p className="lux-subdisplay mt-8 max-w-xl mx-auto">
-                Create your account in a minute. Your next conference, and the
-                ones after, begin here.
+                Create your free account in a minute and start browsing conferences.
               </p>
             </Reveal>
             <Reveal delay={0.3}>
@@ -671,7 +674,7 @@ export default function HomePage() {
                   </button>
                 ) : (
                   <Link
-                    href={isOrganizerUser ? "/organizers/dashboard" : "/marketplace"}
+                    href={isOrganizerUser ? "/organizers/dashboard" : CONFERENCES_PATH}
                     className="lux-button-primary text-base w-full sm:w-auto inline-flex justify-center items-center min-h-[48px] touch-manipulation"
                     style={{ padding: "16px 34px" }}
                   >
@@ -703,8 +706,8 @@ export default function HomePage() {
             </Reveal>
             <Reveal delay={0.16}>
               <p className="lux-subdisplay mt-8 max-w-xl mx-auto">
-                Hosting a conference, exploring a partnership, or just have a
-                question? Our team typically responds within one business day.
+                Hosting a conference, exploring a partnership, or have a question?
+                Our team typically responds within one business day.
               </p>
             </Reveal>
             <Reveal delay={0.22}>
@@ -795,9 +798,7 @@ export default function HomePage() {
             </Reveal>
             <Reveal delay={0.08}>
               <h2 className="lux-display mt-6" style={{ color: "var(--fg-immersive)" }}>
-                Common questions,
-                <br />
-                clear answers.
+                Frequently asked questions
               </h2>
             </Reveal>
 
@@ -807,11 +808,11 @@ export default function HomePage() {
               {[
                 {
                   q: "Is Tidingz free for delegates?",
-                  a: "Yes. Creating an account and browsing the marketplace are free. You only pay when you register for a conference, at the fee set by the organizer.",
+                  a: "Yes. Creating an account and browsing conferences are free. You only pay when you register for a conference, at the fee set by the organizer.",
                 },
                 {
                   q: "How do I register for a conference?",
-                  a: "Browse the Marketplace, open a conference page, and click 'Apply Now'. Fill in your details, select a category, and complete payment. You will receive a confirmation email and can track your status from your dashboard.",
+                  a: "Browse conferences, open a conference page, and click 'Apply Now'. Fill in your details, select a category, and complete payment. You will receive a confirmation email and can track your status from your dashboard.",
                 },
                 {
                   q: "Can I host my conference on Tidingz?",
@@ -819,7 +820,7 @@ export default function HomePage() {
                 },
                 {
                   q: "How do delegate passes and QR codes work?",
-                  a: "Once an organizer allots and publishes passes, a QR code appears in your dashboard. Show it at the gate for instant check-in. Organizers can scan with any camera — no extra hardware needed.",
+                  a: "Once an organizer allots and publishes passes, a QR code appears in your dashboard. Show it at the gate for instant check-in. Organizers can scan with any camera. No extra hardware needed.",
                 },
               ].map((item, i) => (
                 <motion.div

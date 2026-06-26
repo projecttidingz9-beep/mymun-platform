@@ -1,5 +1,16 @@
 @import "tailwindcss";
 
+/* Brand logos: pre-paint theme script sets html.dark before first paint. */
+.brand-logo-dark {
+  display: none;
+}
+html.dark .brand-logo-light {
+  display: none;
+}
+html.dark .brand-logo-dark {
+  display: block;
+}
+
 :root {
   --bg: #f3f1ec;
   --bg-subtle: #ece8e2;

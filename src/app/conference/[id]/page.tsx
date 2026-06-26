@@ -17,6 +17,7 @@ import {
 } from "@/lib/public-conference-view";
 import { hasOrganizerConferenceAccess } from "@/lib/organizer-access";
 import AppRouteSkeleton from "@/components/AppRouteSkeleton";
+import { CONFERENCES_PATH } from "@/lib/paths";
 
 type Tab = "overview" | "committees" | "schedule" | "organizer" | "reviews";
 
@@ -178,11 +179,11 @@ export default function ConferenceDetailPage() {
             We couldn&apos;t find that conference.
           </h1>
           <Link
-            href="/marketplace"
+            href={CONFERENCES_PATH}
             className="lux-button-primary inline-block mt-8"
             style={{ padding: "12px 22px" }}
           >
-            Back to marketplace
+            Back to conferences
           </Link>
         </div>
       </div>
@@ -213,11 +214,11 @@ export default function ConferenceDetailPage() {
             We couldn&apos;t find that conference.
           </h1>
           <Link
-            href="/marketplace"
+            href={CONFERENCES_PATH}
             className="lux-button-primary inline-block mt-8"
             style={{ padding: "12px 22px" }}
           >
-            Back to marketplace
+            Back to conferences
           </Link>
         </div>
       </div>
@@ -546,8 +547,8 @@ export default function ConferenceDetailPage() {
               Home
             </Link>
             <span>·</span>
-            <Link href="/marketplace" className="transition-colors">
-              Marketplace
+            <Link href={CONFERENCES_PATH} className="transition-colors">
+              Conferences
             </Link>
             <span>·</span>
             <span style={{ color: "var(--fg)" }}>{displayTitle}</span>

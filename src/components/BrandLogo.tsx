@@ -1,9 +1,6 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useState } from "react";
-
-const THEME_STORAGE_KEY = "tidingz_dark";
 
 export type BrandLogoVariant = "horizontal" | "vertical" | "verticalCompact" | "icon";
 
@@ -31,13 +28,6 @@ function resolveSrc(variant: BrandLogoVariant, isDark: boolean): string {
   }
 }
 
-function readIsDark(): boolean {
-  if (typeof document === "undefined") return false;
-  const stored = localStorage.getItem(THEME_STORAGE_KEY);
-  const domDark = document.documentElement.classList.contains("dark");
-  return stored === null ? domDark : stored === "true";
-}
-
 /** Intrinsic dimensions for layout (images scale via className). */
 const DIMS: Record<
   BrandLogoVariant,
@@ -49,47 +39,23 @@ const DIMS: Record<
   icon: { width: 256, height: 256, alt: "Tidingz" },
 };
 
-export default function BrandLogo({
+function LogoImage({
   variant,
+  isDark,
   className,
   priority,
   sizes,
-  themeOverride,
-}: BrandLogoProps) {
-  const usesLiveTheme = themeOverride === undefined;
-
-  const [liveDark, setLiveDark] = useState(() =>
-    usesLiveTheme && typeof window !== "undefined" ? readIsDark() : false,
-  );
-
-  useEffect(() => {
-    if (!usesLiveTheme) return;
-
-    const sync = () => setLiveDark(readIsDark());
-
-    const onStorage = (event: StorageEvent) => {
-      if (event.key !== THEME_STORAGE_KEY) return;
-      sync();
-    };
-    const onThemeChanged = () => sync();
-
-    window.addEventListener("storage", onStorage);
-    window.addEventListener("tidingz-theme-change", onThemeChanged);
-    return () => {
-      window.removeEventListener("storage", onStorage);
-      window.removeEventListener("tidingz-theme-change", onThemeChanged);
-    };
-  }, [usesLiveTheme]);
-
-  const isDark =
-    themeOverride === "dark" ? true : themeOverride === "light" ? false : liveDark;
-
-  const src = resolveSrc(variant, isDark);
+}: {
+  variant: BrandLogoVariant;
+  isDark: boolean;
+  className?: string;
+  priority?: boolean;
+  sizes?: string;
+}) {
   const { width, height, alt } = DIMS[variant];
-
   return (
     <Image
-      src={src}
+      src={resolveSrc(variant, isDark)}
       alt={alt}
       width={width}
       height={height}
@@ -97,5 +63,65 @@ export default function BrandLogo({
       priority={priority}
       sizes={sizes}
     />
+  );
+}
+
+export default function BrandLogo({
+  variant,
+  className,
+  priority,
+  sizes,
+  themeOverride,
+}: BrandLogoProps) {
+  const { width, height, alt } = DIMS[variant];
+
+  if (themeOverride === "dark") {
+    return (
+      <LogoImage
+        variant={variant}
+        isDark
+        className={className}
+        priority={priority}
+        sizes={sizes}
+      />
+    );
+  }
+
+  if (themeOverride === "light") {
+    return (
+      <LogoImage
+        variant={variant}
+        isDark={false}
+        className={className}
+        priority={priority}
+        sizes={sizes}
+      />
+    );
+  }
+
+  const lightSrc = resolveSrc(variant, false);
+  const darkSrc = resolveSrc(variant, true);
+
+  return (
+    <span className="inline-flex items-center">
+      <Image
+        src={lightSrc}
+        alt={alt}
+        width={width}
+        height={height}
+        className={`brand-logo-light ${className ?? ""}`}
+        priority={priority}
+        sizes={sizes}
+      />
+      <Image
+        src={darkSrc}
+        alt={alt}
+        width={width}
+        height={height}
+        className={`brand-logo-dark ${className ?? ""}`}
+        priority={priority}
+        sizes={sizes}
+      />
+    </span>
   );
 }

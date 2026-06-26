@@ -7,6 +7,7 @@ import ThemeController from "@/components/ThemeController";
 import CookieConsent from "@/components/CookieConsent";
 import { ToastProvider } from "@/components/Toast";
 import { getSiteUrl } from "@/lib/site-url";
+import { THEME_INIT_SCRIPT } from "@/lib/theme";
 
 const siteUrl = getSiteUrl();
 
@@ -20,7 +21,7 @@ export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: "Tidingz — The Future of Model United Nations",
   description:
-    "Discover, organize, and participate in Model UN conferences worldwide. Marketplace, registration, delegate passes, QR check-in, and organizer dashboards — all in one platform.",
+    "Discover, organize, and participate in Model UN conferences worldwide. Conferences, registration, delegate passes, QR check-in, and organizer dashboards — all in one platform.",
   keywords: ["Model UN", "MUN", "conferences", "delegates", "resolution", "diplomacy"],
   alternates: {
     canonical: "/",
@@ -66,6 +67,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={inter.variable} suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+      </head>
       <body className="min-h-screen min-h-[100dvh] flex flex-col antialiased overflow-x-clip">
         <OrganizationJsonLd />
         <a href="#main-content" className="skip-link">

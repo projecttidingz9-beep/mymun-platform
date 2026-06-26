@@ -5,7 +5,7 @@ import { test, expect } from "@playwright/test";
  * Skips automatically when no `/conference/:id` links are rendered.
  */
 test("marketplace → conference detail when listings exist", async ({ page }) => {
-  await page.goto("/marketplace");
+  await page.goto("/conferences");
   await page.waitForLoadState("networkidle");
 
   const conferenceLinks = page.locator('a[href^="/conference/"]');

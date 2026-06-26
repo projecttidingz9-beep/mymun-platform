@@ -61,7 +61,7 @@ export default function MarketplacePage() {
     try {
       const res = await fetch("/api/marketplace", { signal });
       if (!res.ok) {
-        throw new Error("Could not load marketplace catalog.");
+        throw new Error("Could not load conferences catalog.");
       }
       const data = (await res.json()) as { conferences?: Conference[] };
       if (Array.isArray(data.conferences)) {
@@ -73,7 +73,7 @@ export default function MarketplacePage() {
       if (signal?.aborted) return;
       setCatalog([]);
       setCatalogError(
-        error instanceof Error ? error.message : "Could not load marketplace catalog."
+        error instanceof Error ? error.message : "Could not load conferences catalog."
       );
     } finally {
       if (!signal?.aborted) setCatalogLoading(false);
@@ -548,7 +548,7 @@ export default function MarketplacePage() {
         <div className="max-w-7xl mx-auto">
           <span className="lux-pill">
             <span className="lux-pill-dot" />
-            Global Marketplace
+            Conferences
           </span>
           <h1
             className="lux-display mt-8 max-w-4xl"

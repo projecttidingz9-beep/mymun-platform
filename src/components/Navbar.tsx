@@ -12,6 +12,8 @@ import {
   SUPER_ADMIN_HREF,
   SUPER_ADMIN_LABEL,
 } from "@/lib/admin-nav";
+import { CONFERENCES_PATH } from "@/lib/paths";
+import { THEME_STORAGE_KEY } from "@/lib/theme";
 
 function MenuIcon({ children }: { children: React.ReactNode }) {
   return (
@@ -29,11 +31,11 @@ function MenuIcon({ children }: { children: React.ReactNode }) {
 }
 
 const NAV_LINKS = [
-  { label: "Marketplace", href: "/marketplace" },
+  { label: "Conferences", href: CONFERENCES_PATH },
   { label: "For Organizers", href: "/organizers" },
   { label: "Dashboard", href: "/dashboard" },
 ];
-const INLINE_PRIORITY_HREFS = [SUPER_ADMIN_HREF, "/marketplace"];
+const INLINE_PRIORITY_HREFS = [SUPER_ADMIN_HREF, CONFERENCES_PATH];
 
 interface NavbarProps {
   openAuthModal?: () => void;
@@ -63,7 +65,7 @@ export default function Navbar({ openAuthModal }: NavbarProps) {
   useEffect(() => {
     const hydrationTimer = window.setTimeout(() => {
       setHydrated(true);
-      const storedTheme = localStorage.getItem("tidingz_dark");
+      const storedTheme = localStorage.getItem(THEME_STORAGE_KEY);
       const domDark = document.documentElement.classList.contains("dark");
       setDarkMode(storedTheme === null ? domDark : storedTheme === "true");
     }, 0);
@@ -72,12 +74,12 @@ export default function Navbar({ openAuthModal }: NavbarProps) {
 
   useEffect(() => {
     const syncThemeFromStorage = () => {
-      const storedTheme = localStorage.getItem("tidingz_dark");
+      const storedTheme = localStorage.getItem(THEME_STORAGE_KEY);
       const domDark = document.documentElement.classList.contains("dark");
       setDarkMode(storedTheme === null ? domDark : storedTheme === "true");
     };
     const onStorage = (event: StorageEvent) => {
-      if (event.key !== "tidingz_dark") return;
+      if (event.key !== THEME_STORAGE_KEY) return;
       syncThemeFromStorage();
     };
     const onThemeChanged = () => {
@@ -124,7 +126,7 @@ export default function Navbar({ openAuthModal }: NavbarProps) {
   const toggleDark = () => {
     const nextDark = !document.documentElement.classList.contains("dark");
     document.documentElement.classList.toggle("dark", nextDark);
-    localStorage.setItem("tidingz_dark", String(nextDark));
+    localStorage.setItem(THEME_STORAGE_KEY, String(nextDark));
     setDarkMode(nextDark);
     window.dispatchEvent(new Event("tidingz-theme-change"));
   };
@@ -147,7 +149,7 @@ export default function Navbar({ openAuthModal }: NavbarProps) {
     : NAV_LINKS;
   const visibleNavLinks = showLoggedInUi
     ? roleNavLinks.filter((link) => {
-        if (link.href === "/marketplace") {
+        if (link.href === CONFERENCES_PATH) {
           return currentRole !== "organizer";
         }
         if (link.href === "/dashboard") {
