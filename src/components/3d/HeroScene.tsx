@@ -136,9 +136,9 @@ function SceneContents({
             floatIntensity={reducedMotion ? 0 : lite ? 0.35 : 0.6}
             rotationIntensity={reducedMotion ? 0 : lite ? 0.2 : 0.35}
           >
-            <group position={lite ? [0, 0.2, 0] : [2.15, 0.1, 0]}>
+            <group position={lite ? [0, -0.8, 0] : [4.4, 0.05, 0]}>
               <BrandLogoMark
-                scale={lite ? 1.0 : 1.7}
+                scale={lite ? 0.85 : 1.35}
                 reducedMotion={reducedMotion}
                 lite={lite}
               />

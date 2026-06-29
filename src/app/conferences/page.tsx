@@ -538,7 +538,8 @@ export default function MarketplacePage() {
   );
 
   return (
-    <div className="marketplace-page min-h-[100dvh]" style={{ background: "var(--bg)", color: "var(--fg)" }}>
+    <div className="lux-shell lux-shell-immersive marketplace-page min-h-screen">
+      <div aria-hidden className="lux-backdrop" />
 
       <Navbar openAuthModal={() => setAuthOpen(true)} />
       <AuthModal isOpen={authOpen} onClose={() => setAuthOpen(false)} />
@@ -548,11 +549,11 @@ export default function MarketplacePage() {
         <div className="max-w-7xl mx-auto">
           <span className="lux-pill">
             <span className="lux-pill-dot" />
-            Conferences
+            Global marketplace
           </span>
           <h1
             className="lux-display mt-8 max-w-4xl"
-            style={{ color: "var(--fg)" }}
+            style={{ color: "var(--fg-immersive)" }}
           >
             Find your next{" "}
             <span className="text-gradient">

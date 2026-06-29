@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
@@ -13,7 +13,7 @@ import {
   SUPER_ADMIN_LABEL,
 } from "@/lib/admin-nav";
 import { CONFERENCES_PATH } from "@/lib/paths";
-import { THEME_STORAGE_KEY } from "@/lib/theme";
+import { applyThemeClass, readStoredThemeDark, THEME_STORAGE_KEY } from "@/lib/theme";
 
 function MenuIcon({ children }: { children: React.ReactNode }) {
   return (
@@ -51,7 +51,19 @@ export default function Navbar({ openAuthModal }: NavbarProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [authOpen, setAuthOpen] = useState(false);
   const [hydrated, setHydrated] = useState(false);
-  const [darkMode, setDarkMode] = useState(false);
+  const darkMode = useSyncExternalStore(
+    (onStoreChange) => {
+      const onTheme = () => onStoreChange();
+      window.addEventListener("tidingz-theme-change", onTheme);
+      window.addEventListener("storage", onTheme);
+      return () => {
+        window.removeEventListener("tidingz-theme-change", onTheme);
+        window.removeEventListener("storage", onTheme);
+      };
+    },
+    () => readStoredThemeDark(),
+    () => true
+  );
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement | null>(null);
 
@@ -63,34 +75,8 @@ export default function Navbar({ openAuthModal }: NavbarProps) {
   }, []);
 
   useEffect(() => {
-    const hydrationTimer = window.setTimeout(() => {
-      setHydrated(true);
-      const storedTheme = localStorage.getItem(THEME_STORAGE_KEY);
-      const domDark = document.documentElement.classList.contains("dark");
-      setDarkMode(storedTheme === null ? domDark : storedTheme === "true");
-    }, 0);
+    const hydrationTimer = window.setTimeout(() => setHydrated(true), 0);
     return () => window.clearTimeout(hydrationTimer);
-  }, []);
-
-  useEffect(() => {
-    const syncThemeFromStorage = () => {
-      const storedTheme = localStorage.getItem(THEME_STORAGE_KEY);
-      const domDark = document.documentElement.classList.contains("dark");
-      setDarkMode(storedTheme === null ? domDark : storedTheme === "true");
-    };
-    const onStorage = (event: StorageEvent) => {
-      if (event.key !== THEME_STORAGE_KEY) return;
-      syncThemeFromStorage();
-    };
-    const onThemeChanged = () => {
-      syncThemeFromStorage();
-    };
-    window.addEventListener("storage", onStorage);
-    window.addEventListener("tidingz-theme-change", onThemeChanged);
-    return () => {
-      window.removeEventListener("storage", onStorage);
-      window.removeEventListener("tidingz-theme-change", onThemeChanged);
-    };
   }, []);
 
   useEffect(() => {
@@ -125,9 +111,8 @@ export default function Navbar({ openAuthModal }: NavbarProps) {
 
   const toggleDark = () => {
     const nextDark = !document.documentElement.classList.contains("dark");
-    document.documentElement.classList.toggle("dark", nextDark);
+    applyThemeClass(nextDark);
     localStorage.setItem(THEME_STORAGE_KEY, String(nextDark));
-    setDarkMode(nextDark);
     window.dispatchEvent(new Event("tidingz-theme-change"));
   };
 

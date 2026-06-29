@@ -143,6 +143,16 @@ export default function HomePage() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
+    if (params.get("signin") === "1") {
+      openAuthModal();
+      const url = new URL(window.location.href);
+      url.searchParams.delete("signin");
+      window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+    }
+  }, [openAuthModal]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
     const error = params.get("error");
     if (!error) return;
     const detail = params.get("detail");
@@ -288,7 +298,7 @@ export default function HomePage() {
             className="absolute inset-0 pointer-events-none"
             style={{
               background:
-                "linear-gradient(to bottom, rgba(11,13,18,0.05) 0%, rgba(11,13,18,0.35) 55%, rgba(11,13,18,0.9) 100%)",
+                "linear-gradient(105deg, rgba(11,13,18,0.97) 0%, rgba(11,13,18,0.88) 38%, rgba(11,13,18,0.45) 62%, rgba(11,13,18,0.15) 100%)",
             }}
           />
 
@@ -297,11 +307,11 @@ export default function HomePage() {
               initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 1.1, ease: [0.2, 0.7, 0.2, 1] }}
-              className="mb-10"
+              className="mb-10 max-w-3xl"
             >
               <span className="lux-pill">
                 <span className="lux-pill-dot" />
-                Tidingz · Season 2026
+                Model UN Platform
               </span>
             </motion.div>
 
@@ -313,7 +323,7 @@ export default function HomePage() {
                 delay: 0.1,
                 ease: [0.2, 0.7, 0.2, 1],
               }}
-              className="lux-display-xl max-w-5xl"
+              className="lux-display-xl max-w-3xl relative z-20"
               style={{ color: "var(--fg-immersive)" }}
             >
               The future of{" "}

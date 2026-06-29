@@ -4,6 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { Conference } from "@/lib/types";
 import { resolveConferenceBannerImage } from "@/lib/conference-media";
+import { conferenceMonogram, conferencePlaceholderGradient } from "@/lib/conference-placeholder";
 import { formatMoney } from "@/lib/format-money";
 
 interface ConferenceCardProps {
@@ -42,12 +43,8 @@ export default function ConferenceCard({ conference: c }: ConferenceCardProps) {
   const bannerImageUrl = resolveConferenceBannerImage({ conference: c });
   const hasBanner = Boolean(bannerImageUrl);
   const hasLogo = Boolean(c.logoImageUrl);
-  const logoFallback = c.title
-    .split(" ")
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() || "")
-    .join("") || "MUN";
+  const logoFallback = conferenceMonogram(c.title);
+  const placeholderGradient = conferencePlaceholderGradient(c.title);
   const statusBadgeTone =
     c.statusBadgeLabel === "Event Ended"
       ? "badge-gray"
@@ -60,7 +57,16 @@ export default function ConferenceCard({ conference: c }: ConferenceCardProps) {
   return (
     <Link href={`/conference/${c.id}`} className="block group card rounded-[1.5rem] overflow-hidden cursor-pointer min-w-0">
       {/* Card Header / Color Banner */}
-      <div className={`relative h-36 ${hasBanner ? "" : `bg-gradient-to-br ${c.color}`} flex items-end p-5 overflow-hidden`}>
+      <div
+        className={`relative h-36 ${hasBanner ? "" : `bg-gradient-to-br ${c.color}`} flex items-end p-5 overflow-hidden`}
+        style={
+          !hasBanner
+            ? {
+                background: `linear-gradient(135deg, ${placeholderGradient.from}, ${placeholderGradient.to})`,
+              }
+            : undefined
+        }
+      >
         {hasBanner && bannerImageUrl && (
           <Image
             src={bannerImageUrl}
@@ -84,15 +90,31 @@ export default function ConferenceCard({ conference: c }: ConferenceCardProps) {
             backgroundSize: "40px 40px",
           }}
         />
+        {/* Decorative watermark when no custom banner/logo */}
+        {!hasBanner && !hasLogo && (
+          <div
+            aria-hidden
+            className="absolute inset-0 flex items-center justify-center pointer-events-none select-none"
+            style={{
+              fontSize: "5.5rem",
+              fontWeight: 900,
+              letterSpacing: "0.12em",
+              color: "rgba(255,255,255,0.08)",
+            }}
+          >
+            {logoFallback}
+          </div>
+        )}
         {/* Center logo */}
         <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[2]">
           <div
-            className="w-16 h-16 rounded-full overflow-hidden flex items-center justify-center text-sm font-black"
+            className="w-14 h-14 rounded-full overflow-hidden flex items-center justify-center text-xs font-black"
             style={{
-              background: hasLogo ? "rgba(11,13,18,0.8)" : "rgba(11,13,18,0.92)",
-              border: "2px solid rgba(243,237,224,0.7)",
-              boxShadow: "0 8px 24px rgba(0,0,0,0.42)",
-              color: "rgba(243,237,224,0.95)",
+              background: hasLogo ? "rgba(11,13,18,0.8)" : "rgba(255,255,255,0.14)",
+              border: "2px solid rgba(255,255,255,0.35)",
+              boxShadow: "0 8px 24px rgba(0,0,0,0.32)",
+              color: "rgba(255,255,255,0.95)",
+              backdropFilter: "blur(6px)",
             }}
             aria-label={`${c.title} logo`}
           >
@@ -101,11 +123,20 @@ export default function ConferenceCard({ conference: c }: ConferenceCardProps) {
                 src={c.logoImageUrl}
                 alt={`${c.title} logo`}
                 className="w-full h-full object-cover rounded-full"
-                width={64}
-                height={64}
+                width={56}
+                height={56}
               />
             ) : (
-              <span style={{ letterSpacing: "0.08em" }}>{logoFallback}</span>
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden>
+                <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.5" opacity="0.9" />
+                <path
+                  d="M4 12c2.5-4 5-6 8-6s5.5 2 8 6c-2.5 4-5 6-8 6s-5.5-2-8-6Z"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  opacity="0.75"
+                />
+                <path d="M4 12h16" stroke="currentColor" strokeWidth="1.5" opacity="0.5" />
+              </svg>
             )}
           </div>
         </div>

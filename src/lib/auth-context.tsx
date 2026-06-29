@@ -843,6 +843,7 @@ interface AuthContextType {
   authReady: boolean;
   /** Set when a protected API returns 401 mid-session — opens sign-in modal. */
   authModalOpen: boolean;
+  openAuthModal: () => void;
   dismissAuthModal: () => void;
   organizerConferences: OrganizerConference[];
   lastOrganizerSyncError: string | null;
@@ -1049,6 +1050,7 @@ const AuthContext = createContext<AuthContextType>({
   isLoggedIn: false,
   authReady: false,
   authModalOpen: false,
+  openAuthModal: () => {},
   dismissAuthModal: () => {},
   organizerConferences: [],
   lastOrganizerSyncError: null,
@@ -2202,6 +2204,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isLoggedIn: !!user,
         authReady,
         authModalOpen,
+        openAuthModal: () => setAuthModalOpen(true),
         dismissAuthModal: () => setAuthModalOpen(false),
         organizerConferences,
         lastOrganizerSyncError,

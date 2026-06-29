@@ -7,6 +7,7 @@ import Image from "next/image";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import AppRouteSkeleton from "@/components/AppRouteSkeleton";
+import SignInGate from "@/components/SignInGate";
 import { useToast } from "@/components/Toast";
 import { ensureServerSession } from "@/lib/client/session";
 import { useAuth } from "@/lib/auth-context";
@@ -68,7 +69,7 @@ const formatInvoiceAddress = (registration: Registration, userAddress?: {
 };
 
 export default function DashboardPage() {
-  const { user, isLoggedIn, authReady, notifications, markNotificationRead, updateDelegateProfile, logout, addRegistration } =
+  const { user, isLoggedIn, authReady, notifications, markNotificationRead, updateDelegateProfile, logout, addRegistration, openAuthModal } =
     useAuth();
   const toast = useToast();
   const router = useRouter();
@@ -167,11 +168,14 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!authReady) return;
-    if (!isLoggedIn) router.push("/");
-    if (isLoggedIn && user?.role === "organizer") {
+    if (!isLoggedIn) {
+      openAuthModal();
+      return;
+    }
+    if (user?.role === "organizer") {
       router.push("/organizers/dashboard");
     }
-  }, [authReady, isLoggedIn, router, user?.role]);
+  }, [authReady, isLoggedIn, openAuthModal, router, user?.role]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -268,8 +272,22 @@ export default function DashboardPage() {
     });
   }, [isLoggedIn, user]);
 
-  if (!authReady || !isLoggedIn || !user) {
+  if (!authReady) {
     return <AppRouteSkeleton />;
+  }
+
+  if (!isLoggedIn || !user) {
+    return (
+      <>
+        <Navbar />
+        <SignInGate
+          title="Sign in to your dashboard"
+          description="View your registrations, delegate passes, and conference updates."
+          onSignIn={openAuthModal}
+        />
+        <Footer />
+      </>
+    );
   }
 
   const registrations = user.registeredConferences;

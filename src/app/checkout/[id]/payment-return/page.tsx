@@ -23,7 +23,7 @@ export default function PaymentReturnPage() {
   useEffect(() => {
     if (!authReady) return;
     if (!isLoggedIn) {
-      router.replace(`/?next=${encodeURIComponent(`/checkout/${eventKey}/payment-return?order_id=${orderId}`)}`);
+      router.replace(`/?signin=1&next=${encodeURIComponent(`/checkout/${eventKey}/payment-return?order_id=${orderId}`)}`);
       return;
     }
     if (!orderId) {

@@ -6,6 +6,7 @@ import Link from "next/link";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import AppRouteSkeleton from "@/components/AppRouteSkeleton";
+import SignInGate from "@/components/SignInGate";
 import { useAuth } from "@/lib/auth-context";
 import {
   type Conference,
@@ -30,7 +31,7 @@ const createConfirmationId = () => `TZ-${Math.random().toString(36).slice(2, 8).
 export default function CheckoutPage() {
   const params = useParams();
   const router = useRouter();
-  const { isLoggedIn, user, authReady, addRegistration, organizerConferences } = useAuth();
+  const { isLoggedIn, user, authReady, addRegistration, organizerConferences, openAuthModal } = useAuth();
   const toast = useToast();
 
   const [step, setStep] = useState<Step>(1);
@@ -139,13 +140,13 @@ export default function CheckoutPage() {
   useEffect(() => {
     if (!authReady) return;
     if (!isLoggedIn) {
-      router.push("/");
+      openAuthModal();
       return;
     }
     if (user?.role === "organizer") {
       router.push(`/conference/${String(params.id)}`);
     }
-  }, [authReady, isLoggedIn, user?.role, router, params.id]);
+  }, [authReady, isLoggedIn, openAuthModal, user?.role, router, params.id]);
 
   const displayTitle = organizerConference?.title || marketplaceConference?.title || "Conference";
   const displayCity = organizerConference?.city || marketplaceConference?.city || "";
@@ -356,6 +357,22 @@ export default function CheckoutPage() {
 
   if (!authReady || (!organizerConference && !checkoutConfigLoaded)) {
     return <AppRouteSkeleton />;
+  }
+
+  if (!isLoggedIn) {
+    return (
+      <>
+        <Navbar />
+        <SignInGate
+          title="Sign in to register"
+          description={`Sign in or create an account to complete registration for ${displayTitle}.`}
+          onSignIn={openAuthModal}
+          backHref={`/conference/${eventKey}`}
+          backLabel="Back to conference"
+        />
+        <Footer />
+      </>
+    );
   }
 
   if (user?.role === "organizer") {

@@ -167,39 +167,46 @@ let paymentIntentId = "";
   }
 }
 
+// If delegate3 already registered, try delegates 4 and 5
 if (!paymentIntentId) {
-  // fallback: login delegate4
-  jar.clear();
-  const login = await api("/api/auth/login", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email: "delegate4@tidingz.demo", password: PASSWORD }),
-  });
-  if (!login.res.ok) fail("register", "Could not use alternate delegate", login.json);
-  registrationId = `reg-test-${Date.now()}`;
-  const reg = await api("/api/registrations", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      registrationId,
-      eventId: SEED_EVENT_ID,
-      categoryId,
-      categoryName: "Delegate Registration",
-      fullName: "Payment Test Delegate Four",
-      school: "Test School",
-      formAnswers: {
-        fullName: "Payment Test Delegate Four",
+  for (const [slug, phone, name] of [
+    ["delegate4@tidingz.demo", "9123456789", "Payment Test Delegate Four"],
+    ["delegate5@tidingz.demo", "9234567890", "Payment Test Delegate Five"],
+  ]) {
+    jar.clear();
+    const login = await api("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: slug, password: PASSWORD }),
+    });
+    if (!login.res.ok) continue;
+    registrationId = `reg-test-${Date.now()}`;
+    const reg = await api("/api/registrations", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        registrationId,
+        eventId: SEED_EVENT_ID,
+        categoryId,
+        categoryName: "Delegate Registration",
+        fullName: name,
         school: "Test School",
-        phone: "9123456789",
-      },
-      committeeConfigId: committeeId,
-      committeePreferences: [committeeId],
-    }),
-  });
-  if (!reg.res.ok) fail("register", "Alternate delegate registration failed", reg.json);
-  paymentIntentId = reg.json.registration?.paymentIntentId || "";
-  registrationId = reg.json.registration?.registrationId || registrationId;
-  ok("register", `delegate4 registrationId=${registrationId}`);
+        formAnswers: { fullName: name, school: "Test School", phone },
+        committeeConfigId: committeeId,
+        committeePreferences: [committeeId],
+      }),
+    });
+    if (reg.res.status === 409) {
+      ok("register", `${slug} already registered, trying next delegate`);
+      continue;
+    }
+    if (!reg.res.ok) fail("register", `Delegate ${slug} registration failed`, reg.json);
+    paymentIntentId = reg.json.registration?.paymentIntentId || "";
+    registrationId = reg.json.registration?.registrationId || registrationId;
+    ok("register", `${slug} registrationId=${registrationId}`);
+    break;
+  }
+  if (!paymentIntentId) fail("register", "All test delegates already registered. Re-seed the database.");
 }
 
 // 6. Phone validation rejects bad input

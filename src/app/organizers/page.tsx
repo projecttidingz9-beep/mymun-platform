@@ -10,29 +10,41 @@ import { useAuth } from "@/lib/auth-context";
 
 const FEATURES_FOR_ORGANIZERS = [
   {
+    icon: "🏛️",
     title: "Committee Builder",
     desc: "Create committees, agendas, documents, and chair assignments from one dashboard.",
   },
   {
+    icon: "📝",
     title: "Registration Ops",
     desc: "Manage categories, pricing phases, and incoming applications with clear status flow.",
   },
   {
+    icon: "🎫",
     title: "Allotments & Passes",
     desc: "Assign delegates to committees and issue passes with a streamlined organizer workflow.",
   },
   {
+    icon: "📣",
     title: "Announcements",
     desc: "Broadcast updates to delegates instantly without juggling external tools.",
   },
   {
+    icon: "📊",
     title: "Insights",
     desc: "Track seats, applications, and registration progress in real time.",
   },
   {
+    icon: "🚀",
     title: "Publishing Control",
     desc: "Draft safely and publish only when your conference is ready for the marketplace.",
   },
+];
+
+const ORGANIZER_STATS = [
+  { value: "1 dashboard", label: "Applications to check-in" },
+  { value: "QR passes", label: "No extra hardware" },
+  { value: "Cashfree", label: "Secure online payments" },
 ];
 
 export default function OrganizersPage() {
@@ -121,6 +133,21 @@ export default function OrganizersPage() {
         </div>
       </section>
 
+      <section className="relative lux-section py-10 px-4 sm:px-6 border-y" style={{ borderColor: "rgba(243,237,224,0.08)" }}>
+        <div className="max-w-5xl mx-auto grid sm:grid-cols-3 gap-6 text-center">
+          {ORGANIZER_STATS.map((stat) => (
+            <div key={stat.label}>
+              <p className="text-lg font-bold" style={{ color: "var(--fg-immersive)" }}>
+                {stat.value}
+              </p>
+              <p className="text-xs mt-1" style={{ color: "rgba(243,237,224,0.55)" }}>
+                {stat.label}
+              </p>
+            </div>
+          ))}
+        </div>
+      </section>
+
       <section className="relative lux-section py-16 sm:py-24 px-4 sm:px-6">
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-16">
@@ -139,10 +166,13 @@ export default function OrganizersPage() {
             {FEATURES_FOR_ORGANIZERS.map((feature, i) => (
               <Reveal key={feature.title} delay={i * 0.04}>
                 <div className="lux-card p-6 sm:p-7 h-full">
-                  <p className="text-xs font-semibold" style={{ color: "var(--accent-warm)", letterSpacing: "0.24em", textTransform: "uppercase" }}>
+                  <span className="text-2xl" aria-hidden>
+                    {feature.icon}
+                  </span>
+                  <p className="text-xs font-semibold mt-4" style={{ color: "var(--accent-warm)", letterSpacing: "0.24em", textTransform: "uppercase" }}>
                     {String(i + 1).padStart(2, "0")}
                   </p>
-                  <h3 className="mt-4 text-xl font-semibold" style={{ color: "var(--fg-immersive)" }}>
+                  <h3 className="mt-3 text-xl font-semibold" style={{ color: "var(--fg-immersive)" }}>
                     {feature.title}
                   </h3>
                   <p className="mt-3 text-sm leading-relaxed" style={{ color: "rgba(243,237,224,0.68)" }}>

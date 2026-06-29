@@ -43,34 +43,34 @@ export default function CookieConsent() {
 
   return (
     <div
-      className="fixed bottom-0 inset-x-0 z-[100] px-4 pt-4 pb-[max(1rem,env(safe-area-inset-bottom,0px))] flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between border-t"
+      className="fixed z-[100] bottom-4 left-4 right-4 sm:left-auto sm:right-4 sm:max-w-sm rounded-2xl border px-4 py-3 shadow-lg"
       style={{
-        background: "var(--bg)",
+        background: "color-mix(in srgb, var(--bg) 94%, transparent 6%)",
         borderColor: "var(--border)",
-        boxShadow: "0 -8px 32px rgba(0,0,0,0.15)",
+        backdropFilter: "blur(12px)",
+        WebkitBackdropFilter: "blur(12px)",
       }}
       role="dialog"
       aria-label="Cookie consent"
     >
-      <p className="text-xs sm:text-sm max-w-3xl leading-relaxed" style={{ color: "var(--fg-muted)" }}>
-        We use essential cookies for sign-in and security. Optional analytics are off until you accept. See our{" "}
+      <p className="text-xs leading-relaxed" style={{ color: "var(--fg-muted)" }}>
+        Essential cookies only until you opt in.{" "}
         <a href="/legal/cookies" className="underline">
           Cookie Policy
         </a>
-        .
       </p>
-      <div className="flex flex-col sm:flex-row gap-2 shrink-0 w-full sm:w-auto">
+      <div className="flex gap-2 mt-3">
         <button
           type="button"
-          className="btn text-sm px-6 py-3 min-h-[44px] w-full sm:w-auto"
-          style={{ border: "1.5px solid var(--border)" }}
+          className="btn text-xs px-3 py-2 min-h-[36px] flex-1"
+          style={{ border: "1px solid var(--border)" }}
           onClick={() => finish("rejected")}
         >
           Reject optional
         </button>
         <button
           type="button"
-          className="btn btn-primary text-sm px-6 py-3 min-h-[44px] w-full sm:w-auto"
+          className="btn btn-primary text-xs px-3 py-2 min-h-[36px] flex-1"
           onClick={() => finish("accepted")}
         >
           Accept
