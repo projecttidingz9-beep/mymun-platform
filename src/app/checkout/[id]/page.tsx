@@ -263,6 +263,7 @@ export default function CheckoutPage() {
           categoryName: selectedCategory.name,
           fullName: fullName.trim(),
           school: school.trim(),
+          phone: phone.trim(),
           committeeConfigId: selectedCommitteeId || undefined,
           committeeName: selectedCommittee?.name,
           committeePreferences: [selectedCommitteeId, secondPreferenceCommitteeId, thirdPreferenceCommitteeId].filter(

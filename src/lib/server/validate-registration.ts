@@ -5,6 +5,11 @@ import {
   resolveServerRegistrationAmount,
 } from "@/lib/server/resolve-registration-price";
 import { validateCountryPreferencesForCommittee } from "@/lib/server/country-preference-validation";
+import {
+  isValidIndianMobilePhone,
+  normalizeIndianMobilePhone,
+  parseIndianMobilePhone,
+} from "@/lib/server/validate-phone";
 
 export class RegistrationValidationError extends Error {
   constructor(message: string) {
@@ -57,6 +62,15 @@ export async function validateRegistrationRequest(body: Record<string, unknown>)
   if (!school) {
     throw new RegistrationValidationError("School/institution is required.");
   }
+
+  const phoneRaw = parseIndianMobilePhone(body);
+  if (!phoneRaw) {
+    throw new RegistrationValidationError("A valid 10-digit mobile number is required.");
+  }
+  if (!isValidIndianMobilePhone(phoneRaw)) {
+    throw new RegistrationValidationError("Enter a valid 10-digit Indian mobile number.");
+  }
+  const phone = normalizeIndianMobilePhone(phoneRaw);
 
   const committeePreferences = dedupeStrings(
     Array.isArray(body.committeePreferences)
@@ -149,6 +163,7 @@ export async function validateRegistrationRequest(body: Record<string, unknown>)
     pricing,
     fullName,
     school,
+    phone,
   };
 }
 

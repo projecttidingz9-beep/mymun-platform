@@ -13,7 +13,7 @@ export default function PaymentReturnPage() {
   const params = useParams();
   const searchParams = useSearchParams();
   const router = useRouter();
-  const { authReady, isLoggedIn } = useAuth();
+  const { authReady, isLoggedIn, refreshUserProfile } = useAuth();
   const eventKey = String(params.id || "");
   const orderId = searchParams.get("order_id")?.trim() || "";
 
@@ -55,6 +55,7 @@ export default function PaymentReturnPage() {
         if (payload.paid || payload.orderStatus?.toUpperCase() === "PAID") {
           setStatus("paid");
           setMessage("Payment successful. Your registration is confirmed.");
+          void refreshUserProfile();
           return;
         }
 
@@ -77,7 +78,7 @@ export default function PaymentReturnPage() {
     return () => {
       cancelled = true;
     };
-  }, [authReady, isLoggedIn, orderId, eventKey, router]);
+  }, [authReady, isLoggedIn, orderId, eventKey, router, refreshUserProfile]);
 
   if (!authReady) {
     return (

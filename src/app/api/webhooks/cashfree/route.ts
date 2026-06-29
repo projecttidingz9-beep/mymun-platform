@@ -36,9 +36,13 @@ export async function POST(request: NextRequest) {
     }
 
     if (isCashfreePaymentSuccess(event)) {
-      const result = await confirmPaymentByOrderId(orderId);
+      const result = await confirmPaymentByOrderId(orderId, { trustVerifiedWebhookSuccess: true });
       if (!result.ok) {
         logger.warn("cashfree_webhook_confirm_failed", { orderId, reason: result.reason });
+        return NextResponse.json(
+          { error: "Payment confirmation failed.", reason: result.reason },
+          { status: 500 }
+        );
       }
     }
 

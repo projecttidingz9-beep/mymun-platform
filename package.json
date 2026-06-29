@@ -24,6 +24,8 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "test:e2e:prod": "playwright test e2e/production-smoke.spec.ts",
+    "test:payment-flow": "node scripts/test-payment-flow.mjs",
+    "test:webhook": "node scripts/simulate-cashfree-webhook.mjs",
     "verify:env": "node scripts/verify-production-env.mjs",
     "verify:prod-deploy": "node scripts/verify-production-deploy.mjs",
     "pre-launch:check": "node scripts/pre-launch-check.mjs",

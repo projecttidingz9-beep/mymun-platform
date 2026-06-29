@@ -40,6 +40,25 @@ describe("parseCashfreeOrderRequest", () => {
   it("requires eventId", () => {
     expect(() => parseCashfreeOrderRequest({ registrationId: "reg-123" })).toThrow(CashfreeOrderError);
   });
+
+  it("rejects invalid customer phone", () => {
+    expect(() =>
+      parseCashfreeOrderRequest({
+        registrationId: "reg-123",
+        eventId: "evt-1",
+        customerPhone: "1234",
+      })
+    ).toThrow(CashfreeOrderError);
+  });
+
+  it("normalizes valid customer phone", () => {
+    const parsed = parseCashfreeOrderRequest({
+      registrationId: "reg-123",
+      eventId: "evt-1",
+      customerPhone: "+91 9876543210",
+    });
+    expect(parsed.customerPhone).toBe("9876543210");
+  });
 });
 
 describe("cashfree webhook helpers", () => {

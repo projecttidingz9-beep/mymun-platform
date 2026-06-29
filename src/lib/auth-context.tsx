@@ -855,6 +855,8 @@ interface AuthContextType {
   ) => Promise<LoginResult>;
   logout: () => void;
   addRegistration: (reg: Registration) => void;
+  /** Reload delegate registrations and notifications from /api/user/me. */
+  refreshUserProfile: () => Promise<void>;
   addOrganizerConference: (
     payload: Omit<OrganizerConference, "id" | "status" | "applicants" | "announcements">
   ) => Promise<{ ok: boolean; error?: string; code?: string }>;
@@ -1054,6 +1056,7 @@ const AuthContext = createContext<AuthContextType>({
   login: async () => ({ ok: false, failure: "network" as const }),
   logout: () => {},
   addRegistration: () => {},
+  refreshUserProfile: async () => {},
   addOrganizerConference: async () => ({ ok: false, error: "Not available." }),
   removeOrganizerConference: () => {},
   updateOrganizerConferenceStatus: () => {},
@@ -1392,7 +1395,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setNotifications([]);
   };
 
-  const addRegistration = () => {
+  const refreshUserProfile = React.useCallback(async () => {
+    await refreshUserAndNotifications();
+  }, [refreshUserAndNotifications]);
+
+  const addRegistration = (_reg?: Registration) => {
     void refreshUserAndNotifications();
     if (isOrganizerUser(user)) {
       void refetchMyEvents();
@@ -2202,6 +2209,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         login,
         logout,
         addRegistration,
+        refreshUserProfile,
         addOrganizerConference,
         removeOrganizerConference,
         updateOrganizerConferenceStatus,

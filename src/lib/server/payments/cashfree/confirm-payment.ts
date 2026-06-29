@@ -5,7 +5,10 @@ export type ConfirmPaymentResult =
   | { ok: true; alreadyConfirmed: boolean; registrationId: string }
   | { ok: false; reason: string };
 
-export async function confirmPaymentByOrderId(orderId: string): Promise<ConfirmPaymentResult> {
+export async function confirmPaymentByOrderId(
+  orderId: string,
+  options?: { trustVerifiedWebhookSuccess?: boolean }
+): Promise<ConfirmPaymentResult> {
   const normalizedOrderId = orderId.trim();
   if (!normalizedOrderId) {
     return { ok: false, reason: "Missing order id." };
@@ -34,16 +37,18 @@ export async function confirmPaymentByOrderId(orderId: string): Promise<ConfirmP
     return { ok: true, alreadyConfirmed: true, registrationId: intent.registrationId };
   }
 
-  let orderStatus: string | undefined;
-  try {
-    const order = await fetchCashfreeOrderStatus(normalizedOrderId);
-    orderStatus = order.order_status?.toUpperCase();
-  } catch {
-    return { ok: false, reason: "Could not verify order with Cashfree." };
-  }
+  if (!options?.trustVerifiedWebhookSuccess) {
+    let orderStatus: string | undefined;
+    try {
+      const order = await fetchCashfreeOrderStatus(normalizedOrderId);
+      orderStatus = order.order_status?.toUpperCase();
+    } catch {
+      return { ok: false, reason: "Could not verify order with Cashfree." };
+    }
 
-  if (orderStatus !== "PAID") {
-    return { ok: false, reason: `Order is not paid (status: ${orderStatus || "unknown"}).` };
+    if (orderStatus !== "PAID") {
+      return { ok: false, reason: `Order is not paid (status: ${orderStatus || "unknown"}).` };
+    }
   }
 
   await prisma.$transaction(async (tx) => {
