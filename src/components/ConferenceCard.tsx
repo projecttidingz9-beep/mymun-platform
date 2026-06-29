@@ -169,14 +169,15 @@ export default function ConferenceCard({ conference: c }: ConferenceCardProps) {
       {/* Card Body */}
       <div className="p-5 space-y-4">
         <div>
-          <div className="flex items-start justify-between gap-3 mb-1.5 min-w-0">
-            <h3
-              className="font-bold text-base leading-snug transition-colors group-hover:text-blue-600 line-clamp-2 min-w-0 flex-1"
-              style={{ color: "var(--fg)" }}
-            >
-              {c.title}
-            </h3>
-            <div className="flex items-center gap-1.5 flex-shrink-0 pt-0.5">
+          <h3
+            className="font-bold text-base leading-snug break-words transition-colors group-hover:text-blue-600 mb-1.5"
+            style={{ color: "var(--fg)" }}
+            title={c.title}
+          >
+            {c.title}
+          </h3>
+          {(c.featured || c.statusBadgeLabel) && (
+            <div className="flex flex-wrap items-center gap-1.5 mb-1.5">
               {c.featured && (
                 <span className="badge badge-gold text-[10px] px-2 py-0.5">Featured</span>
               )}
@@ -186,7 +187,7 @@ export default function ConferenceCard({ conference: c }: ConferenceCardProps) {
                 </span>
               )}
             </div>
-          </div>
+          )}
           <div className="flex flex-wrap items-center gap-2 text-xs" style={{ color: "var(--fg-muted)" }}>
             <span className="flex items-center gap-1">
               <svg width="11" height="11" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
