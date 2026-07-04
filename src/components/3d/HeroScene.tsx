@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import type { MutableRefObject } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Environment, Float } from "@react-three/drei";
@@ -101,38 +101,93 @@ function SceneController({
   return <group ref={groupRef} />;
 }
 
-/** God-ray plane sizes from BrandLogoMark, plus bloom pad. */
+/** God-ray plane sizes from BrandLogoMark, plus bloom pad for overflow checks. */
 const RAYS_SIZE_FULL = 5.8;
 const RAYS_SIZE_LITE = 4.2;
 const BLOOM_PAD = 1.25;
 const EDGE_MARGIN = 0.35;
 
-function computeMarkLayout(
+/** Pre-change desktop defaults — only shrink on narrow viewports. */
+const MARK_X_FULL = 4.4;
+const MARK_Y_FULL = 0.05;
+const MARK_SCALE_FULL = 1.35;
+const MARK_X_LITE = 0;
+const MARK_Y_LITE = -0.8;
+const MARK_SCALE_LITE = 0.85;
+
+function glowRadius(raysSize: number, scale: number): number {
+  return (raysSize * scale * BLOOM_PAD) / 2;
+}
+
+/**
+ * Start from the original fixed layout; clamp scale/position only when the
+ * padded glow would clip the viewport edges.
+ */
+function clampMarkLayout(
   width: number,
   height: number,
   lite: boolean,
 ): { scale: number; x: number; y: number } {
-  const fitSize = (lite ? RAYS_SIZE_LITE : RAYS_SIZE_FULL) * BLOOM_PAD;
-  const maxScale = lite ? 0.9 : 1.05;
-  const widthFactor = lite ? 0.7 : 0.42;
-  const scale = Math.min(
-    maxScale,
-    (width * widthFactor) / fitSize,
-    (height * 0.55) / fitSize,
-  );
-  const radius = (fitSize * scale) / 2;
-  const x = lite
-    ? 0
-    : Math.min(width * 0.22, width / 2 - radius - EDGE_MARGIN);
-  const y = lite ? -0.8 : 0.05;
-  return { scale, x, y };
+  const raysSize = lite ? RAYS_SIZE_LITE : RAYS_SIZE_FULL;
+  const baseY = lite ? MARK_Y_LITE : MARK_Y_FULL;
+  let scale = lite ? MARK_SCALE_LITE : MARK_SCALE_FULL;
+  let x = lite ? MARK_X_LITE : MARK_X_FULL;
+
+  if (width <= 0 || height <= 0) {
+    return { scale, x, y: baseY };
+  }
+
+  const halfW = width / 2;
+  const halfH = height / 2;
+  const minX = -halfW + EDGE_MARGIN;
+  const maxX = halfW - EDGE_MARGIN;
+  const minY = -halfH + EDGE_MARGIN;
+  const maxY = halfH - EDGE_MARGIN;
+
+  const fitsHeight = (s: number) => {
+    const r = glowRadius(raysSize, s);
+    return baseY - r >= minY && baseY + r <= maxY;
+  };
+
+  const fitsWidth = (s: number, posX: number) => {
+    const r = glowRadius(raysSize, s);
+    return posX - r >= minX && posX + r <= maxX;
+  };
+
+  while (scale > 0.2 && !fitsHeight(scale)) {
+    scale *= 0.96;
+  }
+
+  if (lite) {
+    while (scale > 0.2 && !fitsWidth(scale, x)) {
+      scale *= 0.96;
+    }
+    return { scale, x, y: baseY };
+  }
+
+  let r = glowRadius(raysSize, scale);
+  if (x + r > maxX) {
+    x = maxX - r;
+  }
+  if (x - r < minX) {
+    const maxScaleForWidth =
+      (2 * Math.min(x - minX, maxX - x)) / (raysSize * BLOOM_PAD);
+    scale = Math.min(scale, maxScaleForWidth);
+    r = glowRadius(raysSize, scale);
+    x = Math.min(MARK_X_FULL, maxX - r);
+    if (x - r < minX) {
+      scale = Math.min(scale, (2 * (maxX - minX)) / (raysSize * BLOOM_PAD));
+      r = glowRadius(raysSize, scale);
+      x = (minX + maxX) / 2;
+    }
+  }
+
+  return { scale, x, y: baseY };
 }
 
 /**
- * Positions and scales the brand mark from the live R3F viewport every frame
- * so the full glow stays on-screen (React viewport subscriptions can go stale).
- * World scale is applied on the outer group; BrandLogoMark keeps scale={1} so
- * its entrance animation still runs on the local group.
+ * Positions the brand mark from viewport size (updates on resize only).
+ * Scale lives on BrandLogoMark so entrance animation is not double-applied.
  */
 function ResponsiveBrandMark({
   tier,
@@ -141,23 +196,21 @@ function ResponsiveBrandMark({
   tier: Tier;
   reducedMotion: boolean;
 }) {
-  const groupRef = useRef<Group>(null);
   const lite = tier === "lite";
-
-  useFrame((state) => {
-    const group = groupRef.current;
-    if (!group) return;
-    const { width, height } = state.viewport;
-    if (width <= 0 || height <= 0) return;
-
-    const layout = computeMarkLayout(width, height, lite);
-    group.position.set(layout.x, layout.y, 0);
-    group.scale.setScalar(layout.scale);
-  });
+  const vw = useThree((state) => state.viewport.width);
+  const vh = useThree((state) => state.viewport.height);
+  const layout = useMemo(
+    () => clampMarkLayout(vw, vh, lite),
+    [vw, vh, lite],
+  );
 
   return (
-    <group ref={groupRef}>
-      <BrandLogoMark scale={1} reducedMotion={reducedMotion} lite={lite} />
+    <group position={[layout.x, layout.y, 0]}>
+      <BrandLogoMark
+        scale={layout.scale}
+        reducedMotion={reducedMotion}
+        lite={lite}
+      />
     </group>
   );
 }
@@ -204,7 +257,7 @@ function SceneContents({
         {!lite && (
           <EffectComposer multisampling={0} enableNormalPass={false}>
             <Bloom
-              intensity={0.85}
+              intensity={1.1}
               luminanceThreshold={0.3}
               luminanceSmoothing={0.22}
               mipmapBlur
