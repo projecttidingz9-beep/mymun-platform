@@ -10,6 +10,8 @@ vi.mock("@/lib/server/marketplace-public", () => ({
   mapPublishedEventToConference: vi.fn((event: { id: string }) => ({
     id: event.id,
     title: "Mapped",
+    description: "Full description",
+    committees: [{ id: "c1", name: "UNSC", abbreviation: "UNSC", difficulty: "Intermediate", size: 15, allottedCount: 0 }],
   })),
 }));
 
@@ -28,7 +30,25 @@ describe("GET /api/marketplace", () => {
     const res = await GET();
     expect(res.status).toBe(200);
     const body = (await res.json()) as { conferences: Array<{ id: string }> };
-    expect(body.conferences).toEqual([{ id: "evt-published", title: "Mapped" }]);
+    expect(body.conferences).toEqual([
+      {
+        id: "evt-published",
+        title: "Mapped",
+        description: "Full description",
+        committees: [
+          {
+            id: "c1",
+            name: "UNSC",
+            abbreviation: "UNSC",
+            topic1: "",
+            topic2: "",
+            difficulty: "Intermediate",
+            size: 15,
+            allottedCount: 0,
+          },
+        ],
+      },
+    ]);
     expect(getCachedPublishedCatalog).toHaveBeenCalledTimes(1);
     expect(mapPublishedEventToConference).toHaveBeenCalledTimes(1);
     expect(res.headers.get("Cache-Control")).toBe(MARKETPLACE_CATALOG_CACHE_CONTROL);
