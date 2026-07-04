@@ -54,6 +54,20 @@ export async function POST(
     return NextResponse.json({ error: "Recipient user not found." }, { status: 404 });
   }
 
+  // The organizer only has authority over *this* event — an award can only be recorded for a
+  // delegate who actually registered here, otherwise an organizer could inject fabricated award
+  // history onto any user's profile just by guessing/knowing their id or email.
+  const recipientRegistration = await prisma.registration.findFirst({
+    where: { eventId, userId: recipient.id },
+    select: { id: true },
+  });
+  if (!recipientRegistration) {
+    return NextResponse.json(
+      { error: "Recipient is not registered for this conference." },
+      { status: 403 }
+    );
+  }
+
   const event = await prisma.event.findUnique({
     where: { id: eventId },
     select: { startDate: true },

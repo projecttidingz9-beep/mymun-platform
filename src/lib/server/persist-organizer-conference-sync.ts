@@ -149,6 +149,11 @@ export async function persistOrganizerConferenceSync(
     const resolvedVenue =
       conference.venue?.trim() || venueFromParts || null;
 
+    const existingCfg = await tx.organizerConferenceConfig.findUnique({
+      where: { eventId },
+      select: { allocationMode: true },
+    });
+
     await tx.organizerConferenceConfig.update({
       where: { eventId },
       data: {
@@ -161,6 +166,16 @@ export async function persistOrganizerConferenceSync(
         twitterUrl: conference.socialLinks?.twitter ?? null,
         brandPrimaryColor: conference.brandPrimaryColor ?? null,
         brandSecondaryColor: conference.brandSecondaryColor ?? null,
+        portfolioMatrixVisibility: conference.portfolioMatrixVisibility === "PUBLIC" ? "PUBLIC" : "PRIVATE",
+        // Allocation mode is set once and immutable: ignore attempts to change it after it has a value.
+        ...(existingCfg?.allocationMode
+          ? {}
+          : conference.allocationMode === "PAY_FIRST" || conference.allocationMode === "ALLOT_FIRST"
+            ? { allocationMode: conference.allocationMode }
+            : {}),
+        ...(conference.paymentDeadlineDays != null
+          ? { paymentDeadlineDays: conference.paymentDeadlineDays }
+          : {}),
       },
     });
 
@@ -170,23 +185,37 @@ export async function persistOrganizerConferenceSync(
 
     if (conference.committees.length > 0) {
       await tx.committeeConfig.createMany({
-        data: conference.committees.map((c) => ({
-          id: c.id,
-          organizerConfigId: configRow.id,
-          name: c.name,
-          agenda: c.agenda,
-          type: c.type ?? c.committeeType ?? c.customTypeLabel ?? null,
-          committeeFormat: c.committeeFormat ?? null,
-          metadataJson: c.metadata ? JSON.stringify(c.metadata) : null,
-          positionPaperDeadline: c.positionPaperDeadline
-            ? new Date(c.positionPaperDeadline)
-            : null,
-          seatCount: c.seatCount,
-          basePrice: c.basePrice ?? null,
-          chairName: c.chairName ?? null,
-          chairEmail: c.chairEmail ?? null,
-          visibility: c.isPublic === false ? "PRIVATE" : "PUBLIC",
-        })),
+        data: conference.committees.map((c) => {
+          const noPortfolio = c.noPortfolio === true;
+          const derivedSeatCount = noPortfolio
+            ? c.seatCount
+            : (c.portfolios ?? []).length > 0
+              ? (c.portfolios ?? []).reduce((sum, p) => sum + (p.seatCount > 0 ? p.seatCount : 0), 0)
+              : c.seatCount;
+          return {
+            id: c.id,
+            organizerConfigId: configRow.id,
+            name: c.name,
+            agenda: c.agenda,
+            agendasJson:
+              c.additionalAgendas && c.additionalAgendas.length > 0
+                ? JSON.stringify(c.additionalAgendas)
+                : null,
+            type: c.type ?? c.committeeType ?? c.customTypeLabel ?? null,
+            committeeFormat: c.committeeFormat ?? null,
+            metadataJson: c.metadata ? JSON.stringify(c.metadata) : null,
+            // Position papers are retired — never write deadlines for the legacy column.
+            positionPaperDeadline: null,
+            logoImageUrl: c.logoImageUrl ?? null,
+            noPortfolio,
+            seatCount: derivedSeatCount > 0 ? derivedSeatCount : 1,
+            basePrice: c.basePrice ?? null,
+            chairName: c.chairs?.[0]?.name ?? c.chairName ?? null,
+            chairEmail: c.chairs?.[0]?.email ?? c.chairEmail ?? null,
+            chairsJson: c.chairs && c.chairs.length > 0 ? JSON.stringify(c.chairs) : null,
+            visibility: c.isPublic === false ? "PRIVATE" : "PUBLIC",
+          };
+        }),
       });
 
       const questionRows = conference.committees.flatMap((c) =>
@@ -240,10 +269,8 @@ export async function persistOrganizerConferenceSync(
         data: (conference.awards ?? []).map((award) => ({
           eventId,
           category: award.category || "General",
-          presetKey: award.presetKey ?? null,
           prizeTitle: award.prizeTitle || null,
-          sponsorLogoUrl: award.sponsorLogoUrl ?? null,
-          sponsorName: award.sponsorName ?? null,
+          amount: award.amount && award.amount > 0 ? award.amount : null,
           description: award.description ?? null,
           recipientRegistrationId: award.participantId ?? null,
           recipientUserId: award.participantUserId ?? null,

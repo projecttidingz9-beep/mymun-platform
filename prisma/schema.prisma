@@ -44,6 +44,8 @@ enum EventStatus {
   DRAFT
   REVIEW
   PUBLISHED
+  /** Temporarily hidden from the marketplace by a super admin, without deleting it — reversible. */
+  SUSPENDED
   ARCHIVED
   CANCELLED
 }
@@ -90,37 +92,47 @@ enum TeamRole {
   STAFF
 }
 
+/**
+ * Conference-level, set-once-and-immutable (see persist-organizer-conference-sync).
+ */
+enum AllocationMode {
+  PAY_FIRST
+  ALLOT_FIRST
+}
+
 model User {
-  id                     String                  @id @default(cuid())
-  email                  String                  @unique
-  name                   String
-  passwordHash           String?
-  role                   UserRole                @default(DELEGATE)
-  sessionVersion         Int                     @default(0)
-  failedLoginAttempts    Int                     @default(0)
-  lockedUntil            DateTime?
-  deletedAt              DateTime?
-  emailVerified          Boolean                 @default(false)
-  registrations          Registration[]
+  id                      String                       @id @default(cuid())
+  email                   String                       @unique
+  name                    String
+  passwordHash            String?
+  role                    UserRole                     @default(DELEGATE)
+  sessionVersion          Int                          @default(0)
+  failedLoginAttempts     Int                          @default(0)
+  lockedUntil             DateTime?
+  deletedAt               DateTime?
+  emailVerified           Boolean                      @default(false)
+  registrations           Registration[]
   emailVerificationTokens EmailVerificationToken[]
-  checkins               Checkin[]               @relation("CheckinBy")
-  notifications          Notification[]
-  passwordResetTokens    PasswordResetToken[]
-  createdPartnerships    EventPartnership[]      @relation("PartnershipCreatedBy")
-  respondedPartnerships  EventPartnership[]      @relation("PartnershipRespondedBy")
-  ownedEvents            Event[]                 @relation("EventOwner")
-  eventTeamMemberships   EventTeamMember[]
-  auditLogs              AuditLog[]
-  confirmedPaymentIntents PaymentIntent[]        @relation("PaymentConfirmedBy")
-  issuedCertificates     ParticipationCertificate[] @relation("CertificateIssuedBy")
-  delegationOwned        Delegation[]            @relation("DelegationOwner")
-  delegationMembers      DelegationMember[]
-  conferenceReviews      ConferenceReview[]
+  checkins                Checkin[]                    @relation("CheckinBy")
+  notifications           Notification[]
+  passwordResetTokens     PasswordResetToken[]
+  createdPartnerships     EventPartnership[]           @relation("PartnershipCreatedBy")
+  respondedPartnerships   EventPartnership[]           @relation("PartnershipRespondedBy")
+  ownedEvents             Event[]                      @relation("EventOwner")
+  eventTeamMemberships    EventTeamMember[]
+  auditLogs               AuditLog[]
+  confirmedPaymentIntents PaymentIntent[]              @relation("PaymentConfirmedBy")
+  issuedCertificates      ParticipationCertificate[]   @relation("CertificateIssuedBy")
+  delegationOwned         Delegation[]                 @relation("DelegationOwner")
+  delegationMembers       DelegationMember[]
+  conferenceReviews       ConferenceReview[]
   notificationPreferences UserNotificationPreference[]
-  /** Delegate-facing profile fields (JSON) — source of truth vs client-only localStorage. */
-  delegateProfile        Json?
-  createdAt              DateTime                @default(now())
-  updatedAt              DateTime                @updatedAt
+  /**
+   * Delegate-facing profile fields (JSON) — source of truth vs client-only localStorage.
+   */
+  delegateProfile         Json?
+  createdAt               DateTime                     @default(now())
+  updatedAt               DateTime                     @updatedAt
 }
 
 model PasswordResetToken {
@@ -150,48 +162,48 @@ model EmailVerificationToken {
 }
 
 model Event {
-  id                      String                  @id
-  title                   String
-  startDate               DateTime
-  endDate                 DateTime
-  slug                    String?                 @unique
-  status                  EventStatus             @default(DRAFT)
-  timezone                String?
-  currency                String?                 @default("INR")
-  coverImageUrl           String?
-  ownerUserId             String?
-  deletedAt               DateTime?
-  organizerConfig         OrganizerConferenceConfig?
-  registrations           Registration[]
-  passes                  DelegatePass[]
-  checkins                Checkin[]
-  notifications           Notification[]
-  outgoingPartnerships    EventPartnership[]      @relation("PartnershipSourceEvent")
-  incomingPartnerships    EventPartnership[]      @relation("PartnershipTargetEvent")
-  teamMembers             EventTeamMember[]
-  auditLogs               AuditLog[]
-  awards                  ConferenceAward[]
+  id                        String                     @id
+  title                     String
+  startDate                 DateTime
+  endDate                   DateTime
+  slug                      String?                    @unique
+  status                    EventStatus                @default(DRAFT)
+  timezone                  String?
+  currency                  String?                    @default("INR")
+  coverImageUrl             String?
+  ownerUserId               String?
+  deletedAt                 DateTime?
+  organizerConfig           OrganizerConferenceConfig?
+  registrations             Registration[]
+  passes                    DelegatePass[]
+  checkins                  Checkin[]
+  notifications             Notification[]
+  outgoingPartnerships      EventPartnership[]         @relation("PartnershipSourceEvent")
+  incomingPartnerships      EventPartnership[]         @relation("PartnershipTargetEvent")
+  teamMembers               EventTeamMember[]
+  auditLogs                 AuditLog[]
+  awards                    ConferenceAward[]
   participationCertificates ParticipationCertificate[]
-  reviews                 ConferenceReview[]
-  delegations             Delegation[]
-  positionPapers          PositionPaper[]
-  owner                   User?                   @relation("EventOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
-  createdAt               DateTime                @default(now())
-  updatedAt               DateTime                @updatedAt
+  reviews                   ConferenceReview[]
+  delegations               Delegation[]
+  positionPapers            PositionPaper[]
+  owner                     User?                      @relation("EventOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
+  createdAt                 DateTime                   @default(now())
+  updatedAt                 DateTime                   @updatedAt
 
   @@index([status, startDate])
 }
 
 model EventTeamMember {
-  id           String    @id @default(cuid())
-  eventId      String
-  userId       String
-  role         TeamRole  @default(STAFF)
-  permissions  Json?
-  invitedAt    DateTime?
-  acceptedAt   DateTime?
-  event        Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id          String    @id @default(cuid())
+  eventId     String
+  userId      String
+  role        TeamRole  @default(STAFF)
+  permissions Json?
+  invitedAt   DateTime?
+  acceptedAt  DateTime?
+  event       Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([eventId, userId])
   @@index([eventId])
@@ -219,7 +231,7 @@ model EventPartnership {
 
 /// Partial unique in DB: at most one row per (userId, eventId) where deletedAt IS NULL — see migration `Registration_userId_eventId_active_key`.
 model Registration {
-  id                       String             @id
+  id                       String                    @id
   userId                   String
   eventId                  String
   categoryId               String?
@@ -231,19 +243,32 @@ model Registration {
   portfolioPreferencesJson String?
   countryPreferencesJson   String?
   formAnswersJson          String?
-  amount                   Decimal            @db.Decimal(12, 2)
-  paid                     Boolean            @default(false)
-  status                   RegistrationStatus @default(PENDING)
+  amount                   Decimal                   @db.Decimal(12, 2)
+  paid                     Boolean                   @default(false)
+  status                   RegistrationStatus        @default(PENDING)
   allottedAt               DateTime?
-  checkedIn                Boolean            @default(false)
+  /**
+   * Allotment-release workflow: allotments are drafted (allottedAt set) but stay hidden from the delegate until the organizer explicitly releases the batch.
+   */
+  released                 Boolean                   @default(false)
+  releasedAt               DateTime?
+  /**
+   * Allot-first mode only: payment must be completed by this date or the allotment is auto-cancelled.
+   */
+  paymentDeadlineAt        DateTime?
+  /**
+   * Allot-first mode only: delegate explicitly declined their allotment instead of paying.
+   */
+  allotmentDeclinedAt      DateTime?
+  checkedIn                Boolean                   @default(false)
   checkedInAt              DateTime?
   delegationId             String?
-  isDelegationHead         Boolean            @default(false)
+  isDelegationHead         Boolean                   @default(false)
   deletedAt                DateTime?
-  user                     User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  event                    Event              @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  portfolio                Portfolio?         @relation(fields: [portfolioId], references: [id], onDelete: SetNull)
-  delegation               Delegation?        @relation(fields: [delegationId], references: [id], onDelete: SetNull)
+  user                     User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  event                    Event                     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  portfolio                Portfolio?                @relation(fields: [portfolioId], references: [id], onDelete: SetNull)
+  delegation               Delegation?               @relation(fields: [delegationId], references: [id], onDelete: SetNull)
   pass                     DelegatePass?
   checkins                 Checkin[]
   notifications            Notification[]
@@ -252,8 +277,8 @@ model Registration {
   participationCertificate ParticipationCertificate?
   positionPapers           PositionPaper[]
   documentAcknowledgments  DocumentAcknowledgment[]
-  createdAt                DateTime           @default(now())
-  updatedAt                DateTime           @updatedAt
+  createdAt                DateTime                  @default(now())
+  updatedAt                DateTime                  @updatedAt
 
   @@index([eventId])
   @@index([userId])
@@ -264,21 +289,21 @@ model Registration {
 }
 
 model PaymentIntent {
-  id                String               @id @default(cuid())
-  registrationId    String               @unique
+  id                String              @id @default(cuid())
+  registrationId    String              @unique
   provider          PaymentProvider
-  amount            Decimal              @db.Decimal(12, 2)
-  currency          String               @default("INR")
-  status            PaymentIntentStatus    @default(PENDING)
+  amount            Decimal             @db.Decimal(12, 2)
+  currency          String              @default("INR")
+  status            PaymentIntentStatus @default(PENDING)
   confirmedAt       DateTime?
   confirmedByUserId String?
   reference         String?
   notes             String?
   raw               Json?
-  registration      Registration         @relation(fields: [registrationId], references: [id], onDelete: Cascade)
-  confirmedBy       User?                @relation("PaymentConfirmedBy", fields: [confirmedByUserId], references: [id], onDelete: SetNull)
-  createdAt         DateTime             @default(now())
-  updatedAt         DateTime             @updatedAt
+  registration      Registration        @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+  confirmedBy       User?               @relation("PaymentConfirmedBy", fields: [confirmedByUserId], references: [id], onDelete: SetNull)
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
 }
 
 model DelegatePass {
@@ -335,72 +360,100 @@ model Notification {
 }
 
 model UserNotificationPreference {
-  id                String           @id @default(cuid())
-  userId            String
-  notificationType  NotificationType
-  emailEnabled      Boolean          @default(true)
-  inAppEnabled      Boolean          @default(true)
-  user              User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id               String           @id @default(cuid())
+  userId           String
+  notificationType NotificationType
+  emailEnabled     Boolean          @default(true)
+  inAppEnabled     Boolean          @default(true)
+  user             User             @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, notificationType])
 }
 
 model OrganizerConferenceConfig {
-  id                   String               @id @default(cuid())
-  eventId              String               @unique
-  description          String?
-  venue                String?
-  logoImageUrl         String?
-  bannerImageUrl       String?
-  websiteUrl           String?
-  instagramUrl         String?
-  linkedinUrl          String?
-  twitterUrl           String?
-  brandPrimaryColor    String?
-  brandSecondaryColor  String?
-  paymentUpi           String?
-  paymentBankHint      String?
-  paymentNotesMarkdown String?
-  event                  Event                      @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  committees             CommitteeConfig[]
-  registrationCategories RegistrationCategoryConfig[]
-  pricingPhases          PricingPhaseConfig[]
-  createdAt              DateTime                   @default(now())
-  updatedAt              DateTime                   @updatedAt
+  id                        String                       @id @default(cuid())
+  eventId                   String                       @unique
+  description               String?
+  venue                     String?
+  logoImageUrl              String?
+  bannerImageUrl            String?
+  websiteUrl                String?
+  instagramUrl              String?
+  linkedinUrl               String?
+  twitterUrl                String?
+  brandPrimaryColor         String?
+  brandSecondaryColor       String?
+  paymentUpi                String?
+  paymentBankHint           String?
+  paymentNotesMarkdown      String?
+  /**
+   * Organizer-configurable: whether delegates can see portfolio allotment status (taken/available) on the public Portfolio Matrix. Portfolio names are always visible.
+   */
+  portfolioMatrixVisibility CommitteeVisibility          @default(PRIVATE)
+  /**
+   * Set once at conference creation and immutable thereafter — see resolve-registration-price / allocation-mode enforcement.
+   */
+  allocationMode            AllocationMode?
+  paymentDeadlineDays       Int?
+  /**
+   * Super-admin-configured invoice template for this conference (data URL or hosted link).
+   * Deliberately NOT writable by the organizer PATCH endpoint — set only via the admin API.
+   */
+  invoiceTemplateUrl        String?
+  invoiceTemplateFileName   String?
+  event                     Event                        @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  committees                CommitteeConfig[]
+  registrationCategories    RegistrationCategoryConfig[]
+  pricingPhases             PricingPhaseConfig[]
+  createdAt                 DateTime                     @default(now())
+  updatedAt                 DateTime                     @updatedAt
 }
 
 model CommitteeConfig {
-  id                String                    @id @default(cuid())
-  organizerConfigId String
-  name              String
-  agenda            String
-  type              String?
-  committeeFormat   String?
-  metadataJson      String?
+  id                    String                    @id @default(cuid())
+  organizerConfigId     String
+  name                  String
+  agenda                String
+  type                  String?
+  committeeFormat       String?
+  metadataJson          String?
   positionPaperDeadline DateTime?
-  chairName         String?
-  chairEmail        String?
-  seatCount         Int
-  basePrice         Decimal?                  @db.Decimal(12, 2)
-  visibility        CommitteeVisibility       @default(PUBLIC)
-  organizerConfig   OrganizerConferenceConfig @relation(fields: [organizerConfigId], references: [id], onDelete: Cascade)
-  portfolios        Portfolio[]
-  questions         ApplicationQuestion[]
-  documents         CommitteeDocument[]
-  positionPapers    PositionPaper[]
-  createdAt         DateTime                  @default(now())
-  updatedAt         DateTime                  @updatedAt
+  chairName             String?
+  chairEmail            String?
+  /**
+   * JSON array of {id,name,email,role} — superset of chairName/chairEmail, which are kept for back-compat (first chair mirrored there).
+   */
+  chairsJson            String?
+  /**
+   * JSON array of additional agenda/topic strings beyond the primary `agenda` field.
+   */
+  agendasJson           String?
+  logoImageUrl          String?
+  /**
+   * International Press / Press Corps style: no named portfolios — delegates are selected directly into the committee. When true, `seatCount` is organizer-editable; otherwise it is derived from `portfolios`.
+   */
+  noPortfolio           Boolean                   @default(false)
+  seatCount             Int
+  basePrice             Decimal?                  @db.Decimal(12, 2)
+  visibility            CommitteeVisibility       @default(PUBLIC)
+  organizerConfig       OrganizerConferenceConfig @relation(fields: [organizerConfigId], references: [id], onDelete: Cascade)
+  portfolios            Portfolio[]
+  questions             ApplicationQuestion[]
+  documents             CommitteeDocument[]
+  positionPapers        PositionPaper[]
+  createdAt             DateTime                  @default(now())
+  updatedAt             DateTime                  @updatedAt
 }
 
 model Portfolio {
-  id          String          @id @default(cuid())
-  committeeId String
-  name        String
-  seatCount   Int             @default(1)
-  committee   CommitteeConfig @relation(fields: [committeeId], references: [id], onDelete: Cascade)
+  id            String          @id @default(cuid())
+  committeeId   String
+  name          String
+  seatCount     Int             @default(1)
+  committee     CommitteeConfig @relation(fields: [committeeId], references: [id], onDelete: Cascade)
   registrations Registration[]
-  createdAt   DateTime        @default(now())
-  updatedAt   DateTime        @updatedAt
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
 
   @@unique([committeeId, name])
   @@index([committeeId])
@@ -440,15 +493,15 @@ model ParticipationCertificate {
 }
 
 model ApplicationQuestion {
-  id          String           @id @default(cuid())
+  id          String              @id @default(cuid())
   committeeId String?
   label       String
   type        String
-  required    Boolean          @default(false)
+  required    Boolean             @default(false)
   optionsJson String?
-  committee   CommitteeConfig? @relation(fields: [committeeId], references: [id], onDelete: Cascade)
+  committee   CommitteeConfig?    @relation(fields: [committeeId], references: [id], onDelete: Cascade)
   answers     ApplicationAnswer[]
-  createdAt   DateTime         @default(now())
+  createdAt   DateTime            @default(now())
 }
 
 model ApplicationAnswer {
@@ -469,7 +522,7 @@ model PricingPhaseConfig {
   name               String
   startDate          DateTime
   endDate            DateTime
-  basePrice          Decimal                @db.Decimal(12, 2)
+  basePrice          Decimal                   @db.Decimal(12, 2)
   committeePriceJson String?
   organizerConfig    OrganizerConferenceConfig @relation(fields: [organizerConfigId], references: [id], onDelete: Cascade)
   createdAt          DateTime                  @default(now())
@@ -507,20 +560,24 @@ model RateLimitBucket {
 }
 
 model ConferenceAward {
-  id                       String   @id @default(cuid())
-  eventId                  String
-  category                 String
-  presetKey                String?
-  prizeTitle               String?
-  sponsorLogoUrl           String?
-  sponsorName              String?
-  description              String?
-  recipientRegistrationId  String?
-  recipientUserId          String?
-  recipientDelegationId    String?
-  participantName          String?
-  createdAt                DateTime @default(now())
-  event                    Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  id                      String   @id @default(cuid())
+  eventId                 String
+  category                String
+  presetKey               String?
+  prizeTitle              String?
+  /// deprecated — sponsor fields removed from UI; kept nullable for legacy data
+  sponsorLogoUrl          String?
+  /// deprecated — sponsor fields removed from UI; kept nullable for legacy data
+  sponsorName             String?
+  /// Optional, blank by default; shown below the award once filled in.
+  amount                  Decimal? @db.Decimal(12, 2)
+  description             String?
+  recipientRegistrationId String?
+  recipientUserId         String?
+  recipientDelegationId   String?
+  participantName         String?
+  createdAt               DateTime @default(now())
+  event                   Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
 
   @@index([eventId])
   @@index([recipientRegistrationId])
@@ -543,18 +600,18 @@ model ConferenceReview {
 }
 
 model Delegation {
-  id           String             @id @default(cuid())
-  eventId      String
-  inviteToken  String             @unique
-  name         String?
-  schoolName   String?
-  maxMembers   Int?
-  status       DelegationStatus   @default(OPEN)
-  ownerUserId  String
-  createdAt    DateTime           @default(now())
-  event        Event              @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  owner        User               @relation("DelegationOwner", fields: [ownerUserId], references: [id], onDelete: Cascade)
-  members      DelegationMember[]
+  id            String             @id @default(cuid())
+  eventId       String
+  inviteToken   String             @unique
+  name          String?
+  schoolName    String?
+  maxMembers    Int?
+  status        DelegationStatus   @default(OPEN)
+  ownerUserId   String
+  createdAt     DateTime           @default(now())
+  event         Event              @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  owner         User               @relation("DelegationOwner", fields: [ownerUserId], references: [id], onDelete: Cascade)
+  members       DelegationMember[]
   registrations Registration[]
 
   @@index([eventId])
@@ -593,16 +650,16 @@ model PositionPaper {
 }
 
 model CommitteeDocument {
-  id          String          @id @default(cuid())
-  committeeId String
-  title       String
-  category    String
-  fileUrl     String
-  version     String?
-  publishedAt DateTime        @default(now())
-  createdAt   DateTime        @default(now())
-  updatedAt   DateTime        @updatedAt
-  committee   CommitteeConfig @relation(fields: [committeeId], references: [id], onDelete: Cascade)
+  id              String                   @id @default(cuid())
+  committeeId     String
+  title           String
+  category        String
+  fileUrl         String
+  version         String?
+  publishedAt     DateTime                 @default(now())
+  createdAt       DateTime                 @default(now())
+  updatedAt       DateTime                 @updatedAt
+  committee       CommitteeConfig          @relation(fields: [committeeId], references: [id], onDelete: Cascade)
   acknowledgments DocumentAcknowledgment[]
 
   @@index([committeeId])

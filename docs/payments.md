@@ -55,6 +55,28 @@ node scripts/simulate-cashfree-webhook.mjs tid_pi_abc123 http://localhost:3000
 
 Cashfree sandbox test card: `4111111111111111`, CVV `123`, any future expiry.
 
+## Cashfree test conference (₹10)
+
+Create or refresh a published mock MUN on production (non-destructive upsert):
+
+```bash
+npm run create:cashfree-test-mun
+```
+
+This creates **Cashfree Test MUN** (`cashfree-test-mun`) with delegate registration at **₹10**. Optional env: `CASHFREE_TEST_ORGANIZER_EMAIL` (default `organizer1@tidingz.demo`).
+
+After running:
+
+1. Sign in as a delegate at `https://tidingz.com`
+2. Open `https://tidingz.com/checkout/cashfree-test-mun`
+3. Complete registration and pay with the sandbox test card above (or a real ₹10 payment in production mode)
+
+Verify API:
+
+```bash
+curl -s https://tidingz.com/api/marketplace/cashfree-test-mun/checkout-config
+```
+
 ## Limitations
 
 - Cashfree refunds are recorded in the database only; the Cashfree Refund API is not called automatically from the organizer dashboard.

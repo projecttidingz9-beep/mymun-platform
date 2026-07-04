@@ -4,9 +4,18 @@ export interface Committee {
   abbreviation: string;
   topic1: string;
   topic2: string;
+  /** All configured agenda/topic strings, in order (topic1/topic2 are kept for back-compat display). */
+  agendas?: string[];
   difficulty: "Beginner" | "Intermediate" | "Advanced";
   size: number;
   allottedCount?: number;
+  logoImageUrl?: string;
+  chairs?: OrganizerCommitteeChair[];
+  /** International Press / Press Corps style: no named portfolios, delegates are selected directly into the committee. */
+  noPortfolio?: boolean;
+  /** Whether the public Portfolio Matrix shows allotment status color-coding for this conference. */
+  portfolioMatrixVisibility?: "PUBLIC" | "PRIVATE";
+  portfolios?: Array<{ id: string; name: string; seatCount: number; taken?: boolean }>;
 }
 
 export interface CommitteePricingInfo {
@@ -18,7 +27,10 @@ export interface CommitteePricingInfo {
 export interface OrganizerCommittee {
   id: string;
   name: string;
+  /** Primary/first agenda topic. */
   agenda: string;
+  /** Additional agenda/topic strings beyond the primary one (organizer can add via "+" in Edit Details). */
+  additionalAgendas?: string[];
   description?: string;
   logoImageUrl?: string;
   committeeType?: "UN" | "NON_UN" | "CUSTOM";
@@ -30,9 +42,11 @@ export interface OrganizerCommittee {
     crisisEnabled?: boolean;
     pressBeatRequired?: boolean;
   };
+  /** @deprecated Position papers removed — kept optional for legacy blob reads only. */
   positionPaperDeadline?: string;
   // Backward-compatible display type persisted by older records.
   type?: string;
+  /** Derived from portfolios' seat counts unless `noPortfolio` is true. */
   seatCount: number;
   allottedCount?: number;
   basePrice?: number;
@@ -40,6 +54,8 @@ export interface OrganizerCommittee {
   chairEmail?: string;
   chairs?: OrganizerCommitteeChair[];
   isPublic?: boolean;
+  /** International Press / Press Corps style: no named portfolios — delegates are selected directly into the committee. */
+  noPortfolio?: boolean;
   customQuestions?: OrganizerCommitteeQuestion[];
   portfolios?: OrganizerCommitteePortfolio[];
   documents?: OrganizerDocument[];
@@ -165,6 +181,10 @@ export interface PublicConferenceDetail extends Conference {
     category: string;
     prizeTitle?: string;
     description?: string;
+    amount?: number;
+    participantName?: string;
+    /** Only populated once the organizer has assigned a winner (and/or the conference has ended). */
+    winnerName?: string;
   }>;
   socialLinks?: {
     website?: string;
@@ -183,6 +203,14 @@ export interface PublicConferenceDetail extends Conference {
   }>;
   previousEditions?: OrganizerPreviousEdition[];
   partnerConferences?: Array<{ id: string; title: string; status: string }>;
+  organizerTeam?: OrganizerTeamMember[];
+  registrationOpen?: boolean;
+  /** Live pricing-phase chips for the public registration card. */
+  pricingPhaseChips?: Array<{ id: string; name: string; status: "Active" | "Upcoming" | "Ended" }>;
+  activePricingPhaseName?: string;
+  allocationMode?: "PAY_FIRST" | "ALLOT_FIRST";
+  /** Section keys the organizer has hidden from the public page. */
+  hiddenSections?: string[];
 }
 
 export interface User {
@@ -271,6 +299,13 @@ export interface OrganizerApplicant {
   assignedPortfolioId?: string;
   assignedPortfolioName?: string;
   assignedAt?: string;
+  /**
+   * Allotment-release workflow: an allotment can exist as a private draft (released=false) that only the
+   * organizer can see. The delegate only learns of their committee/portfolio once the organizer explicitly
+   * releases it (see `releaseAllotments`).
+   */
+  released?: boolean;
+  releasedAt?: string;
   overrideUsed?: boolean;
   assignmentHistory?: OrganizerAssignmentLog[];
   phone?: string;
@@ -359,6 +394,14 @@ export interface OrganizerConference {
   organizerTeamEmails?: string[];
   awards?: OrganizerAwardConfig[];
   reviews?: ConferenceReview[];
+  /** Whether delegates see portfolio allotment status color-coding on the public Portfolio Matrix. Names are always visible. */
+  portfolioMatrixVisibility?: "PUBLIC" | "PRIVATE";
+  /** Set once at conference creation and immutable thereafter. */
+  allocationMode?: "PAY_FIRST" | "ALLOT_FIRST";
+  /** Allot-first mode only: number of days a delegate has to pay after being allotted before it auto-cancels. */
+  paymentDeadlineDays?: number;
+  /** Public landing-page section keys the organizer has chosen to hide. */
+  hiddenSections?: string[];
 }
 
 export type OrganizerConferencePartnerStatus = "PENDING" | "ACCEPTED" | "REJECTED" | "CANCELLED";
@@ -388,6 +431,7 @@ export interface OrganizerTeamMember {
   email: string;
   role: string;
   permissions: OrganizerPermission[];
+  photoUrl?: string;
 }
 
 export type OrganizerPermission =
@@ -400,16 +444,21 @@ export type OrganizerPermission =
 export interface OrganizerAwardConfig {
   id: string;
   category: string;
-  presetKey?: string;
   prizeTitle?: string;
-  sponsorName?: string;
-  sponsorLogoUrl?: string;
+  /** Optional, blank by default. Shown below the award once filled in. */
+  amount?: number;
   description?: string;
   participantId?: string;
   participantName?: string;
   participantUserId?: string;
   participantUserEmail?: string;
   recipientDelegationId?: string;
+  /** @deprecated sponsor fields removed from UI — kept optional for legacy data reads. */
+  presetKey?: string;
+  /** @deprecated */
+  sponsorName?: string;
+  /** @deprecated */
+  sponsorLogoUrl?: string;
 }
 
 export interface ConferenceReview {

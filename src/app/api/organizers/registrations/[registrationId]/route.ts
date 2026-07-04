@@ -100,6 +100,10 @@ export async function PATCH(
     ...(resolvedPortfolioId !== undefined ? { portfolioId: resolvedPortfolioId } : {}),
     ...(paid !== undefined ? { paid } : {}),
     ...(nextAllottedAt !== undefined ? { allottedAt: nextAllottedAt } : {}),
+    // Every (re-)allotment starts as an unreleased draft — the delegate only learns of it once the
+    // organizer explicitly releases the batch via /release-allotments. Moving an already-released
+    // delegate to a new committee re-drafts it so the change is reviewed before being surfaced again.
+    ...(statusDb === RegistrationStatus.ALLOTTED ? { released: false, releasedAt: null } : {}),
   };
 
   try {

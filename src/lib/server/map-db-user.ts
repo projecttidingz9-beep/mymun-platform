@@ -5,11 +5,15 @@ import { moneyNumber } from "@/lib/server/decimal-money";
 import { prismaUserRoleToSession } from "@/lib/server/user-role";
 
 function mapRegistrationStatusToOrganizer(
-  s: RegistrationStatus
+  s: RegistrationStatus,
+  released: boolean
 ): NonNullable<Registration["organizerStatus"]> {
   switch (s) {
     case RegistrationStatus.ALLOTTED:
-      return "Allotted";
+      // Allotments are drafted privately (see `released`/`releasedAt` on Registration) so the
+      // organizer can build out a full committee roster before delegates find out anything —
+      // until the organizer releases the batch, the delegate must still see "Pending".
+      return released ? "Allotted" : "Pending";
     case RegistrationStatus.WAITLISTED:
       return "Waitlisted";
     case RegistrationStatus.REJECTED:
@@ -25,10 +29,10 @@ function mapRegistrationToClient(
     delegation?: { id: string; schoolName: string; inviteToken: string } | null;
   }
 ): Registration {
-  const org = mapRegistrationStatusToOrganizer(reg.status);
-  const isAllotted = reg.status === RegistrationStatus.ALLOTTED;
+  const isAllotted = reg.status === RegistrationStatus.ALLOTTED && reg.released;
+  const org = mapRegistrationStatusToOrganizer(reg.status, reg.released);
   const status: Registration["status"] =
-    reg.status === RegistrationStatus.ALLOTTED
+    isAllotted
       ? "Confirmed"
       : reg.status === RegistrationStatus.WAITLISTED
         ? "Waitlisted"

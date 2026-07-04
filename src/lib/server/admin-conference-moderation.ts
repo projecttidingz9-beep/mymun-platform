@@ -3,6 +3,9 @@ import type { EventStatus } from "@/generated/prisma/enums";
 import { prisma } from "./prisma";
 import { mergeOrganizerStoredBlob } from "./organizer-config-store";
 import { mapManagedEventToOrganizerConference } from "./map-managed-event-to-organizer-conference";
+import { getOrganizerOverviewAnalytics } from "./organizer-overview";
+import { PLATFORM_FEE_RATE, netAfterPlatformFee } from "@/lib/platform-finance";
+import { getActivePhase } from "@/lib/pricing";
 import { env } from "./env";
 import { logger } from "./logger";
 
@@ -141,6 +144,13 @@ export async function moderateConferenceByStatus(input: {
     });
   }
 
+  if (input.status === "SUSPENDED" && existing.status !== "PUBLISHED") {
+    throw new Error("Only published conferences can be suspended.");
+  }
+  if (input.status === "PUBLISHED" && existing.status !== "SUSPENDED" && existing.status !== "REVIEW") {
+    throw new Error("Only a suspended or in-review conference can be moved to Published this way.");
+  }
+
   if (existing.status === input.status) {
     return {
       eventId,
@@ -155,7 +165,9 @@ export async function moderateConferenceByStatus(input: {
       ? "Published"
       : input.status === "REVIEW"
         ? "Review"
-        : "Draft";
+        : input.status === "SUSPENDED"
+          ? "Suspended"
+          : "Draft";
 
   await prisma.$transaction(async (tx) => {
     await tx.event.update({
@@ -417,6 +429,46 @@ export type AdminReviewEventDetail = {
     categoryCount: number;
     adminRejectionNote?: string;
   };
+  /** The full original application form as the organizer submitted/edited it. */
+  applicationForm: {
+    title: string;
+    organizerName: string;
+    contactDetail?: string;
+    ownerEmail?: string;
+    city: string;
+    country: string;
+    venue?: string;
+    level: string;
+    capacity: number;
+    currency?: string;
+    startDate: string;
+    endDate: string;
+    registrationDeadline?: string;
+    description?: string;
+    termsAndConditions?: string;
+    refundPolicy?: string;
+    codeOfConduct?: string;
+  };
+  review: {
+    registrationOpen: boolean;
+    registeredCount: number;
+    paidCount: number;
+    revenueCollected: number;
+    platformFeeRate: number;
+    platformCut: number;
+    organizerNetPayout: number;
+  };
+  bankingDetails: {
+    accountHolderName?: string;
+    bankName?: string;
+    accountNumber?: string;
+    ifscCode?: string;
+    upiId?: string;
+  } | null;
+  invoiceTemplate: {
+    url: string | null;
+    fileName: string | null;
+  };
 };
 
 export async function getAdminReviewEventDetail(eventId: string): Promise<AdminReviewEventDetail | null> {
@@ -433,6 +485,7 @@ export async function getAdminReviewEventDetail(eventId: string): Promise<AdminR
       updatedAt: true,
       coverImageUrl: true,
       owner: { select: { name: true, email: true } },
+      organizerConfig: { select: { invoiceTemplateUrl: true, invoiceTemplateFileName: true } },
     },
   });
 
@@ -440,6 +493,19 @@ export async function getAdminReviewEventDetail(eventId: string): Promise<AdminR
 
   const conference = await mapManagedEventToOrganizerConference(eventId);
   if (!conference) return null;
+
+  const openCategories = (conference.registrationCategories || []).filter((category) => category.isOpen !== false);
+  const registrationOpen =
+    openCategories.length > 0 &&
+    openCategories.some((category) => {
+      const phases = category.pricingPhases || [];
+      return phases.length === 0 || Boolean(getActivePhase(phases));
+    });
+
+  const analytics = await getOrganizerOverviewAnalytics(eventId);
+  const registeredCount = analytics.totalRegistrations;
+  const revenueCollected = analytics.revenueCollected;
+  const platformCut = Math.max(0, Math.round(revenueCollected * PLATFORM_FEE_RATE));
 
   return {
     event: {
@@ -470,6 +536,47 @@ export async function getAdminReviewEventDetail(eventId: string): Promise<AdminR
       committeeCount: conference.committees.length,
       categoryCount: conference.registrationCategories.length,
       adminRejectionNote: conference.adminRejectionNote,
+    },
+    applicationForm: {
+      title: conference.title,
+      organizerName: conference.organizerName,
+      contactDetail: conference.contactDetail,
+      ownerEmail: conference.ownerEmail ?? event.owner?.email ?? undefined,
+      city: conference.city,
+      country: conference.country,
+      venue: conference.venue,
+      level: conference.level,
+      capacity: conference.capacity,
+      currency: conference.currency,
+      startDate: event.startDate.toISOString(),
+      endDate: event.endDate.toISOString(),
+      registrationDeadline: conference.registrationDeadline,
+      description: conference.description,
+      termsAndConditions: conference.termsAndConditions,
+      refundPolicy: conference.refundPolicy,
+      codeOfConduct: conference.codeOfConduct,
+    },
+    review: {
+      registrationOpen,
+      registeredCount,
+      paidCount: Math.round((analytics.paymentCompletionRate / 100) * registeredCount),
+      revenueCollected,
+      platformFeeRate: PLATFORM_FEE_RATE,
+      platformCut,
+      organizerNetPayout: netAfterPlatformFee(revenueCollected),
+    },
+    bankingDetails: conference.bankingDetails
+      ? {
+          accountHolderName: conference.bankingDetails.accountHolderName,
+          bankName: conference.bankingDetails.bankName,
+          accountNumber: conference.bankingDetails.accountNumber,
+          ifscCode: conference.bankingDetails.ifscCode,
+          upiId: conference.bankingDetails.upiId,
+        }
+      : null,
+    invoiceTemplate: {
+      url: event.organizerConfig?.invoiceTemplateUrl ?? null,
+      fileName: event.organizerConfig?.invoiceTemplateFileName ?? null,
     },
   };
 }

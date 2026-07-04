@@ -1,10 +1,7 @@
 import { prisma } from "./prisma";
+import { matchesLegacyOwnerOrTeam, type LegacyOwnershipBlob } from "./event-ownership";
 
 const JSON_PREFIX = "__preview_json__:";
-
-function normalizeEmail(value: string | undefined | null) {
-  return (value || "").trim().toLowerCase();
-}
 
 function parseBlob(description: string | null | undefined): Record<string, unknown> {
   if (!description || !description.startsWith(JSON_PREFIX)) return {};
@@ -23,7 +20,6 @@ export async function listManagedEventIds(
   actorEmail: string | null
 ): Promise<string[]> {
   const ids = new Set<string>();
-  const normalizedEmail = normalizeEmail(actorEmail);
 
   if (actorUserId) {
     const owned = await prisma.event.findMany({
@@ -48,21 +44,31 @@ export async function listManagedEventIds(
     select: { eventId: true, description: true },
   });
 
-  for (const row of configs) {
-    const blob = parseBlob(row.description);
-    const ownerUid = typeof blob.ownerUserId === "string" ? blob.ownerUserId.trim() : "";
-    const ownerMail = normalizeEmail(typeof blob.ownerEmail === "string" ? blob.ownerEmail : "");
-    const teamEmailsRaw = Array.isArray(blob.organizerTeamEmails) ? blob.organizerTeamEmails : [];
-    const teamEmails = teamEmailsRaw
-      .map((e) => normalizeEmail(String(e)))
-      .filter(Boolean);
+  // Events that already have a real (accepted) team roster in the database must be governed
+  // exclusively by that roster — a stale legacy blob (e.g. an organizer who was later removed
+  // from the team, or an email that was never cleaned up) must never grant continued visibility.
+  // This mirrors the same guard enforced by `requireEventOrganizerAccess` for write access, so
+  // "can I see it in My Events" and "can I actually edit it" never diverge.
+  const eventIdsWithConfig = configs.map((row) => row.eventId);
+  const teamCounts = eventIdsWithConfig.length
+    ? await prisma.eventTeamMember.groupBy({
+        by: ["eventId"],
+        where: { eventId: { in: eventIdsWithConfig }, acceptedAt: { not: null } },
+        _count: { eventId: true },
+      })
+    : [];
+  const eventsWithDbTeam = new Set(teamCounts.map((row) => row.eventId));
 
-    if (actorUserId && ownerUid && ownerUid === actorUserId) {
-      ids.add(row.eventId);
+  for (const row of configs) {
+    if (eventsWithDbTeam.has(row.eventId) && !ids.has(row.eventId)) {
+      // Already-resolved via the DB-backed owner/team queries above, or not a match at all —
+      // either way, the legacy blob must not be consulted once a real roster exists.
+      continue;
     }
-    if (normalizedEmail) {
-      if (ownerMail && ownerMail === normalizedEmail) ids.add(row.eventId);
-      if (teamEmails.includes(normalizedEmail)) ids.add(row.eventId);
+
+    const blob = parseBlob(row.description) as LegacyOwnershipBlob;
+    if (matchesLegacyOwnerOrTeam(blob, actorUserId, actorEmail)) {
+      ids.add(row.eventId);
     }
   }
 

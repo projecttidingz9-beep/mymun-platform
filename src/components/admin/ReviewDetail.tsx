@@ -11,6 +11,12 @@ type ReviewDetailProps = {
   onClose: () => void;
 };
 
+function formatMoneyInr(value: number): string {
+  return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(
+    value
+  );
+}
+
 export default function ReviewDetail({ eventId, onModerated, onClose }: ReviewDetailProps) {
   const [detail, setDetail] = useState<AdminReviewDetail | null>(null);
   const [loading, setLoading] = useState(false);
@@ -20,7 +26,13 @@ export default function ReviewDetail({ eventId, onModerated, onClose }: ReviewDe
   const [approveOpen, setApproveOpen] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [suspendOpen, setSuspendOpen] = useState(false);
   const [rejectNote, setRejectNote] = useState("");
+  const [showFullForm, setShowFullForm] = useState(false);
+  const [invoiceFileName, setInvoiceFileName] = useState("");
+  const [invoiceSaving, setInvoiceSaving] = useState(false);
+  const [deleteOrganizerOpen, setDeleteOrganizerOpen] = useState(false);
+  const [deleteOrganizerBusy, setDeleteOrganizerBusy] = useState(false);
 
   const loadDetail = useCallback(async () => {
     if (!eventId) {
@@ -84,6 +96,87 @@ export default function ReviewDetail({ eventId, onModerated, onClose }: ReviewDe
       setToast("Could not reach server.");
     } finally {
       setBusy(false);
+    }
+  };
+
+  const toggleSuspend = async () => {
+    if (!eventId || !detail) return;
+    const action = detail.event.status === "SUSPENDED" ? "unsuspend" : "suspend";
+    setBusy(true);
+    setToast(null);
+    try {
+      const res = await fetch(`/api/admin/events/${encodeURIComponent(eventId)}/moderate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ action }),
+      });
+      const payload = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        setToast(payload.error || "Action failed.");
+        return;
+      }
+      setSuspendOpen(false);
+      setToast(action === "suspend" ? "Conference suspended and hidden from the marketplace." : "Conference unsuspended and republished.");
+      onModerated();
+      await loadDetail();
+    } catch {
+      setToast("Could not reach server.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const saveInvoiceTemplate = async (payload: { url: string; fileName?: string }) => {
+    if (!eventId) return;
+    setInvoiceSaving(true);
+    setToast(null);
+    try {
+      const res = await fetch(`/api/admin/events/${encodeURIComponent(eventId)}/invoice-template`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(payload),
+      });
+      const body = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        setToast(body.error || "Could not save invoice template.");
+        return;
+      }
+      setToast(payload.url ? "Invoice template saved." : "Invoice template cleared.");
+      setInvoiceFileName("");
+      await loadDetail();
+    } catch {
+      setToast("Could not reach server.");
+    } finally {
+      setInvoiceSaving(false);
+    }
+  };
+
+  const deleteOrganizerAccount = async () => {
+    if (!detail?.organizer.email) return;
+    setDeleteOrganizerBusy(true);
+    setToast(null);
+    try {
+      const res = await fetch("/api/admin/organizers/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ email: detail.organizer.email }),
+      });
+      const payload = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        setToast(payload.error || "Could not delete organizer account.");
+        return;
+      }
+      setDeleteOrganizerOpen(false);
+      setToast(`Organizer account (${detail.organizer.email}) deleted.`);
+      onModerated();
+      onClose();
+    } catch {
+      setToast("Could not reach server.");
+    } finally {
+      setDeleteOrganizerBusy(false);
     }
   };
 
@@ -204,6 +297,142 @@ export default function ReviewDetail({ eventId, onModerated, onClose }: ReviewDe
             </div>
           )}
 
+          <button
+            type="button"
+            className="text-xs font-semibold text-[var(--blue)]"
+            onClick={() => setShowFullForm((prev) => !prev)}
+          >
+            {showFullForm ? "Hide full application form ▲" : "View full application form ▼"}
+          </button>
+          {showFullForm && (
+            <dl className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm rounded-xl border border-[var(--border)] bg-[var(--bg-subtle)] p-4">
+              {[
+                ["Conference name", detail.applicationForm.title],
+                ["Organizing body", detail.applicationForm.organizerName],
+                ["Contact detail", detail.applicationForm.contactDetail || "—"],
+                ["Owner account email", detail.applicationForm.ownerEmail || "—"],
+                ["City", detail.applicationForm.city],
+                ["Country", detail.applicationForm.country],
+                ["Venue", detail.applicationForm.venue || "—"],
+                ["Level", detail.applicationForm.level],
+                ["Approximate capacity", String(detail.applicationForm.capacity)],
+                ["Currency", detail.applicationForm.currency || "—"],
+                ["Start date", new Date(detail.applicationForm.startDate).toLocaleDateString()],
+                ["End date", new Date(detail.applicationForm.endDate).toLocaleDateString()],
+                ["Registration deadline", detail.applicationForm.registrationDeadline || "—"],
+              ].map(([label, value]) => (
+                <div key={label}>
+                  <dt className="text-[var(--fg-muted)]">{label}</dt>
+                  <dd className="text-[var(--fg)]">{value}</dd>
+                </div>
+              ))}
+              {detail.applicationForm.description && (
+                <div className="sm:col-span-2">
+                  <dt className="text-[var(--fg-muted)]">Description</dt>
+                  <dd className="text-[var(--fg)] whitespace-pre-wrap">{detail.applicationForm.description}</dd>
+                </div>
+              )}
+              {detail.applicationForm.termsAndConditions && (
+                <div className="sm:col-span-2">
+                  <dt className="text-[var(--fg-muted)]">Terms & conditions</dt>
+                  <dd className="text-[var(--fg)] whitespace-pre-wrap">{detail.applicationForm.termsAndConditions}</dd>
+                </div>
+              )}
+              {detail.applicationForm.refundPolicy && (
+                <div className="sm:col-span-2">
+                  <dt className="text-[var(--fg-muted)]">Refund policy</dt>
+                  <dd className="text-[var(--fg)] whitespace-pre-wrap">{detail.applicationForm.refundPolicy}</dd>
+                </div>
+              )}
+              {detail.applicationForm.codeOfConduct && (
+                <div className="sm:col-span-2">
+                  <dt className="text-[var(--fg-muted)]">Code of conduct</dt>
+                  <dd className="text-[var(--fg)] whitespace-pre-wrap">{detail.applicationForm.codeOfConduct}</dd>
+                </div>
+              )}
+            </dl>
+          )}
+
+          <div className="rounded-xl border border-[var(--border)] p-4 space-y-3">
+            <p className="text-xs uppercase tracking-wide text-[var(--fg-muted)]">Review panel</p>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
+              <div>
+                <dt className="text-[var(--fg-muted)]">Registration status</dt>
+                <dd className={detail.review.registrationOpen ? "text-emerald-600 dark:text-emerald-400 font-medium" : "text-[var(--fg-muted)] font-medium"}>
+                  {detail.review.registrationOpen ? "Open" : "Closed"}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-[var(--fg-muted)]">Registered</dt>
+                <dd className="tabular-nums text-[var(--fg)]">{detail.review.registeredCount} ({detail.review.paidCount} paid)</dd>
+              </div>
+              <div>
+                <dt className="text-[var(--fg-muted)]">Revenue collected</dt>
+                <dd className="tabular-nums text-[var(--fg)]">{formatMoneyInr(detail.review.revenueCollected)}</dd>
+              </div>
+              <div>
+                <dt className="text-[var(--fg-muted)]">Platform cut ({Math.round(detail.review.platformFeeRate * 100)}%)</dt>
+                <dd className="tabular-nums text-[var(--fg)]">{formatMoneyInr(detail.review.platformCut)}</dd>
+              </div>
+              <div>
+                <dt className="text-[var(--fg-muted)]">Organizer net payout</dt>
+                <dd className="tabular-nums text-[var(--fg)]">{formatMoneyInr(detail.review.organizerNetPayout)}</dd>
+              </div>
+            </div>
+            <div className="pt-2 border-t border-[var(--border)]">
+              <p className="text-xs uppercase tracking-wide text-[var(--fg-muted)] mb-1">Organizer bank details</p>
+              {detail.bankingDetails ? (
+                <dl className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
+                  <div><dt className="text-[var(--fg-muted)]">Account holder</dt><dd className="text-[var(--fg)]">{detail.bankingDetails.accountHolderName || "—"}</dd></div>
+                  <div><dt className="text-[var(--fg-muted)]">Bank</dt><dd className="text-[var(--fg)]">{detail.bankingDetails.bankName || "—"}</dd></div>
+                  <div><dt className="text-[var(--fg-muted)]">Account number</dt><dd className="text-[var(--fg)] font-mono">{detail.bankingDetails.accountNumber || "—"}</dd></div>
+                  <div><dt className="text-[var(--fg-muted)]">IFSC</dt><dd className="text-[var(--fg)] font-mono">{detail.bankingDetails.ifscCode || "—"}</dd></div>
+                  <div><dt className="text-[var(--fg-muted)]">UPI</dt><dd className="text-[var(--fg)]">{detail.bankingDetails.upiId || "—"}</dd></div>
+                </dl>
+              ) : (
+                <p className="text-sm text-[var(--fg-muted)]">Organizer has not added payout bank details yet.</p>
+              )}
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-[var(--border)] p-4 space-y-2">
+            <p className="text-xs uppercase tracking-wide text-[var(--fg-muted)]">Invoice template</p>
+            {detail.invoiceTemplate.url ? (
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-sm text-[var(--fg)]">{detail.invoiceTemplate.fileName || "Custom template configured"}</p>
+                <button
+                  type="button"
+                  className="btn btn-danger-ghost text-xs min-h-[36px]"
+                  disabled={invoiceSaving}
+                  onClick={() => void saveInvoiceTemplate({ url: "" })}
+                >
+                  Clear
+                </button>
+              </div>
+            ) : (
+              <p className="text-sm text-[var(--fg-muted)]">No invoice template configured — the default platform template will be used.</p>
+            )}
+            <input
+              type="file"
+              accept=".pdf,.html,.htm,.png,.jpg,.jpeg"
+              className="text-xs"
+              disabled={invoiceSaving}
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (!file) return;
+                setInvoiceFileName(file.name);
+                const reader = new FileReader();
+                reader.onload = () => {
+                  const result = typeof reader.result === "string" ? reader.result : "";
+                  if (!result) return;
+                  void saveInvoiceTemplate({ url: result, fileName: file.name });
+                };
+                reader.readAsDataURL(file);
+              }}
+            />
+            {invoiceFileName && <p className="text-xs text-[var(--fg-muted)]">Uploading {invoiceFileName}…</p>}
+          </div>
+
           <div className="flex flex-wrap gap-2 pt-2">
             <Link
               href={`/admin/review/${encodeURIComponent(detail.event.id)}`}
@@ -231,6 +460,16 @@ export default function ReviewDetail({ eventId, onModerated, onClose }: ReviewDe
                 </button>
               </>
             )}
+            {(detail.event.status === "PUBLISHED" || detail.event.status === "SUSPENDED") && (
+              <button
+                type="button"
+                className="btn btn-ghost text-sm min-h-[44px] touch-manipulation"
+                disabled={busy}
+                onClick={() => setSuspendOpen(true)}
+              >
+                {detail.event.status === "SUSPENDED" ? "Unsuspend & republish" : "Suspend (hide, keep data)"}
+              </button>
+            )}
             {detail.event.status === "PUBLISHED" && (
               <button
                 type="button"
@@ -251,6 +490,23 @@ export default function ReviewDetail({ eventId, onModerated, onClose }: ReviewDe
               {toast}
             </p>
           )}
+
+          {detail.organizer.email && (
+            <div className="rounded-xl border border-rose-500/30 bg-rose-500/5 p-4">
+              <p className="text-xs uppercase tracking-wide text-rose-700 dark:text-rose-300 mb-1">Danger zone</p>
+              <p className="text-sm text-[var(--fg-muted)] mb-2">
+                Permanently delete the organizer account ({detail.organizer.email}) — typically only after they've
+                emailed requesting deletion and own no active conferences.
+              </p>
+              <button
+                type="button"
+                className="btn btn-danger-ghost text-sm min-h-[44px] touch-manipulation"
+                onClick={() => setDeleteOrganizerOpen(true)}
+              >
+                Delete organizer account
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -262,6 +518,32 @@ export default function ReviewDetail({ eventId, onModerated, onClose }: ReviewDe
         busy={busy}
         onClose={() => setApproveOpen(false)}
         onConfirm={() => void moderate("approve")}
+      />
+
+      <ModerationModal
+        open={deleteOrganizerOpen}
+        title="Permanently delete this organizer account?"
+        description={`This deletes the account for ${detail?.organizer.email ?? "this organizer"} entirely and cannot be undone. It will fail if they still own any active conference.`}
+        confirmLabel="Delete organizer account"
+        confirmVariant="danger"
+        busy={deleteOrganizerBusy}
+        onClose={() => setDeleteOrganizerOpen(false)}
+        onConfirm={() => void deleteOrganizerAccount()}
+      />
+
+      <ModerationModal
+        open={suspendOpen}
+        title={detail?.event.status === "SUSPENDED" ? "Unsuspend and republish?" : "Suspend this conference?"}
+        description={
+          detail?.event.status === "SUSPENDED"
+            ? `"${detail?.event.title ?? "This conference"}" will become visible on the marketplace again.`
+            : `"${detail?.event.title ?? "This conference"}" will be immediately hidden from the marketplace. All data (registrations, revenue, committees) is preserved and this can be reversed at any time — use this instead of Delete when you just need to pause a listing.`
+        }
+        confirmLabel={detail?.event.status === "SUSPENDED" ? "Unsuspend & republish" : "Suspend conference"}
+        confirmVariant={detail?.event.status === "SUSPENDED" ? "primary" : "danger"}
+        busy={busy}
+        onClose={() => setSuspendOpen(false)}
+        onConfirm={() => void toggleSuspend()}
       />
 
       <ModerationModal

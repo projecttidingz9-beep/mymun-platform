@@ -68,4 +68,43 @@ export type AdminReviewDetail = {
     categoryCount: number;
     adminRejectionNote?: string;
   };
+  applicationForm: {
+    title: string;
+    organizerName: string;
+    contactDetail?: string;
+    ownerEmail?: string;
+    city: string;
+    country: string;
+    venue?: string;
+    level: string;
+    capacity: number;
+    currency?: string;
+    startDate: string;
+    endDate: string;
+    registrationDeadline?: string;
+    description?: string;
+    termsAndConditions?: string;
+    refundPolicy?: string;
+    codeOfConduct?: string;
+  };
+  review: {
+    registrationOpen: boolean;
+    registeredCount: number;
+    paidCount: number;
+    revenueCollected: number;
+    platformFeeRate: number;
+    platformCut: number;
+    organizerNetPayout: number;
+  };
+  bankingDetails: {
+    accountHolderName?: string;
+    bankName?: string;
+    accountNumber?: string;
+    ifscCode?: string;
+    upiId?: string;
+  } | null;
+  invoiceTemplate: {
+    url: string | null;
+    fileName: string | null;
+  };
 };

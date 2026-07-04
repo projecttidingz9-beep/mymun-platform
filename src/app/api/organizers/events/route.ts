@@ -48,25 +48,13 @@ export async function POST(request: NextRequest) {
     const country = String(body.country || "").trim();
     const organizerName = String(body.organizerName || "").trim();
     const contactDetail = String(body.contactDetail || "").trim();
-    const startDate = String(body.startDate || "").trim();
-    const endDate = String(body.endDate || "").trim();
-    const registrationDeadline = String(body.registrationDeadline || "").trim();
     const capacity = typeof body.capacity === "number" ? body.capacity : Number(body.capacity);
     const level =
       body.level === "High School" || body.level === "University" || body.level === "Open"
         ? body.level
-        : "High School";
+        : "Open";
 
-    if (
-      !title ||
-      !city ||
-      !country ||
-      !organizerName ||
-      !contactDetail ||
-      !startDate ||
-      !endDate ||
-      !registrationDeadline
-    ) {
+    if (!title || !city || !country || !organizerName || !contactDetail) {
       return NextResponse.json({ error: "Missing required conference fields." }, { status: 400 });
     }
     if (!Number.isFinite(capacity) || capacity <= 0) {
@@ -76,6 +64,20 @@ export async function POST(request: NextRequest) {
     const eventId = `evt-${randomUUID()}`;
     const venue = typeof body.venue === "string" ? body.venue.trim() : "";
     const description = typeof body.description === "string" ? body.description.trim() : "";
+
+    // Dates are no longer collected on the initial creation form (the organizer sets exact
+    // dates later from the dashboard) — fall back to sane placeholders so the (non-nullable)
+    // Event.startDate/endDate columns are always populated, and so a default registration
+    // category can still be created.
+    const providedStartDate = String(body.startDate || "").trim();
+    const providedEndDate = String(body.endDate || "").trim();
+    const fallbackStart = new Date();
+    fallbackStart.setUTCDate(fallbackStart.getUTCDate() + 60);
+    const startDate = providedStartDate || fallbackStart.toISOString().slice(0, 10);
+    const fallbackEnd = new Date(providedStartDate ? `${providedStartDate}T00:00:00.000Z` : fallbackStart);
+    fallbackEnd.setUTCDate(fallbackEnd.getUTCDate() + 2);
+    const endDate = providedEndDate || fallbackEnd.toISOString().slice(0, 10);
+    const registrationDeadline = String(body.registrationDeadline || "").trim() || startDate;
 
     const registrationCategories: RegistrationCategory[] = Array.isArray(body.registrationCategories)
       ? (body.registrationCategories as RegistrationCategory[])
@@ -90,7 +92,10 @@ export async function POST(request: NextRequest) {
           endDate: new Date(`${endDate}T12:00:00.000Z`),
           status: "DRAFT",
           ownerUserId: actorUserId,
-          currency: typeof body.currency === "string" ? body.currency : "INR",
+          currency:
+            typeof body.currency === "string" && body.currency.trim()
+              ? body.currency.trim().toUpperCase()
+              : "INR",
           organizerConfig: {
             create: {
               venue: venue || null,

@@ -68,11 +68,15 @@ export default function ScheduleAddDayModal({
     >
       <button
         type="button"
-        className="absolute inset-0 bg-black/50"
+        className="absolute inset-0"
+        style={{ background: "rgba(0,0,0,0.65)" }}
         aria-label="Close dialog"
         onClick={onClose}
       />
-      <div className="relative w-full max-w-md max-h-[90dvh] overflow-y-auto rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-6 shadow-xl">
+      <div
+        className="relative w-full max-w-md max-h-[90dvh] overflow-y-auto rounded-2xl p-6 shadow-2xl"
+        style={{ background: "var(--bg-elevated, #101014)", border: "1px solid var(--border)" }}
+      >
         <h2 id="schedule-add-day-title" className="text-lg font-semibold text-[var(--fg)]">
           Add schedule day
         </h2>

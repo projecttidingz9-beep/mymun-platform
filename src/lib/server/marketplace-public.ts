@@ -4,13 +4,16 @@ import type {
   OrganizerConferencePartnerLink,
   OrganizerDocument,
   OrganizerPreviousEdition,
+  OrganizerTeamMember,
   PublicConferenceDetail,
+  RegistrationCategory,
 } from "@/lib/types";
-import type { CommitteeConfig, Event, OrganizerConferenceConfig, PricingPhaseConfig, User } from "@/generated/prisma/client";
+import type { CommitteeConfig, Event, OrganizerConferenceConfig, Portfolio, PricingPhaseConfig, User } from "@/generated/prisma/client";
 import { moneyNumber } from "@/lib/server/decimal-money";
 import { decodeOrganizerDescription } from "@/lib/server/organizer-description";
 import { decodeOrganizerStoredBlobRecord } from "@/lib/server/organizer-blob-decode";
 import { coerceDate } from "@/lib/server/coerce-date";
+import { getActivePhase, getPhaseStatus } from "@/lib/pricing";
 
 const REGION_BY_COUNTRY: Record<string, Conference["region"]> = {
   india: "Asia",
@@ -70,23 +73,26 @@ function parseVenue(venue: string | null | undefined): { location: string; city:
 function statusBadge(
   end: Date | string,
   committees: CommitteeConfig[],
-  phases: PricingPhaseConfig[]
+  blob: Record<string, unknown> | null
 ): NonNullable<Conference["statusBadgeLabel"]> {
   const today = new Date().setHours(0, 0, 0, 0);
   const endDay = new Date(end).setHours(0, 0, 0, 0);
   if (endDay < today) return "Event Ended";
 
   const capacity = committees.reduce((s, c) => s + c.seatCount, 0);
-  if (capacity <= 0 && phases.length === 0) return "Coming Soon";
+  const categories = Array.isArray(blob?.registrationCategories)
+    ? (blob!.registrationCategories as RegistrationCategory[])
+    : [];
+  const openCategories = categories.filter((category) => category.isOpen !== false);
+  const allPhases = openCategories.flatMap((category) => category.pricingPhases || []);
+  if (capacity <= 0 && allPhases.length === 0 && openCategories.length === 0) return "Coming Soon";
 
-  const activePhase = phases.find((p) => {
-    const s = new Date(p.startDate).setHours(0, 0, 0, 0);
-    const e = new Date(p.endDate).setHours(0, 0, 0, 0);
-    return today >= s && today <= e;
+  if (computeRegistrationOpen(blob)) return "Register Now";
+
+  const upcoming = allPhases.some((phase) => {
+    const start = new Date(phase.startDate).setHours(0, 0, 0, 0);
+    return Number.isFinite(start) && start > today;
   });
-  if (activePhase) return "Register Now";
-
-  const upcoming = phases.some((p) => new Date(p.startDate).setHours(0, 0, 0, 0) > today);
   if (upcoming) return "Coming Soon";
 
   return "Currently Registrations Closed";
@@ -96,14 +102,43 @@ export type EventWithListing = Event & {
   organizerConfig:
     | (Omit<OrganizerConferenceConfig, "description"> & {
         description?: string | null;
-        committees: CommitteeConfig[];
+        committees: Array<CommitteeConfig & { portfolios?: Portfolio[] }>;
         pricingPhases: PricingPhaseConfig[];
       })
     | null;
   owner: Pick<User, "name" | "email"> | null;
   _count: { registrations: number };
-  registrations?: Array<{ committeeName: string | null }>;
+  registrations?: Array<{ committeeName: string | null; portfolioName: string | null }>;
 };
+
+function parseChairsJson(raw: string | null | undefined): Array<{ id: string; name: string; email?: string; role?: string }> {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === "object")
+      .map((entry, index) => ({
+        id: String(entry.id || `chair-${index}`),
+        name: String(entry.name || ""),
+        email: entry.email ? String(entry.email) : undefined,
+        role: entry.role ? String(entry.role) : undefined,
+      }))
+      .filter((chair) => chair.name);
+  } catch {
+    return [];
+  }
+}
+
+function parseAgendasJson(raw: string | null | undefined): string[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.map(String).filter(Boolean) : [];
+  } catch {
+    return [];
+  }
+}
 
 function allotmentCountsByCommitteeName(
   registrations: Array<{ committeeName: string | null }> | undefined
@@ -115,6 +150,20 @@ function allotmentCountsByCommitteeName(
     map.set(name, (map.get(name) ?? 0) + 1);
   }
   return map;
+}
+
+/** Portfolio name -> taken, keyed by "committeeName::portfolioName" (case-insensitive). */
+function takenPortfolioKeys(
+  registrations: Array<{ committeeName: string | null; portfolioName: string | null }> | undefined
+): Set<string> {
+  const set = new Set<string>();
+  for (const reg of registrations ?? []) {
+    const committee = reg.committeeName?.trim().toLowerCase();
+    const portfolio = reg.portfolioName?.trim().toLowerCase();
+    if (!committee || !portfolio) continue;
+    set.add(`${committee}::${portfolio}`);
+  }
+  return set;
 }
 
 function blobString(blob: Record<string, unknown> | null, key: string): string | undefined {
@@ -130,11 +179,20 @@ function normalizeBlobAwards(blob: Record<string, unknown> | null): OrganizerAwa
     const item = entry as Record<string, unknown>;
     const category = typeof item.category === "string" ? item.category.trim() : "";
     if (!category) continue;
+    const amountRaw = item.amount;
+    const amount =
+      typeof amountRaw === "number" && Number.isFinite(amountRaw) && amountRaw > 0 ? amountRaw : undefined;
+    const participantName =
+      typeof item.participantName === "string" && item.participantName.trim()
+        ? item.participantName.trim()
+        : undefined;
     awards.push({
       id: String(item.id || `award-${awards.length}`),
       category,
       prizeTitle: typeof item.prizeTitle === "string" ? item.prizeTitle : undefined,
       description: typeof item.description === "string" ? item.description : undefined,
+      amount,
+      participantName,
     });
   }
   return awards.length > 0 ? awards : undefined;
@@ -175,7 +233,6 @@ export function mapPublishedEventToConference(event: EventWithListing): Conferen
   const description =
     blobString(blob, "description") ?? decodeOrganizerDescription(cfg?.description);
   const committees = cfg?.committees ?? [];
-  const phases = cfg?.pricingPhases ?? [];
   const parsedVenue = parseVenue(cfg?.venue);
   const city = blobString(blob, "city") ?? parsedVenue.city;
   const country = blobString(blob, "country") ?? parsedVenue.country;
@@ -189,25 +246,38 @@ export function mapPublishedEventToConference(event: EventWithListing): Conferen
   const committeePrices = committees
     .map((c) => (c.basePrice == null ? null : moneyNumber(c.basePrice)))
     .filter((n): n is number => n != null && Number.isFinite(n));
-  const phasePrices = phases.map((p) => moneyNumber(p.basePrice)).filter((n) => Number.isFinite(n));
-  const priceCandidates = [...committeePrices, ...phasePrices];
+  const blobCategories = Array.isArray(blob?.registrationCategories)
+    ? (blob!.registrationCategories as RegistrationCategory[])
+    : [];
+  const phasePrices = blobCategories.flatMap((category) =>
+    (category.pricingPhases || [])
+      .map((phase) => Number(phase.basePrice))
+      .filter((n) => Number.isFinite(n))
+  );
+  const categoryBasePrices = blobCategories
+    .map((category) => Number(category.basePrice))
+    .filter((n) => Number.isFinite(n));
+  const priceCandidates = [...committeePrices, ...phasePrices, ...categoryBasePrices];
   const price = priceCandidates.length > 0 ? Math.min(...priceCandidates) : 0;
 
   const allotmentByName = allotmentCountsByCommitteeName(event.registrations);
+  const takenPortfolios = takenPortfolioKeys(event.registrations);
   const publicCommittees = committees.filter(
     (cm) => cm.visibility === "PUBLIC" || cm.visibility == null
   );
+  const matrixVisibility = cfg?.portfolioMatrixVisibility === "PUBLIC" ? "PUBLIC" : "PRIVATE";
 
   const capacity = publicCommittees.reduce((sum, c) => sum + c.seatCount, 0);
   const registered = event._count.registrations;
 
   const currency = event.currency?.trim() || "INR";
 
-  const earliestPhaseStart = phases
+  const blobPhaseDates = blobCategories.flatMap((category) => category.pricingPhases || []);
+  const earliestPhaseStart = blobPhaseDates
     .map((p) => coerceDate(p.startDate))
     .filter((d) => !Number.isNaN(d.getTime()))
     .sort((a, b) => a.getTime() - b.getTime())[0];
-  const latestPhaseEnd = phases
+  const latestPhaseEnd = blobPhaseDates
     .map((p) => coerceDate(p.endDate))
     .filter((d) => !Number.isNaN(d.getTime()))
     .sort((a, b) => b.getTime() - a.getTime())[0];
@@ -241,16 +311,37 @@ export function mapPublishedEventToConference(event: EventWithListing): Conferen
     price,
     currency,
     level,
-    committees: publicCommittees.map((cm) => ({
-      id: cm.id,
-      name: cm.name,
-      abbreviation: cm.name.slice(0, 8).toUpperCase(),
-      topic1: cm.agenda?.trim() || "Agenda to be announced",
-      topic2: "",
-      difficulty: "Intermediate" as const,
-      size: cm.seatCount,
-      allottedCount: allotmentByName.get(cm.name) ?? 0,
-    })),
+    committees: publicCommittees.map((cm) => {
+      const agendas = parseAgendasJson((cm as { agendasJson?: string | null }).agendasJson);
+      const chairs = parseChairsJson((cm as { chairsJson?: string | null }).chairsJson);
+      const noPortfolio = (cm as { noPortfolio?: boolean }).noPortfolio === true;
+      const portfolios = noPortfolio
+        ? []
+        : (cm.portfolios ?? []).map((p) => ({
+            id: p.id,
+            name: p.name,
+            seatCount: p.seatCount,
+            taken: matrixVisibility === "PUBLIC"
+              ? takenPortfolios.has(`${cm.name.trim().toLowerCase()}::${p.name.trim().toLowerCase()}`)
+              : undefined,
+          }));
+      return {
+        id: cm.id,
+        name: cm.name,
+        abbreviation: cm.name.slice(0, 8).toUpperCase(),
+        topic1: cm.agenda?.trim() || "Agenda to be announced",
+        topic2: agendas[0] || "",
+        agendas: [cm.agenda?.trim() || "Agenda to be announced", ...agendas].filter(Boolean),
+        difficulty: "Intermediate" as const,
+        size: cm.seatCount,
+        allottedCount: allotmentByName.get(cm.name) ?? 0,
+        logoImageUrl: (cm as { logoImageUrl?: string | null }).logoImageUrl ?? undefined,
+        chairs: chairs.length > 0 ? chairs : undefined,
+        noPortfolio,
+        portfolioMatrixVisibility: matrixVisibility,
+        portfolios,
+      };
+    }),
     capacity: capacity || Math.max(registered, 1),
     registered,
     description: description || "Details will be posted by the organizer.",
@@ -276,7 +367,7 @@ export function mapPublishedEventToConference(event: EventWithListing): Conferen
         : publicCommittees.length > 0
           ? publicCommittees.slice(0, 3).map((c) => c.name)
           : ["Model UN", "Published"],
-    statusBadgeLabel: statusBadge(event.endDate, committees, phases),
+    statusBadgeLabel: statusBadge(event.endDate, committees, blob),
   };
 }
 
@@ -336,6 +427,20 @@ function normalizePartnerConferences(
   return partners.length > 0 ? partners : undefined;
 }
 
+/** Registration is only "open" when a category is not manually closed AND has a currently active pricing phase (or no phases configured at all yet, in which case the category's base price applies indefinitely). */
+function computeRegistrationOpen(blob: Record<string, unknown> | null): boolean {
+  const categories = Array.isArray(blob?.registrationCategories)
+    ? (blob!.registrationCategories as RegistrationCategory[])
+    : [];
+  const openCategories = categories.filter((category) => category.isOpen !== false);
+  if (openCategories.length === 0) return false;
+  return openCategories.some((category) => {
+    const phases = category.pricingPhases || [];
+    if (phases.length === 0) return true;
+    return Boolean(getActivePhase(phases));
+  });
+}
+
 export function mapPublishedEventToPublicDetail(
   event: EventWithListing,
   options?: { approvedReviews?: PublicReviewRow[] }
@@ -360,23 +465,91 @@ export function mapPublishedEventToPublicDetail(
     codeOfConduct: blobString(blob, "codeOfConduct"),
     faqNotes: blobString(blob, "faqNotes"),
     organizerName: blobString(blob, "organizerName"),
-    socialLinks: socialRaw
-      ? {
-          website: typeof socialRaw.website === "string" ? socialRaw.website : undefined,
-          instagram: typeof socialRaw.instagram === "string" ? socialRaw.instagram : undefined,
-          linkedin: typeof socialRaw.linkedin === "string" ? socialRaw.linkedin : undefined,
-          twitter: typeof socialRaw.twitter === "string" ? socialRaw.twitter : undefined,
-        }
-      : {
-          website: event.organizerConfig?.websiteUrl ?? undefined,
-          instagram: event.organizerConfig?.instagramUrl ?? undefined,
-          linkedin: event.organizerConfig?.linkedinUrl ?? undefined,
-          twitter: event.organizerConfig?.twitterUrl ?? undefined,
-        },
+    socialLinks: (() => {
+      const pick = (key: "website" | "instagram" | "linkedin" | "twitter") => {
+        const fromBlob =
+          socialRaw && typeof socialRaw[key] === "string" ? String(socialRaw[key]).trim() : "";
+        if (fromBlob) return fromBlob;
+        const cfg = event.organizerConfig;
+        if (key === "website") return cfg?.websiteUrl?.trim() || undefined;
+        if (key === "instagram") return cfg?.instagramUrl?.trim() || undefined;
+        if (key === "linkedin") return cfg?.linkedinUrl?.trim() || undefined;
+        return cfg?.twitterUrl?.trim() || undefined;
+      };
+      return {
+        website: pick("website"),
+        instagram: pick("instagram"),
+        linkedin: pick("linkedin"),
+        twitter: pick("twitter"),
+      };
+    })(),
     commonDocuments: normalizeBlobDocuments(blob),
     awards: normalizeBlobAwards(blob),
     previousEditions: normalizeBlobPreviousEditions(blob),
     partnerConferences: normalizePartnerConferences(blob),
     reviews: options?.approvedReviews?.length ? options.approvedReviews : undefined,
+    registrationOpen: computeRegistrationOpen(blob),
+    ...computePublicPricingPhaseSummary(blob),
+    allocationMode:
+      event.organizerConfig?.allocationMode === "PAY_FIRST" ||
+      event.organizerConfig?.allocationMode === "ALLOT_FIRST"
+        ? event.organizerConfig.allocationMode
+        : undefined,
+    organizerTeam: normalizePublicTeam(blob),
+    hiddenSections: Array.isArray(blob?.hiddenSections)
+      ? (blob!.hiddenSections as unknown[]).map((entry) => String(entry)).filter(Boolean)
+      : undefined,
   };
+}
+
+function computePublicPricingPhaseSummary(blob: Record<string, unknown> | null): {
+  pricingPhaseChips?: PublicConferenceDetail["pricingPhaseChips"];
+  activePricingPhaseName?: string;
+} {
+  const categories = Array.isArray(blob?.registrationCategories)
+    ? (blob!.registrationCategories as RegistrationCategory[])
+    : [];
+  const chips: NonNullable<PublicConferenceDetail["pricingPhaseChips"]> = [];
+  let activePricingPhaseName: string | undefined;
+  for (const category of categories) {
+    if (category.isOpen === false) continue;
+    for (const phase of category.pricingPhases || []) {
+      const status = getPhaseStatus(phase, new Date());
+      chips.push({
+        id: `${category.id}-${phase.id}`,
+        name: phase.name,
+        status: status === "Active" || status === "Upcoming" || status === "Ended" ? status : "Ended",
+      });
+      if (status === "Active" && !activePricingPhaseName) {
+        activePricingPhaseName = phase.name;
+      }
+    }
+  }
+  return {
+    pricingPhaseChips: chips.length > 0 ? chips : undefined,
+    activePricingPhaseName,
+  };
+}
+
+function normalizePublicTeam(blob: Record<string, unknown> | null): PublicConferenceDetail["organizerTeam"] {
+  if (!blob || !Array.isArray(blob.organizerTeam)) return undefined;
+  const members = blob.organizerTeam
+    .map((entry) => {
+      if (!entry || typeof entry !== "object") return null;
+      const row = entry as Record<string, unknown>;
+      const name = typeof row.name === "string" ? row.name.trim() : "";
+      if (!name) return null;
+      return {
+        id: typeof row.id === "string" ? row.id : `team-${name}`,
+        name,
+        email: typeof row.email === "string" ? row.email : "",
+        role: typeof row.role === "string" ? row.role : "Team",
+        permissions: Array.isArray(row.permissions)
+          ? (row.permissions as OrganizerTeamMember["permissions"])
+          : (["view"] as OrganizerTeamMember["permissions"]),
+        photoUrl: typeof row.photoUrl === "string" ? row.photoUrl : undefined,
+      };
+    })
+    .filter(Boolean) as NonNullable<PublicConferenceDetail["organizerTeam"]>;
+  return members.length > 0 ? members : undefined;
 }

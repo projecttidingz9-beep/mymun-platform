@@ -903,6 +903,10 @@ interface AuthContextType {
         | "commonDocuments"
         | "whatIsIncluded"
         | "conferenceSchedule"
+        | "allocationMode"
+        | "hiddenSections"
+        | "portfolioMatrixVisibility"
+        | "paymentDeadlineDays"
       >
     >,
     options?: OrganizerConferenceSyncOptions
@@ -947,6 +951,10 @@ interface AuthContextType {
         | "commonDocuments"
         | "whatIsIncluded"
         | "conferenceSchedule"
+        | "allocationMode"
+        | "hiddenSections"
+        | "portfolioMatrixVisibility"
+        | "paymentDeadlineDays"
       >
     >,
     options?: OrganizerConferenceSyncOptions
@@ -972,6 +980,7 @@ interface AuthContextType {
     patch: Partial<OrganizerConference["registrationCategories"][number]>
   ) => void;
   addRegistrationCategory: (conferenceId: string, category: RegistrationCategory) => void;
+  removeRegistrationCategory: (conferenceId: string, categoryId: string) => void;
   addConferenceReview: (
     conferenceId: string,
     payload: Omit<ConferenceReview, "id" | "conferenceId" | "status" | "featured" | "createdAt">
@@ -1007,6 +1016,16 @@ interface AuthContextType {
     portfolioId?: string;
   }) => { ok: boolean; message: string };
   unassignApplicant: (conferenceId: string, applicantId: string) => { ok: boolean; message: string };
+  /**
+   * Allotment-release workflow: publishes any draft allotments (made via assignApplicant / auto-assign)
+   * so delegates can finally see them, and fires their "you've been allotted" notification + email.
+   * Pass `registrationIds` to release a specific selection, or omit to release every outstanding draft
+   * for the conference at once ("assign all -> confirm -> release").
+   */
+  releaseAllotments: (
+    conferenceId: string,
+    registrationIds?: string[]
+  ) => Promise<{ ok: boolean; message: string; releasedCount: number }>;
   overrideSeatLimit: (conferenceId: string, committeeId: string, seatCount: number) => void;
   notifications: UserNotification[];
   markNotificationRead: (notificationId: string) => void;
@@ -1071,6 +1090,7 @@ const AuthContext = createContext<AuthContextType>({
   removeOrganizerCommittee: () => {},
   updateRegistrationCategoryConfig: () => {},
   addRegistrationCategory: () => {},
+  removeRegistrationCategory: () => {},
   addConferenceReview: () => {},
   moderateConferenceReview: () => {},
   removeConferenceReview: () => {},
@@ -1095,6 +1115,11 @@ const AuthContext = createContext<AuthContextType>({
   unassignApplicant: () => ({
     ok: false,
     message: "Use the Applications tab in your organizer dashboard to unassign applicants.",
+  }),
+  releaseAllotments: async () => ({
+    ok: false,
+    message: "Use the Applications tab in your organizer dashboard to release allotments.",
+    releasedCount: 0,
   }),
   overrideSeatLimit: () => {},
   notifications: [],
@@ -1555,16 +1580,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const current = organizerConferences;
     const next = current.map((conference) => {
       if (conference.id !== conferenceId) return conference;
+      // Allocation mode is set-once and immutable for the life of the conference.
+      const safePatch = { ...patch };
+      if (conference.allocationMode && safePatch.allocationMode) {
+        delete safePatch.allocationMode;
+      }
       const merged: OrganizerConference = {
         ...conference,
-        ...patch,
+        ...safePatch,
         socialLinks: {
           ...(conference.socialLinks || {}),
-          ...(patch.socialLinks || {}),
+          ...(safePatch.socialLinks || {}),
         },
       };
-      if (patch.organizerTeam) {
-        merged.organizerTeamEmails = patch.organizerTeam
+      if (safePatch.organizerTeam) {
+        merged.organizerTeamEmails = safePatch.organizerTeam
           .map((member) => member.email.trim().toLowerCase())
           .filter(Boolean);
       }
@@ -1659,6 +1689,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return {
         ...conference,
         registrationCategories: [...conference.registrationCategories, category],
+      };
+    });
+    persistOrganizerConferences(next);
+  };
+
+  const removeRegistrationCategory: AuthContextType["removeRegistrationCategory"] = (conferenceId, categoryId) => {
+    const current = organizerConferences;
+    const next = current.map((conference) => {
+      if (conference.id !== conferenceId) return conference;
+      return {
+        ...conference,
+        registrationCategories: conference.registrationCategories.filter((category) => category.id !== categoryId),
       };
     });
     persistOrganizerConferences(next);
@@ -2197,6 +2239,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const releaseAllotments: AuthContextType["releaseAllotments"] = async (
+    conferenceId,
+    registrationIds
+  ) => {
+    try {
+      const res = await fetch(`/api/organizers/conferences/${conferenceId}/release-allotments`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(registrationIds ? { registrationIds } : {}),
+      });
+      const payload = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        releasedCount?: number;
+      };
+      if (!res.ok) {
+        return {
+          ok: false,
+          message: payload.error || "Could not release allotments.",
+          releasedCount: 0,
+        };
+      }
+      await refetchMyEvents({ id: user?.id, email: user?.email });
+      return {
+        ok: true,
+        message: `Released ${payload.releasedCount ?? 0} allotment(s).`,
+        releasedCount: payload.releasedCount ?? 0,
+      };
+    } catch {
+      return { ok: false, message: "Could not release allotments.", releasedCount: 0 };
+    }
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -2225,6 +2300,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         removeOrganizerCommittee,
         updateRegistrationCategoryConfig,
         addRegistrationCategory,
+        removeRegistrationCategory,
         addConferenceReview,
         moderateConferenceReview,
         removeConferenceReview,
@@ -2238,6 +2314,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         commitOrganizerConferences,
         moveApplicant,
         unassignApplicant,
+        releaseAllotments,
         overrideSeatLimit,
         notifications,
         markNotificationRead,

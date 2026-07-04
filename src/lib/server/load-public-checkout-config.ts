@@ -85,6 +85,8 @@ export type PublicCheckoutConfig = {
   currency: string;
   registrationCategories: RegistrationCategory[];
   committees: OrganizerCommittee[];
+  logoImageUrl?: string;
+  allocationMode?: "PAY_FIRST" | "ALLOT_FIRST";
 };
 
 /** Public registration config for delegate checkout (published events only). */
@@ -102,6 +104,8 @@ export async function loadPublicCheckoutConfig(eventKey: string): Promise<Public
         select: {
           registrationCategories: true,
           pricingPhases: true,
+          logoImageUrl: true,
+          allocationMode: true,
           committees: {
             select: {
               id: true,
@@ -188,10 +192,21 @@ export async function loadPublicCheckoutConfig(eventKey: string): Promise<Public
     ];
   }
 
+  const logoFromBlob =
+    typeof blob.logoImageUrl === "string" && blob.logoImageUrl.trim()
+      ? blob.logoImageUrl.trim()
+      : undefined;
+
   return {
     eventId: event.id,
     currency: event.currency?.trim() || "INR",
     registrationCategories: registrationCategories.filter((category) => category.isOpen !== false),
     committees,
+    logoImageUrl: logoFromBlob || event.organizerConfig?.logoImageUrl || undefined,
+    allocationMode:
+      event.organizerConfig?.allocationMode === "PAY_FIRST" ||
+      event.organizerConfig?.allocationMode === "ALLOT_FIRST"
+        ? event.organizerConfig.allocationMode
+        : undefined,
   };
 }

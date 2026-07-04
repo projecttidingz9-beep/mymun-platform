@@ -25,25 +25,20 @@ export default function CreateOrganizerConferencePage() {
   const [city, setCity] = useState("");
   const [country, setCountry] = useState("");
   const [organizerName, setOrganizerName] = useState("");
-  const [contactDetail, setContactDetail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
   const [venue, setVenue] = useState("");
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
-  const [registrationDeadline, setRegistrationDeadline] = useState("");
   const [capacity, setCapacity] = useState("");
-  const [level, setLevel] = useState<"High School" | "University" | "Open">("High School");
-  const [description, setDescription] = useState("");
-  const [currency, setCurrency] = useState<"INR" | "USD" | "EUR" | "GBP">("INR");
+
+  const contactDetail = [email.trim(), phone.trim()].filter(Boolean).join(" · ");
 
   const canSubmit =
     title.trim() &&
     city.trim() &&
     country.trim() &&
     organizerName.trim() &&
-    contactDetail.trim() &&
-    startDate &&
-    endDate &&
-    registrationDeadline &&
+    phone.trim() &&
+    email.trim() &&
     Number(capacity) > 0;
 
   const handleSubmit = async (): Promise<void> => {
@@ -80,15 +75,15 @@ export default function CreateOrganizerConferencePage() {
         city: city.trim(),
         country: country.trim(),
         organizerName: organizerName.trim(),
-        contactDetail: contactDetail.trim(),
+        contactDetail,
         venue: venue.trim() || undefined,
-        level,
+        level: "Open",
         capacity: Number(capacity),
-        startDate,
-        endDate,
-        registrationDeadline,
-        description: description.trim() || undefined,
-        currency,
+        // Exact dates are configured later from the organizer dashboard — the server fills in
+        // a sane placeholder range when these are left blank at creation time.
+        startDate: "",
+        endDate: "",
+        currency: "INR",
         socialLinks: {},
         registrationCategories: [
           {
@@ -97,7 +92,6 @@ export default function CreateOrganizerConferencePage() {
             description: "Default delegate category.",
             applicationType: "delegate",
             isOpen: true,
-            deadlineOverride: registrationDeadline,
             basePrice: 0,
             requiresCommitteeSelection: false,
             formFields: [],
@@ -158,7 +152,9 @@ export default function CreateOrganizerConferencePage() {
                 <div className="section-label mb-2">Organizer Onboarding</div>
                 <h1 className="app-title">Create Conference</h1>
                 <p className="app-subtitle mt-2">
-                  Create your conference as Draft, then open your dashboard and click Publish when ready to go live.
+                  Just the basics for now — dates, registration pricing, and committees are all configured
+                  from your dashboard afterward. Create your conference as Draft, then open your dashboard
+                  and click Publish when ready to go live.
                 </p>
               </div>
             </div>
@@ -181,95 +177,39 @@ export default function CreateOrganizerConferencePage() {
                 <input className="input-base mt-2" value={country} onChange={(e) => setCountry(e.target.value)} />
               </div>
               <div>
-                <label className="app-sidebar-picker-label">Contact Detail *</label>
+                <label className="app-sidebar-picker-label">Phone *</label>
                 <input
                   className="input-base mt-2"
-                  value={contactDetail}
-                  onChange={(e) => setContactDetail(e.target.value)}
-                  placeholder="Phone number or reachable email"
+                  type="tel"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  placeholder="+91 98765 43210"
                 />
               </div>
               <div>
-                <label className="app-sidebar-picker-label">Venue</label>
-                <input className="input-base mt-2" value={venue} onChange={(e) => setVenue(e.target.value)} />
-              </div>
-              <div>
-                <label className="app-sidebar-picker-label">Start Date *</label>
-                <input className="input-base mt-2" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
-              </div>
-              <div>
-                <label className="app-sidebar-picker-label">End Date *</label>
-                <input className="input-base mt-2" type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
-              </div>
-              <div>
-                <label className="app-sidebar-picker-label">Registration Deadline *</label>
+                <label className="app-sidebar-picker-label">Email *</label>
                 <input
                   className="input-base mt-2"
-                  type="date"
-                  value={registrationDeadline}
-                  onChange={(e) => setRegistrationDeadline(e.target.value)}
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="organizers@yourconference.com"
                 />
               </div>
               <div>
-                <label className="app-sidebar-picker-label">Capacity *</label>
+                <label className="app-sidebar-picker-label">Approximate Capacity *</label>
                 <input
                   className="input-base mt-2"
                   type="number"
                   min={1}
                   value={capacity}
                   onChange={(e) => setCapacity(e.target.value)}
+                  placeholder="e.g. 200"
                 />
               </div>
               <div>
-                <label className="app-sidebar-picker-label">Currency *</label>
-                <select
-                  className="input-base mt-2"
-                  value={currency}
-                  onChange={(event) =>
-                    setCurrency(
-                      event.target.value === "USD" ||
-                        event.target.value === "EUR" ||
-                        event.target.value === "GBP"
-                        ? event.target.value
-                        : "INR"
-                    )
-                  }
-                >
-                  <option value="INR">INR — Indian Rupee</option>
-                  <option value="USD">USD — US Dollar</option>
-                  <option value="EUR">EUR — Euro</option>
-                  <option value="GBP">GBP — British Pound</option>
-                </select>
-              </div>
-              <div className="md:col-span-2">
-                <label className="app-sidebar-picker-label">Conference Level</label>
-                <div className="grid grid-cols-3 gap-2 mt-2">
-                  {(["High School", "University", "Open"] as const).map((option) => (
-                    <button
-                      key={option}
-                      type="button"
-                      className="btn btn-ghost text-sm"
-                      onClick={() => setLevel(option)}
-                      style={{
-                        background: level === option ? "var(--blue-subtle)" : "var(--bg-subtle)",
-                        borderColor: level === option ? "var(--blue)" : "var(--border)",
-                        color: level === option ? "var(--blue)" : "var(--fg-muted)",
-                      }}
-                    >
-                      {option}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div className="md:col-span-2">
-                <label className="app-sidebar-picker-label">Description</label>
-                <textarea
-                  className="input-base mt-2"
-                  rows={4}
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Optional short conference summary"
-                />
+                <label className="app-sidebar-picker-label">Venue (optional)</label>
+                <input className="input-base mt-2" value={venue} onChange={(e) => setVenue(e.target.value)} />
               </div>
             </div>
 

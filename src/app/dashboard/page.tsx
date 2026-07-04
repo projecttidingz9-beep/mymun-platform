@@ -101,7 +101,6 @@ export default function DashboardPage() {
       Array<{ id: string; title: string; category: string; fileUrl: string; acknowledged: boolean }>
     >
   >({});
-  const [positionPaperDrafts, setPositionPaperDrafts] = useState<Record<string, string>>({});
   const [serverNotifications, setServerNotifications] = useState<Array<{
     id: string;
     title: string;
@@ -179,9 +178,14 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
+    // Support both `?tab=` (reliable across client-side navigations from other pages,
+    // e.g. the navbar's profile menu) and `#hash` (in-page section links) for picking
+    // the initial tab — the profile-menu "Settings" vs "Dashboard" links rely on this.
+    const queryTab = searchParams.get("tab");
     const hash = window.location.hash.replace(/^#/, "");
-    if (hash && isDelegateTabId(hash)) {
-      setActiveTab(hash);
+    const initial = (queryTab && isDelegateTabId(queryTab) && queryTab) || (hash && isDelegateTabId(hash) && hash);
+    if (initial) {
+      setActiveTab(initial);
     }
     const onHashChange = () => {
       const next = window.location.hash.replace(/^#/, "");
@@ -191,6 +195,7 @@ export default function DashboardPage() {
     };
     window.addEventListener("hashchange", onHashChange);
     return () => window.removeEventListener("hashchange", onHashChange);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -306,7 +311,6 @@ export default function DashboardPage() {
       read: notification.read,
     })),
   ].sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt));
-  const totalPaid = registrations.filter(r => r.paid).reduce((sum, r) => sum + r.amount, 0);
   const confirmed = registrations.filter(r => r.status === "Confirmed").length;
 
   const STATUS_STYLE: Record<string, { class: string }> = {
@@ -566,12 +570,16 @@ export default function DashboardPage() {
       alert("Invoice is available after payment is completed.");
       return;
     }
-    const { downloadRegistrationInvoicePdf } = await import("@/lib/client/invoice-pdf");
-    downloadRegistrationInvoicePdf(registration, {
-      name: user.name,
-      email: user.email,
-      invoiceAddress: user.invoiceAddress,
-    });
+    try {
+      const { downloadRegistrationInvoice } = await import("@/lib/client/invoice-pdf");
+      await downloadRegistrationInvoice(registration, {
+        name: user.name,
+        email: user.email,
+        invoiceAddress: user.invoiceAddress,
+      });
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Could not download invoice.");
+    }
   };
 
   const onChangePassword = async () => {
@@ -867,12 +875,11 @@ export default function DashboardPage() {
             </div>
           )}
 
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-7">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-7">
             {[
               { label: "Conferences", value: registrations.length, icon: "🌍", tone: "info" as const },
               { label: "Confirmed", value: confirmed, icon: "✅", tone: "success" as const },
               { label: "Countries Represented", value: [...new Set(registrations.map(r => r.country))].length, icon: "🏳️", tone: "accent" as const },
-              { label: "Total Invested", value: `$${totalPaid}`, icon: "💳", tone: "warning" as const },
             ].map((stat) => (
               <div key={stat.label} className="app-stat">
                 <div className="app-stat-head">
@@ -1203,49 +1210,6 @@ export default function DashboardPage() {
                                 ))}
                               </div>
                             )}
-                          {reg.organizerStatus === "Allotted" && (
-                            <div className="p-4 rounded-xl space-y-2" style={{ background: "var(--bg-subtle)" }}>
-                              <p className="text-xs font-bold uppercase tracking-wide" style={{ color: "var(--fg-muted)" }}>
-                                Position paper
-                              </p>
-                              <textarea
-                                className="input-base text-xs"
-                                rows={3}
-                                placeholder="Paste position paper text or summary..."
-                                value={positionPaperDrafts[reg.id] || ""}
-                                onChange={(event) =>
-                                  setPositionPaperDrafts((prev) => ({
-                                    ...prev,
-                                    [reg.id]: event.target.value,
-                                  }))
-                                }
-                              />
-                              <button
-                                type="button"
-                                className="btn btn-ghost text-xs"
-                                onClick={() => {
-                                  void fetch(`/api/registrations/${reg.id}/position-paper`, {
-                                    method: "POST",
-                                    credentials: "include",
-                                    headers: { "Content-Type": "application/json" },
-                                    body: JSON.stringify({
-                                      textContent: positionPaperDrafts[reg.id] || "",
-                                      committeeId: undefined,
-                                    }),
-                                  }).then(async (res) => {
-                                    if (!res.ok) {
-                                      const data = (await res.json()) as { error?: string };
-                                      toast.show(data.error || "Could not submit position paper.", "error");
-                                      return;
-                                    }
-                                    toast.show("Position paper submitted.", "success");
-                                  });
-                                }}
-                              >
-                                Submit position paper
-                              </button>
-                            </div>
-                          )}
                           {(registrationAwards[reg.id] || []).length > 0 && (
                             <div className="p-4 rounded-xl space-y-2" style={{ background: "var(--bg-subtle)" }}>
                               <p className="text-xs font-bold uppercase tracking-wide" style={{ color: "var(--fg-muted)" }}>
@@ -1976,7 +1940,7 @@ export default function DashboardPage() {
                               {registration.categoryName} · Registered {registration.registeredAt}
                             </p>
                             <p className="text-[11px]" style={{ color: "var(--fg-muted)" }}>
-                              Amount: ${registration.amount.toFixed(2)}
+                              Amount: {formatMoney(registration.amount)}
                             </p>
                           </div>
                           <span className={`badge ${registration.paid ? "badge-green" : "badge-gray"}`}>
@@ -2039,7 +2003,7 @@ export default function DashboardPage() {
                             </div>
                             <div className="mt-3 pt-3 flex items-center justify-between text-sm" style={{ borderTop: "1px solid var(--border)" }}>
                               <span style={{ color: "var(--fg-muted)" }}>Total Paid</span>
-                              <span className="font-bold" style={{ color: "var(--fg)" }}>${registration.amount.toFixed(2)}</span>
+                              <span className="font-bold" style={{ color: "var(--fg)" }}>{formatMoney(registration.amount)}</span>
                             </div>
                           </div>
                         )}
@@ -2082,9 +2046,9 @@ export default function DashboardPage() {
                   boxShadow: "var(--card-shadow)",
                 }}
               >
-                <h3 className="font-bold mb-2 text-white">💡 Tip of the Day</h3>
+                <h3 className="font-bold mb-2 text-white">Tip of the Day</h3>
                 <p className="text-white/85 text-sm leading-relaxed">
-                  Start preparing your position paper at least 2 weeks before the conference. Research your country&apos;s official UN voting history for strong arguments.
+                  Research your country&apos;s official UN voting history and recent foreign policy statements before committee sessions for stronger arguments.
                 </p>
 
               </div>

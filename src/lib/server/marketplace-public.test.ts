@@ -1,5 +1,4 @@
 import { describe, it, expect } from "vitest";
-import type { PricingPhaseConfig } from "@/generated/prisma/client";
 import { mapPublishedEventToConference, mapPublishedEventToPublicDetail } from "./marketplace-public";
 import type { EventWithListing } from "./marketplace-public";
 
@@ -66,25 +65,42 @@ describe("mapPublishedEventToConference", () => {
     expect(conference.description).toBe("Blob body text");
   });
 
-  it("handles pricing phase dates serialized as ISO strings", () => {
+  it("handles pricing phase dates from registrationCategories blob (source of truth)", () => {
     const base = makeEvent();
-    const stringPhases = [
-      {
-        id: "phase-1",
-        organizerConfigId: "cfg-1",
-        name: "Early Bird",
-        startDate: "2026-05-01T00:00:00.000Z",
-        endDate: "2026-06-01T00:00:00.000Z",
-        basePrice: 1500,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      },
-    ] as unknown as PricingPhaseConfig[];
+    const blob = {
+      title: "Blob Title",
+      city: "Singapore",
+      country: "Singapore",
+      organizerName: "Blob Organizer",
+      description: "Blob body text",
+      registrationCategories: [
+        {
+          id: "cat-1",
+          name: "Delegate Registration",
+          applicationType: "delegate",
+          isOpen: true,
+          basePrice: 1500,
+          requiresCommitteeSelection: true,
+          formFields: [],
+          pricingPhases: [
+            {
+              id: "phase-1",
+              name: "Early Bird",
+              startDate: "2026-05-01",
+              endDate: "2026-06-01",
+              basePrice: 1500,
+              committeePrices: [],
+            },
+          ],
+        },
+      ],
+    };
     const conference = mapPublishedEventToConference(
       makeEvent({
         organizerConfig: {
           ...base.organizerConfig!,
-          pricingPhases: stringPhases,
+          description: `${PREVIEW_JSON_PREFIX}${JSON.stringify(blob)}`,
+          pricingPhases: [],
         },
       })
     );

@@ -20,7 +20,9 @@ function mapEventStatus(status: EventStatus): OrganizerConference["status"] {
   if (status === "DRAFT") return "Draft";
   if (status === "REVIEW") return "Review";
   if (status === "PUBLISHED") return "Published";
-  if (status === "CANCELLED" || status === "ARCHIVED") return "Draft";
+  // SUSPENDED (admin-hidden) intentionally reads as Draft to the organizer — it's off the
+  // marketplace either way, and re-publishing goes through the normal Draft → Review flow.
+  if (status === "SUSPENDED" || status === "CANCELLED" || status === "ARCHIVED") return "Draft";
   return "Draft";
 }
 
@@ -79,6 +81,10 @@ function committeeFromDbRow(
     id: string;
     name: string;
     agenda: string;
+    agendasJson?: string | null;
+    logoImageUrl?: string | null;
+    chairsJson?: string | null;
+    noPortfolio?: boolean;
     type: string | null;
     committeeFormat?: string | null;
     metadataJson?: string | null;
@@ -128,11 +134,47 @@ function committeeFromDbRow(
     }
   }
 
+  let additionalAgendas: string[] = [];
+  if (c.agendasJson) {
+    try {
+      const parsed = JSON.parse(c.agendasJson);
+      if (Array.isArray(parsed)) additionalAgendas = parsed.map(String).filter(Boolean);
+    } catch {
+      additionalAgendas = [];
+    }
+  }
+
+  let chairs: OrganizerCommittee["chairs"] = [];
+  if (c.chairsJson) {
+    try {
+      const parsed = JSON.parse(c.chairsJson);
+      if (Array.isArray(parsed)) {
+        chairs = parsed
+          .filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === "object")
+          .map((entry, index) => ({
+            id: String(entry.id || `${c.id}-chair-${index}`),
+            name: String(entry.name || ""),
+            email: entry.email ? String(entry.email) : undefined,
+            role: entry.role ? String(entry.role) : undefined,
+          }))
+          .filter((chair) => chair.name);
+      }
+    } catch {
+      chairs = [];
+    }
+  }
+  if (chairs.length === 0 && c.chairName) {
+    chairs = [{ id: `${c.id}-chair-legacy`, name: c.chairName, email: c.chairEmail ?? undefined, role: "Chair" }];
+  }
+
   return {
     id: c.id,
     name: c.name,
     agenda: c.agenda || "Agenda",
+    additionalAgendas,
     description: undefined,
+    logoImageUrl: c.logoImageUrl ?? undefined,
+    noPortfolio: c.noPortfolio === true,
     seatCount: c.seatCount,
     basePrice: c.basePrice == null ? undefined : moneyNumber(c.basePrice),
     chairName: c.chairName ?? undefined,
@@ -144,7 +186,7 @@ function committeeFromDbRow(
     type: legacyType,
     memberMode: committeeType === "UN" ? "UN_COUNTRY" : "CUSTOM_MEMBER",
     metadata,
-    positionPaperDeadline: c.positionPaperDeadline?.toISOString(),
+    positionPaperDeadline: undefined,
     customQuestions: c.questions.map((q) => ({
       id: q.id,
       question: q.label,
@@ -156,7 +198,7 @@ function committeeFromDbRow(
       seatCount: p.seatCount,
       assignedApplicantIds: [],
     })),
-    chairs: [],
+    chairs,
     documents: (c.documents ?? []).map((doc) => ({
       id: doc.id,
       title: doc.title,
@@ -181,6 +223,9 @@ function mergeCommittees(dbList: OrganizerCommittee[], blobList: OrganizerCommit
       seatCount: blob.seatCount ?? db.seatCount,
       name: blob.name ?? db.name,
       agenda: blob.agenda ?? db.agenda,
+      additionalAgendas: blob.additionalAgendas ?? db.additionalAgendas ?? [],
+      logoImageUrl: blob.logoImageUrl ?? db.logoImageUrl,
+      noPortfolio: blob.noPortfolio ?? db.noPortfolio,
       portfolios: blob.portfolios ?? db.portfolios ?? [],
       chairs: blob.chairs ?? db.chairs ?? [],
       customQuestions:
@@ -410,6 +455,8 @@ export async function mapManagedEventToOrganizerConference(eventId: string): Pro
       assignedPortfolioId: isAllotted ? reg.portfolioId ?? undefined : undefined,
       assignedPortfolioName: isAllotted ? reg.portfolioName ?? undefined : undefined,
       assignedAt: reg.allottedAt?.toISOString(),
+      released: isAllotted ? reg.released : undefined,
+      releasedAt: isAllotted ? reg.releasedAt?.toISOString() : undefined,
       paid: reg.paid,
       paymentIntentStatus: reg.paymentIntent?.status,
       paymentProvider: reg.paymentIntent?.provider,
@@ -457,10 +504,8 @@ export async function mapManagedEventToOrganizerConference(eventId: string): Pro
   const awards: OrganizerAwardConfig[] = event.awards.map((a) => ({
     id: a.id,
     category: a.category,
-    presetKey: a.presetKey ?? undefined,
     prizeTitle: a.prizeTitle ?? undefined,
-    sponsorLogoUrl: a.sponsorLogoUrl ?? undefined,
-    sponsorName: a.sponsorName ?? undefined,
+    amount: a.amount == null ? undefined : moneyNumber(a.amount),
     description: a.description ?? undefined,
     participantId: a.recipientRegistrationId ?? undefined,
     participantName: a.participantName ?? undefined,
@@ -580,6 +625,12 @@ export async function mapManagedEventToOrganizerConference(eventId: string): Pro
           })),
     awards: awards.length ? awards : Array.isArray(blob.awards) ? (blob.awards as OrganizerAwardConfig[]) : undefined,
     reviews: reviews.length ? reviews : Array.isArray(blob.reviews) ? (blob.reviews as ConferenceReview[]) : undefined,
+    portfolioMatrixVisibility: event.organizerConfig?.portfolioMatrixVisibility ?? "PRIVATE",
+    allocationMode: event.organizerConfig?.allocationMode ?? undefined,
+    hiddenSections: Array.isArray(blob.hiddenSections)
+      ? (blob.hiddenSections as unknown[]).map((entry) => String(entry)).filter(Boolean)
+      : undefined,
+    paymentDeadlineDays: event.organizerConfig?.paymentDeadlineDays ?? undefined,
   };
 
   return recomputeCommitteeAllotments(conference);

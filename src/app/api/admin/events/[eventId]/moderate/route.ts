@@ -4,6 +4,7 @@ import { revalidateTag } from "next/cache";
 import { getRequestActor, isSuperAdmin, resolveActorUserId } from "@/lib/server/auth";
 import {
   moderateConference,
+  moderateConferenceByStatus,
   type ModerationAction,
 } from "@/lib/server/admin-conference-moderation";
 import { MARKETPLACE_CACHE_TAG } from "@/lib/server/marketplace-queries";
@@ -34,14 +35,36 @@ export async function POST(
   };
 
   const action = body.action;
+  const note = typeof body.note === "string" ? body.note : undefined;
+  const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || undefined;
+  const userAgent = request.headers.get("user-agent") || undefined;
+
+  if (action === "suspend" || action === "unsuspend") {
+    try {
+      const result = await moderateConferenceByStatus({
+        eventId,
+        status: action === "suspend" ? "SUSPENDED" : "PUBLISHED",
+        note,
+        actorUserId,
+        actorEmail: actor!.email,
+        ip,
+        userAgent,
+      });
+      revalidateTag(MARKETPLACE_CACHE_TAG, { expire: 0 });
+      return NextResponse.json({ ok: true, ...result });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Moderation failed.";
+      const status = message === "Event not found." ? 404 : 400;
+      return NextResponse.json({ error: message }, { status });
+    }
+  }
+
   if (action !== "approve" && action !== "reject") {
     return NextResponse.json(
-      { error: 'action must be "approve" or "reject".' },
+      { error: 'action must be "approve", "reject", "suspend", or "unsuspend".' },
       { status: 400 }
     );
   }
-
-  const note = typeof body.note === "string" ? body.note : undefined;
 
   try {
     const result = await moderateConference({
@@ -50,8 +73,8 @@ export async function POST(
       note,
       actorUserId,
       actorEmail: actor!.email,
-      ip: request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || undefined,
-      userAgent: request.headers.get("user-agent") || undefined,
+      ip,
+      userAgent,
     });
 
     if (action === "approve") {

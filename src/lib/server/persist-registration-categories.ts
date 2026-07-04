@@ -29,23 +29,7 @@ function parseDeadline(cat: RegistrationCategory): Date | null {
   return null;
 }
 
-function parsePhaseDate(value: string, phaseName: string, fieldLabel: string): Date {
-  const trimmed = value.trim();
-  if (!trimmed) {
-    throw new Error(
-      `Pricing phase "${phaseName}" is missing a ${fieldLabel}. Complete every pricing phase or remove empty phases before saving.`
-    );
-  }
-  const parsed = new Date(trimmed);
-  if (Number.isNaN(parsed.getTime())) {
-    throw new Error(
-      `Pricing phase "${phaseName}" has an invalid ${fieldLabel}. Complete every pricing phase or remove empty phases before saving.`
-    );
-  }
-  return parsed;
-}
-
-/** Replace category + pricing phase rows within an existing transaction. */
+/** Replace category rows within an existing transaction. Pricing phases live on the JSON blob. */
 export async function syncRegistrationCategoriesToDb(
   tx: Prisma.TransactionClient,
   organizerConfigId: string,
@@ -77,34 +61,11 @@ export async function syncRegistrationCategoriesToDb(
     });
   }
 
-  const phaseMap = new Map<string, RegistrationCategory["pricingPhases"][number]>();
-  for (const cat of registrationCategories) {
-    for (const phase of cat.pricingPhases || []) {
-      if (!phaseMap.has(phase.id)) phaseMap.set(phase.id, phase);
-    }
-  }
-
+  // Pricing phases live on the registrationCategories JSON blob (source of truth). Clear any
+  // legacy event-wide PricingPhaseConfig rows so they cannot drift from per-category phases.
   await tx.pricingPhaseConfig.deleteMany({
     where: { organizerConfigId },
   });
-
-  if (phaseMap.size > 0) {
-    await tx.pricingPhaseConfig.createMany({
-      data: [...phaseMap.values()].map((phase) => {
-        const committeePriceObj = Object.fromEntries(
-          (phase.committeePrices || []).map((cp) => [cp.committeeId, cp.price])
-        );
-        return {
-          organizerConfigId,
-          name: phase.name,
-          startDate: parsePhaseDate(phase.startDate, phase.name, "start date"),
-          endDate: parsePhaseDate(phase.endDate, phase.name, "end date"),
-          basePrice: coercePrice(phase.basePrice),
-          committeePriceJson: JSON.stringify(committeePriceObj),
-        };
-      }),
-    });
-  }
 }
 
 /** Persist registration categories to preview blob and relational config (no committee wipe). */

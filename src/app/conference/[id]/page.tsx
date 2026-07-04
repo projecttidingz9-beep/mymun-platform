@@ -69,7 +69,6 @@ export default function ConferenceDetailPage() {
   });
   const [addedTags, setAddedTags] = useState<string[]>([]);
   const [tagDraft, setTagDraft] = useState("");
-  const [editableStats, setEditableStats] = useState<Record<string, string | number>>({});
   const [reviewMessage, setReviewMessage] = useState<string | null>(null);
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
   const [reviewDeletingId, setReviewDeletingId] = useState<string | null>(null);
@@ -278,7 +277,9 @@ export default function ConferenceDetailPage() {
     ? mergedRegistrationCategories
         .map((category) => getActivePhase(category.pricingPhases))
         .find(Boolean)
-    : null;
+    : publicDetail?.activePricingPhaseName
+      ? { name: publicDetail.activePricingPhaseName }
+      : null;
   const phaseStatusChips = showOperationalOverlay
     ? mergedRegistrationCategories.flatMap((category) =>
         category.pricingPhases.map((phase) => ({
@@ -287,7 +288,15 @@ export default function ConferenceDetailPage() {
           status: getPhaseStatus(phase, new Date()),
         }))
       )
-    : [];
+    : publicDetail?.pricingPhaseChips ?? [];
+  const hiddenSections = new Set(
+    showOperationalOverlay
+      ? organizerConference?.hiddenSections || []
+      : publicDetail?.hiddenSections || []
+  );
+  const isSectionVisible = (key: string) => !hiddenSections.has(key);
+  const publicTeamMembers =
+    (showOperationalOverlay ? organizerConference?.organizerTeam : publicDetail?.organizerTeam) || [];
   const displayTitle = publicView.displayTitle;
   const displayOrganizerName = publicView.displayOrganizerName;
   const safeDisplayDescription = publicView.safeDisplayDescription;
@@ -310,6 +319,11 @@ export default function ConferenceDetailPage() {
     .map((part) => part[0]?.toUpperCase() || "")
     .join("") || "MUN";
   const isOrganizerUser = isLoggedIn && user?.role === "organizer";
+  const registrationIsOpen = showOperationalOverlay
+    ? mergedRegistrationCategories.some(
+        (category) => category.isOpen !== false && Boolean(getActivePhase(category.pricingPhases))
+      )
+    : publicDetail?.registrationOpen ?? true;
   const policySections = publicView.policySections;
   const commonDocuments = publicView.commonDocuments;
   const committeeDocumentGroups = showOperationalOverlay
@@ -360,7 +374,7 @@ export default function ConferenceDetailPage() {
         abbreviation: (cm.type || "Committee").slice(0, 8).toUpperCase(),
         name: cm.name,
         difficulty: "Intermediate" as const,
-        agendas: [cm.agenda, ...(cm.customQuestions?.map((question) => question.question) || [])].filter(
+        agendas: [cm.agenda, ...(cm.additionalAgendas || [])].filter(
           (agenda) => agenda.trim().length > 0
         ),
         size: cm.seatCount,
@@ -368,15 +382,29 @@ export default function ConferenceDetailPage() {
         portfolios: cm.portfolios ?? [],
         chairName: cm.chairName,
         chairs: cm.chairs ?? [],
+        noPortfolio: cm.noPortfolio,
+        portfolioMatrixVisibility: organizerConference?.portfolioMatrixVisibility,
+        logoImageUrl: cm.logoImageUrl,
         sourceConferenceTitle: cm.sourceConferenceTitle,
         documents: cm.documents || [],
       }))
     : c.committees.map((cm) => ({
         ...cm,
-        agendas: [cm.topic1, cm.topic2].filter((agenda) => agenda.trim().length > 0),
+        agendas: (cm.agendas && cm.agendas.length > 0 ? cm.agendas : [cm.topic1, cm.topic2]).filter(
+          (agenda) => agenda.trim().length > 0
+        ),
         seatsRemaining: Math.max(cm.size - (cm.allottedCount ?? 0), 0),
-        portfolios: [],
+        portfolios: (cm.portfolios ?? []).map((p) => ({
+          id: p.id,
+          name: p.name,
+          seatCount: p.seatCount,
+          assignedApplicantIds: p.taken ? [p.name] : [],
+        })),
         chairName: undefined,
+        chairs: cm.chairs ?? [],
+        noPortfolio: cm.noPortfolio,
+        portfolioMatrixVisibility: cm.portfolioMatrixVisibility,
+        logoImageUrl: cm.logoImageUrl,
         sourceConferenceTitle: c.title,
         documents: [],
       }));
@@ -392,39 +420,45 @@ export default function ConferenceDetailPage() {
         reviewsToShow.length
       ).toFixed(1)
     : "0.0";
-  const countryMatrix = displayCommittees.map((committee) => {
-    const listedPortfolios = (committee.portfolios || []).flatMap((portfolio) => {
+  // Portfolio Matrix: real country/portfolio names, never "Seat N"/"Member N" placeholders.
+  // Press Corps / no-portfolio committees are intentionally excluded — delegates there are
+  // selected directly into the committee, not into a named portfolio slot.
+  const portfolioMatrixShowsStatus = (committee: { portfolioMatrixVisibility?: "PUBLIC" | "PRIVATE" }) =>
+    !showOperationalOverlay ? committee.portfolioMatrixVisibility === "PUBLIC" : true;
+  // Keeps 1:1 index alignment with `displayCommittees` — noPortfolio (Press Corps style)
+  // committees simply contribute an empty list instead of being spliced out.
+  const portfolioMatrix = displayCommittees.map((committee) => {
+    if (committee.noPortfolio) return [];
+    const showStatus = portfolioMatrixShowsStatus(committee);
+    return (committee.portfolios || []).flatMap((portfolio) => {
       const totalSeats = Math.max(1, portfolio.seatCount || 1);
       const availableSeats = Math.max(0, totalSeats - (portfolio.assignedApplicantIds?.length || 0));
       return Array.from({ length: totalSeats }).map((_, seatIndex) => ({
         label: totalSeats > 1 ? `${portfolio.name} ${seatIndex + 1}` : portfolio.name,
         available: seatIndex < availableSeats,
+        showStatus,
       }));
     });
-    if (listedPortfolios.length > 0) return listedPortfolios;
-    return Array.from({ length: committee.size }).map((_, seatIndex) => ({
-      label: `Member ${seatIndex + 1}`,
-      available: seatIndex < committee.seatsRemaining,
-    }));
   });
+  const countryMatrix = portfolioMatrix;
 
   const handleRegister = () => {
+    if (!registrationIsOpen) return;
     if (!isLoggedIn) { setAuthOpen(true); return; }
     if (isOrganizerUser) return;
     router.push(`/checkout/${c.id}`);
   };
 
   const saveOverviewMeta = () => {
+    // Ownership is re-checked here (not just `isOrganizerUser`) since `organizerConference` is
+    // resolved from the signed-in organizer's own conference list — a foreign conference will
+    // never appear there, so this can never target another organizer's data. Capacity/level are
+    // configured from the organizer dashboard, not this public page — only tags are editable here.
     if (!organizerConference || !isOrganizerUser) return;
     updateOrganizerConferenceConfig(organizerConference.id, {
       tags: editableTags,
-      capacity: Number(editableStats.Capacity) || organizerConference.capacity,
-      level:
-        editableStats.Level === "High School" || editableStats.Level === "University" || editableStats.Level === "Open"
-          ? editableStats.Level
-          : organizerConference.level,
     });
-    setReviewMessage("Conference stats and tags saved.");
+    setReviewMessage("Tags saved.");
   };
 
   const copyShareLink = async () => {
@@ -463,10 +497,12 @@ export default function ConferenceDetailPage() {
   const tabs: { key: Tab; label: string }[] = [
     { key: "overview", label: "Overview" },
     { key: "committees", label: `Committees (${showOperationalOverlay ? mergedCommittees.length : c.committees.length})` },
-    { key: "schedule", label: "Schedule" },
+    ...(isSectionVisible("schedule") ? [{ key: "schedule" as const, label: "Schedule" }] : []),
     { key: "organizer", label: "Organizer" },
     { key: "reviews", label: `Reviews (${reviewsToShow.length})` },
   ];
+  const publicAwards =
+    (showOperationalOverlay ? organizerConference?.awards : publicDetail?.awards) || [];
 
   return (
     <div className="conference-detail-page min-h-screen" style={{ background: "var(--bg)", color: "var(--fg)" }}>
@@ -603,10 +639,6 @@ export default function ConferenceDetailPage() {
                   <p className="text-[10px] uppercase tracking-[0.16em]" style={{ color: "var(--fg-muted)" }}>Organized by</p>
                   <p className="text-sm font-semibold mt-1" style={{ color: "var(--fg)" }}>{displayOrganizerName}</p>
                 </div>
-                <div className="conference-surface rounded-xl px-4 py-3">
-                  <p className="text-[10px] uppercase tracking-[0.16em]" style={{ color: "var(--fg-muted)" }}>Registration deadline</p>
-                  <p className="text-sm font-semibold mt-1" style={{ color: "var(--fg)" }}>{c.registrationDeadline}</p>
-                </div>
               </div>
               <div className="hidden lg:block flex-1 min-h-[26px]" />
             </div>
@@ -662,8 +694,10 @@ export default function ConferenceDetailPage() {
 
               <div className="space-y-4">
                 <div className="lux-stat">
-                  <span className="lux-stat-label">Seats</span>
-                  <span className="lux-stat-value">
+                  <span className="text-[10px] font-semibold uppercase tracking-[0.28em]" style={{ color: "var(--fg-muted)" }}>
+                    Seats
+                  </span>
+                  <span className="text-[22px] font-semibold" style={{ color: "var(--fg)", letterSpacing: "-0.01em" }}>
                     {seatsLeft}
                     <span
                       className="text-sm font-normal ml-1"
@@ -704,16 +738,16 @@ export default function ConferenceDetailPage() {
               <button
                 type="button"
                 onClick={handleRegister}
-                className={isOrganizerUser ? "lux-button-ghost" : "lux-button-primary"}
-                disabled={isOrganizerUser}
+                className={isOrganizerUser || !registrationIsOpen ? "lux-button-ghost" : "lux-button-primary"}
+                disabled={isOrganizerUser || !registrationIsOpen}
                 style={{
                   width: "100%",
                   marginTop: "22px",
                   padding: "14px 18px",
                   fontSize: "14px",
-                  cursor: isOrganizerUser ? "not-allowed" : "pointer",
-                  opacity: isOrganizerUser ? 0.6 : 1,
-                  ...(isOrganizerUser
+                  cursor: isOrganizerUser || !registrationIsOpen ? "not-allowed" : "pointer",
+                  opacity: isOrganizerUser || !registrationIsOpen ? 0.6 : 1,
+                  ...(isOrganizerUser || !registrationIsOpen
                     ? {
                         color: "var(--fg)",
                         borderColor: "var(--border)",
@@ -724,19 +758,18 @@ export default function ConferenceDetailPage() {
               >
                 {isOrganizerUser
                   ? "Organizers cannot register"
-                  : isLoggedIn
-                    ? "Register now →"
-                    : "Sign in to register →"}
+                  : !registrationIsOpen
+                    ? "Registrations closed for now"
+                    : isLoggedIn
+                      ? "Register now →"
+                      : "Sign in to register →"}
               </button>
+              {!registrationIsOpen && !isOrganizerUser && (
+                <p className="mt-2 text-[11px] text-center" style={{ color: "var(--fg-muted)" }}>
+                  Coming soon — check back once the organizer opens a registration phase.
+                </p>
+              )}
 
-              <div className="mt-auto pt-2">
-              <p
-                className="mt-4 text-[11px] text-center"
-                style={{ color: "var(--fg-muted)" }}
-              >
-                Registration deadline: {c.registrationDeadline}
-              </p>
-              </div>
             </div>
           </div>
         </div>
@@ -863,17 +896,53 @@ export default function ConferenceDetailPage() {
                     </div>
                 )}
               </div>
-              <div className="lux-card p-6 sm:p-7">
-                <h2 className="text-2xl font-bold mb-4" style={{ color: "var(--fg)" }}>Awards</h2>
-                <div className="space-y-3">
-                  {fallbackOverviewAwards.map((award) => (
-                    <p key={award} className="text-sm rounded-xl px-4 py-3 conference-surface" style={{ color: "var(--fg-muted)" }}>
-                      {award}
-                    </p>
-                  ))}
+              {isSectionVisible("awards") && (
+              <div className="lux-card p-6 sm:p-8">
+                <h2 className="text-3xl font-bold mb-6" style={{ color: "var(--fg)" }}>Awards</h2>
+                <div className="grid sm:grid-cols-2 gap-4">
+                  {publicAwards.length > 0
+                    ? publicAwards.map((award) => (
+                        <div
+                          key={award.id}
+                          className="rounded-2xl p-5 conference-surface"
+                          style={{ border: "1px solid var(--border)" }}
+                        >
+                          <p className="text-xs font-semibold uppercase tracking-[0.18em]" style={{ color: "var(--fg-muted)" }}>
+                            {award.category}
+                          </p>
+                          <p className="text-xl font-bold mt-2" style={{ color: "var(--fg)" }}>
+                            {award.prizeTitle || award.category}
+                          </p>
+                          {typeof award.amount === "number" && award.amount > 0 && (
+                            <p className="text-base font-semibold mt-2" style={{ color: "var(--blue)" }}>
+                              {formatMoney(award.amount, c.currency)}
+                            </p>
+                          )}
+                          {("winnerName" in award ? award.winnerName : undefined) ||
+                          award.participantName ? (
+                            <p className="text-sm mt-3" style={{ color: "var(--fg-muted)" }}>
+                              Winner:{" "}
+                              <strong style={{ color: "var(--fg)" }}>
+                                {("winnerName" in award ? award.winnerName : undefined) ||
+                                  award.participantName}
+                              </strong>
+                            </p>
+                          ) : null}
+                          {award.description && (
+                            <p className="text-sm mt-2" style={{ color: "var(--fg-muted)" }}>{award.description}</p>
+                          )}
+                        </div>
+                      ))
+                    : fallbackOverviewAwards.map((award) => (
+                        <div key={award} className="rounded-2xl p-5 conference-surface">
+                          <p className="text-lg font-semibold" style={{ color: "var(--fg)" }}>{award}</p>
+                        </div>
+                      ))}
                 </div>
               </div>
+              )}
 
+              {isSectionVisible("whatsIncluded") && (
               <div className="lux-card p-6 sm:p-7">
                 <h2 className="text-2xl font-bold mb-5" style={{ color: "var(--fg)" }}>What&apos;s Included</h2>
                 <div className="grid sm:grid-cols-2 gap-3">
@@ -885,6 +954,7 @@ export default function ConferenceDetailPage() {
                   ))}
                 </div>
               </div>
+              )}
               {policySections.length > 0 && (
                 <div className="lux-card p-6 sm:p-7">
                   <h2 className="text-2xl font-bold mb-4" style={{ color: "var(--fg)" }}>Policies & Information</h2>
@@ -943,36 +1013,28 @@ export default function ConferenceDetailPage() {
             </div>
 
             <div className="space-y-5">
-              {/* Stats card */}
+              {/* Stats card — always read-only: every value here is computed/derived from actual
+                  registration and configuration data, never a free-text field (prevents any
+                  organizer, including one who doesn't own this conference, from typing in
+                  fabricated numbers). */}
               <div className="card p-6 rounded-2xl space-y-4">
                 <h3 className="font-bold" style={{ color: "var(--fg)" }}>Conference Stats</h3>
-                {Object.entries(defaultStats).map(([label, baseValue]) => (
+                {Object.entries(defaultStats).map(([label, value]) => (
                   <div key={label} className="flex justify-between items-center text-sm gap-2">
                     <span style={{ color: "var(--fg-muted)" }}>{label}</span>
-                    {isOrganizerUser ? (
-                      <input
-                        className="input-base text-xs py-1 px-2 w-[130px] text-right"
-                        value={String(editableStats[label] ?? baseValue)}
-                        onChange={(event) =>
-                          setEditableStats((prev) => ({
-                            ...prev,
-                            [label]: event.target.value,
-                          }))
-                        }
-                      />
-                    ) : (
-                      <span
-                        className="text-sm font-semibold text-right"
-                        style={{ color: "var(--fg)", minWidth: "130px" }}
-                      >
-                        {String(editableStats[label] ?? baseValue)}
-                      </span>
-                    )}
+                    <span
+                      className="text-sm font-semibold text-right"
+                      style={{ color: "var(--fg)", minWidth: "130px" }}
+                    >
+                      {String(value)}
+                    </span>
                   </div>
                 ))}
               </div>
 
-              {/* Tags */}
+              {/* Tags — editable only by the organizer who actually owns this conference
+                  (gated on `organizerConference`, resolved from the actor's own conference
+                  list, not merely on having an organizer account). */}
               <div className="card p-5 rounded-2xl">
                 <h3 className="font-bold mb-3 text-sm" style={{ color: "var(--fg)" }}>Tags</h3>
                 <div className="flex flex-wrap gap-2">
@@ -980,7 +1042,7 @@ export default function ConferenceDetailPage() {
                     <span key={tag} className="badge badge-blue">{tag}</span>
                   ))}
                 </div>
-                {isOrganizerUser && (
+                {Boolean(organizerConference) && isOrganizerUser && (
                   <div className="mt-3 flex gap-2">
                     <input
                       className="input-base text-xs py-2"
@@ -1004,9 +1066,9 @@ export default function ConferenceDetailPage() {
                   </div>
                 )}
               </div>
-              {isOrganizerUser && (
+              {Boolean(organizerConference) && isOrganizerUser && (
                 <button type="button" className="btn btn-primary text-xs w-full" onClick={saveOverviewMeta}>
-                  Save conference stats and tags
+                  Save tags
                 </button>
               )}
             </div>
@@ -1027,10 +1089,23 @@ export default function ConferenceDetailPage() {
               {displayCommittees.map((cm) => (
                 <div key={cm.id} className="card p-6 rounded-2xl">
                   <div className="flex items-start justify-between mb-4">
-                    <div>
-                      <span className="badge badge-blue mb-2">{cm.abbreviation}</span>
-                      <h3 className="font-bold text-xl" style={{ color: "var(--fg)" }}>{cm.name}</h3>
-                      <p className="text-xs" style={{ color: "var(--fg-muted)" }}>{cm.sourceConferenceTitle}</p>
+                    <div className="flex items-start gap-3">
+                      {"logoImageUrl" in cm && cm.logoImageUrl ? (
+                        <Image
+                          src={cm.logoImageUrl}
+                          alt={`${cm.name} logo`}
+                          width={44}
+                          height={44}
+                          className="w-11 h-11 rounded-lg object-cover flex-shrink-0"
+                          style={{ border: "1px solid var(--border)" }}
+                          unoptimized
+                        />
+                      ) : null}
+                      <div>
+                        <span className="badge badge-blue mb-2">{cm.abbreviation}</span>
+                        <h3 className="font-bold text-xl" style={{ color: "var(--fg)" }}>{cm.name}</h3>
+                        <p className="text-xs" style={{ color: "var(--fg-muted)" }}>{cm.sourceConferenceTitle}</p>
+                      </div>
                     </div>
                     <span
                       className="badge"
@@ -1095,31 +1170,61 @@ export default function ConferenceDetailPage() {
             </div>
             )}
             <div className="mt-8">
-              <h3 className="text-xl font-bold mb-4" style={{ color: "var(--fg)" }}>Country Matrix</h3>
+              <h3 className="text-xl font-bold mb-4" style={{ color: "var(--fg)" }}>Portfolio Matrix</h3>
               <div className="space-y-4">
-                {displayCommittees.map((committee) => (
-                  <div key={`${committee.id}-matrix`} className="card p-5 rounded-2xl">
-                    <p className="text-sm font-semibold mb-3" style={{ color: "var(--fg)" }}>{committee.name}</p>
-                    <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-2">
-                      {(countryMatrix[displayCommittees.findIndex((entry) => entry.id === committee.id)] || []).map((seat, seatIndex) => {
-                        const available = seat.available;
-                        return (
-                          <span
-                            key={`${committee.id}-seat-${seatIndex}`}
-                            className="text-[10px] font-semibold rounded-md px-2 py-2 text-center"
-                            style={{
-                              background: available ? "rgba(22,163,74,0.14)" : "rgba(220,38,38,0.16)",
-                              color: available ? "#16a34a" : "#dc2626",
-                              border: `1px solid ${available ? "rgba(22,163,74,0.35)" : "rgba(220,38,38,0.35)"}`,
-                            }}
-                          >
-                            {seat.label}
-                          </span>
-                        );
-                      })}
+                {displayCommittees.map((committee, committeeIndex) => {
+                  if (committee.noPortfolio) {
+                    return (
+                      <div key={`${committee.id}-matrix`} className="card p-5 rounded-2xl">
+                        <p className="text-sm font-semibold mb-1" style={{ color: "var(--fg)" }}>{committee.name}</p>
+                        <p className="text-xs" style={{ color: "var(--fg-muted)" }}>
+                          Delegates are selected directly into this committee — no named portfolios.
+                        </p>
+                      </div>
+                    );
+                  }
+                  const seats = portfolioMatrix[committeeIndex] || [];
+                  return (
+                    <div key={`${committee.id}-matrix`} className="card p-5 rounded-2xl">
+                      <p className="text-sm font-semibold mb-3" style={{ color: "var(--fg)" }}>{committee.name}</p>
+                      {seats.length === 0 ? (
+                        <p className="text-xs" style={{ color: "var(--fg-muted)" }}>Portfolios will be announced soon.</p>
+                      ) : (
+                        <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-2">
+                          {seats.map((seat, seatIndex) => {
+                            const showStatus = seat.showStatus;
+                            const available = seat.available;
+                            const style = showStatus
+                              ? {
+                                  background: available ? "rgba(22,163,74,0.14)" : "rgba(220,38,38,0.16)",
+                                  color: available ? "#16a34a" : "#dc2626",
+                                  border: `1px solid ${available ? "rgba(22,163,74,0.35)" : "rgba(220,38,38,0.35)"}`,
+                                }
+                              : {
+                                  background: "var(--bg-subtle)",
+                                  color: "var(--fg)",
+                                  border: "1px solid var(--border)",
+                                };
+                            return (
+                              <span
+                                key={`${committee.id}-seat-${seatIndex}`}
+                                className="text-[10px] font-semibold rounded-md px-2 py-2 text-center"
+                                style={style}
+                              >
+                                {seat.label}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      )}
+                      {seats.length > 0 && !seats[0]?.showStatus && (
+                        <p className="text-[11px] mt-2" style={{ color: "var(--fg-muted)" }}>
+                          Allotment status is hidden by the organizer for this conference.
+                        </p>
+                      )}
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           </div>
@@ -1203,14 +1308,18 @@ export default function ConferenceDetailPage() {
                 </div>
               </div>
               <div className="space-y-3">
-                <div className="flex items-center gap-3 text-sm">
-                  <span className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: "var(--bg-subtle)" }}>✉️</span>
-                  <a href={`mailto:${displayOrganizerEmail}`} style={{ color: "var(--blue)" }}>{displayOrganizerEmail}</a>
-                </div>
-                <div className="flex items-center gap-3 text-sm">
-                  <span className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: "var(--bg-subtle)" }}>🌐</span>
-                  <a href={displayWebsite} target="_blank" rel="noopener noreferrer" style={{ color: "var(--blue)" }}>{displayWebsite}</a>
-                </div>
+                {displayOrganizerEmail && (
+                  <div className="flex items-center gap-3 text-sm">
+                    <span className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: "var(--bg-subtle)" }}>✉️</span>
+                    <a href={`mailto:${displayOrganizerEmail}`} style={{ color: "var(--blue)" }}>{displayOrganizerEmail}</a>
+                  </div>
+                )}
+                {displayWebsite && (
+                  <div className="flex items-center gap-3 text-sm">
+                    <span className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: "var(--bg-subtle)" }}>🌐</span>
+                    <a href={displayWebsite} target="_blank" rel="noopener noreferrer" style={{ color: "var(--blue)" }}>{displayWebsite}</a>
+                  </div>
+                )}
                 {displayInstagram && (
                   <div className="flex items-center gap-3 text-sm">
                     <span className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: "var(--bg-subtle)" }}>📸</span>
@@ -1230,19 +1339,33 @@ export default function ConferenceDetailPage() {
                   </div>
                 )}
               </div>
-              {(organizerConference?.organizerTeam || []).length > 0 && (
+              {publicTeamMembers.length > 0 && (
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-[0.2em] mb-3" style={{ color: "var(--fg-muted)" }}>
-                    Additional Organizers
+                    Organizing Team
                   </p>
-                  <div className="grid sm:grid-cols-2 gap-2">
-                    {(organizerConference?.organizerTeam || []).map((member) => (
-                      <div key={member.id} className="rounded-xl px-3 py-3 conference-surface">
-                        <p className="text-sm font-semibold" style={{ color: "var(--fg)" }}>{member.name}</p>
-                        <p className="text-xs" style={{ color: "var(--fg-muted)" }}>{member.role}</p>
-                        {"email" in member && member.email && (
-                          <p className="text-xs mt-1" style={{ color: "var(--fg-muted)" }}>{member.email}</p>
+                  <div className="grid sm:grid-cols-2 gap-3">
+                    {publicTeamMembers.map((member) => (
+                      <div key={member.id} className="rounded-xl px-3 py-3 conference-surface flex items-center gap-3">
+                        {member.photoUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={member.photoUrl}
+                            alt={member.name}
+                            className="w-12 h-12 rounded-xl object-cover flex-shrink-0"
+                          />
+                        ) : (
+                          <div
+                            className="w-12 h-12 rounded-xl flex items-center justify-center text-white font-bold flex-shrink-0"
+                            style={{ background: "linear-gradient(135deg, #2563eb, #60a5fa)" }}
+                          >
+                            {member.name[0]?.toUpperCase() || "T"}
+                          </div>
                         )}
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold" style={{ color: "var(--fg)" }}>{member.name}</p>
+                          <p className="text-xs" style={{ color: "var(--fg-muted)" }}>{member.role}</p>
+                        </div>
                       </div>
                     ))}
                   </div>

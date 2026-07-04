@@ -13,6 +13,7 @@ const catalogOrganizerConfigSelect = {
   instagramUrl: true,
   linkedinUrl: true,
   twitterUrl: true,
+  portfolioMatrixVisibility: true,
   committees: true,
   pricingPhases: true,
 } as const;
@@ -64,7 +65,7 @@ export async function fetchPublishedEventDetail(eventKey: string) {
     include: {
       organizerConfig: {
         include: {
-          committees: true,
+          committees: { include: { portfolios: true } },
           pricingPhases: true,
         },
       },
@@ -84,7 +85,7 @@ export async function fetchPublishedEventDetail(eventKey: string) {
       },
       registrations: {
         where: { deletedAt: null, status: "ALLOTTED" },
-        select: { committeeName: true },
+        select: { committeeName: true, portfolioName: true },
       },
     },
   });

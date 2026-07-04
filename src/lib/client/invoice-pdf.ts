@@ -14,6 +14,32 @@ type InvoiceUserDetails = {
   };
 };
 
+/** Prefer admin-uploaded conference invoice template when present; otherwise generate a PDF. */
+export async function downloadRegistrationInvoice(
+  registration: Registration,
+  user: InvoiceUserDetails
+): Promise<void> {
+  if (!registration.paid) {
+    throw new Error("Invoice is available after payment is completed.");
+  }
+  try {
+    const res = await fetch(`/api/registrations/${encodeURIComponent(registration.id)}/invoice`, {
+      credentials: "include",
+      cache: "no-store",
+    });
+    if (res.ok) {
+      const data = (await res.json()) as { templateUrl?: string | null };
+      if (data.templateUrl) {
+        window.open(data.templateUrl, "_blank", "noopener,noreferrer");
+        return;
+      }
+    }
+  } catch {
+    // Fall through to generated PDF.
+  }
+  downloadRegistrationInvoicePdf(registration, user);
+}
+
 export function downloadRegistrationInvoicePdf(
   registration: Registration,
   user: InvoiceUserDetails
@@ -21,6 +47,7 @@ export function downloadRegistrationInvoicePdf(
   const doc = new jsPDF();
   const invoiceId = `INV-${registration.id}`;
   const amount = Number(registration.amount || 0).toFixed(2);
+  const amountLabel = `₹${amount}`;
   const paymentStatus = registration.paid ? "Paid" : "Pending";
   const addressParts = [
     user.invoiceAddress?.line1,
@@ -69,7 +96,7 @@ export function downloadRegistrationInvoicePdf(
   doc.text("Amount Paid", 116, y + 24);
   doc.setTextColor(33, 37, 41);
   doc.setFontSize(12);
-  doc.text(`$${amount}`, 116, y + 31);
+  doc.text(amountLabel, 116, y + 31);
 
   y += 44;
   doc.setDrawColor(220, 224, 229);
@@ -89,7 +116,7 @@ export function downloadRegistrationInvoicePdf(
   doc.text(conferenceLines, 18, y + 18);
   doc.text(doc.splitTextToSize(registration.categoryName, 36), 92, y + 18);
   doc.text(registration.registeredAt, 132, y + 18);
-  doc.text(`$${amount}`, 176, y + 18);
+  doc.text(amountLabel, 176, y + 18);
 
   y += 62;
   doc.setFontSize(9);

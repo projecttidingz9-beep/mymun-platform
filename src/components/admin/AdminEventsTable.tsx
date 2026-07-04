@@ -12,6 +12,8 @@ function statusBadgeClass(status: string) {
       return "bg-amber-500/15 text-amber-800 dark:text-amber-200 border-amber-500/30";
     case "DRAFT":
       return "bg-zinc-500/15 text-zinc-700 dark:text-zinc-200 border-zinc-500/25";
+    case "SUSPENDED":
+      return "bg-orange-500/15 text-orange-800 dark:text-orange-200 border-orange-500/30";
     case "CANCELLED":
       return "bg-rose-500/15 text-rose-800 dark:text-rose-200 border-rose-500/30";
     default:
@@ -58,6 +60,35 @@ export default function AdminEventsTable() {
   useEffect(() => {
     void loadEvents();
   }, [loadEvents]);
+
+  const [suspendBusyId, setSuspendBusyId] = useState<string | null>(null);
+
+  const toggleSuspend = async (row: AdminEventListRow) => {
+    const action = row.status === "SUSPENDED" ? "unsuspend" : "suspend";
+    setSuspendBusyId(row.id);
+    setActionMessage(null);
+    try {
+      const res = await fetch(`/api/admin/events/${encodeURIComponent(row.id)}/moderate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ action }),
+      });
+      const payload = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        setActionMessage(payload.error || "Action failed.");
+        return;
+      }
+      setActionMessage(
+        action === "suspend" ? `"${row.title}" suspended and hidden.` : `"${row.title}" unsuspended and republished.`
+      );
+      await loadEvents();
+    } catch {
+      setActionMessage("Could not reach server.");
+    } finally {
+      setSuspendBusyId(null);
+    }
+  };
 
   const deleteConference = async () => {
     if (!deleteTarget) return;
@@ -112,6 +143,7 @@ export default function AdminEventsTable() {
             <option value="DRAFT">DRAFT</option>
             <option value="REVIEW">REVIEW</option>
             <option value="PUBLISHED">PUBLISHED</option>
+            <option value="SUSPENDED">SUSPENDED</option>
             <option value="ARCHIVED">ARCHIVED</option>
             <option value="CANCELLED">CANCELLED</option>
           </select>
@@ -169,17 +201,30 @@ export default function AdminEventsTable() {
                   {new Date(row.updatedAt).toLocaleString()}
                 </td>
                 <td className="px-4 py-3">
-                  {row.status === "PUBLISHED" ? (
-                    <button
-                      type="button"
-                      className="btn btn-danger-ghost text-xs min-h-[36px] touch-manipulation"
-                      onClick={() => setDeleteTarget(row)}
-                    >
-                      Delete
-                    </button>
-                  ) : (
-                    <span className="text-xs text-[var(--fg-muted)]">—</span>
-                  )}
+                  <div className="flex flex-wrap gap-1.5">
+                    {(row.status === "PUBLISHED" || row.status === "SUSPENDED") && (
+                      <button
+                        type="button"
+                        className="btn btn-ghost text-xs min-h-[36px] touch-manipulation"
+                        disabled={suspendBusyId === row.id}
+                        onClick={() => void toggleSuspend(row)}
+                      >
+                        {row.status === "SUSPENDED" ? "Unsuspend" : "Suspend"}
+                      </button>
+                    )}
+                    {row.status === "PUBLISHED" && (
+                      <button
+                        type="button"
+                        className="btn btn-danger-ghost text-xs min-h-[36px] touch-manipulation"
+                        onClick={() => setDeleteTarget(row)}
+                      >
+                        Delete
+                      </button>
+                    )}
+                    {row.status !== "PUBLISHED" && row.status !== "SUSPENDED" && (
+                      <span className="text-xs text-[var(--fg-muted)]">—</span>
+                    )}
+                  </div>
                 </td>
               </tr>
             ))}

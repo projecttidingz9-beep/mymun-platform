@@ -19,6 +19,7 @@
     "db:migrate:fresh": "npm run db:reset:public && npm run prisma:migrate:deploy",
     "db:seed": "npx tsx prisma/seed.ts",
     "bootstrap:admin": "npx tsx scripts/bootstrap-super-admin.ts",
+    "create:cashfree-test-mun": "npx tsx scripts/create-cashfree-test-conference.ts",
     "db:reset": "prisma migrate reset --force",
     "test": "vitest run",
     "test:watch": "vitest",

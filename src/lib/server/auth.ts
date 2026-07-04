@@ -4,6 +4,7 @@ import { env } from "./env";
 import { prisma } from "./prisma";
 import { getOrganizerPreviewConfig } from "./organizer-config-store";
 import { prismaUserRoleToSession } from "./user-role";
+import { matchesLegacyOwnerOrTeam } from "./event-ownership";
 
 export type RequestActor = {
   email: string;
@@ -114,15 +115,7 @@ export async function requireEventOrganizerAccess(
   }
 
   const config = await getOrganizerPreviewConfig(eventId);
-  if (!config) return false;
-
-  const ownerUserId = (config.ownerUserId || "").trim();
-  const ownerEmail = normalizeEmail(config.ownerEmail);
-  if (actorUserId && ownerUserId && actorUserId === ownerUserId) return true;
-  if (actorEmail && ownerEmail && actorEmail === ownerEmail) return true;
-
-  const teamEmails = (config.organizerTeamEmails || []).map((entry) => normalizeEmail(entry));
-  return actorEmail ? teamEmails.includes(actorEmail) : false;
+  return matchesLegacyOwnerOrTeam(config, actorUserId, actor?.email ?? null);
 }
 
 /** Resolve DB user id from session — read-only (no upsert). Login/register/google create the row first. */
