@@ -530,13 +530,13 @@ export default function ConferenceDetailPage() {
 
       <div className="conference-banner-shell pt-[calc(6rem+env(safe-area-inset-top,0px))]">
         <div className="max-w-7xl 2xl:max-w-[1320px] mx-auto px-4 sm:px-6 2xl:px-8 pt-4">
-          <div className="conference-banner-frame relative aspect-[18/6] min-h-[170px] md:min-h-[260px]">
+          <div className="conference-banner-frame relative flex flex-col justify-end min-h-[200px] md:aspect-[18/6] md:min-h-[260px]">
             {heroBannerImage ? (
               <Image
                 src={heroBannerImage}
                 alt={`${displayTitle} banner`}
                 fill
-                className="object-cover"
+                className="object-cover object-center"
                 sizes="(max-width: 768px) 100vw, 1200px"
               />
             ) : (
@@ -555,19 +555,19 @@ export default function ConferenceDetailPage() {
                   "linear-gradient(180deg, rgba(9,11,16,0.12) 0%, rgba(9,11,16,0.36) 58%, rgba(9,11,16,0.72) 100%)",
               }}
             />
-            <div className="absolute inset-x-0 bottom-0 p-6 sm:p-8 text-white z-10">
-              <div className="flex flex-wrap items-center gap-2 mb-3">
+            <div className="relative z-10 mt-auto p-4 sm:p-6 md:p-8 text-white">
+              <div className="flex flex-wrap items-center gap-2 mb-2 sm:mb-3">
                 <span className="badge" style={{ background: "rgba(255,255,255,0.16)", color: "#fff" }}>{c.level}</span>
                 <span className="badge" style={{ background: "rgba(255,255,255,0.16)", color: "#fff" }}>{c.region}</span>
                 {c.featured && <span className="badge" style={{ background: "rgba(231,195,144,0.95)", color: "#1a1108" }}>Featured</span>}
               </div>
-              <h1 className="lux-display max-w-4xl" style={{ color: "#fff", fontSize: "clamp(2rem, 4.6vw, 4rem)" }}>
+              <h1 className="lux-display max-w-4xl" style={{ color: "#fff", fontSize: "clamp(1.5rem, 6vw, 4rem)" }}>
                 {displayTitle}
               </h1>
-              <div className="mt-4 grid sm:grid-cols-3 gap-3">
-                <span className="conference-pill rounded-2xl px-4 py-3 text-sm font-medium">Place: {displayLocation}</span>
-                <span className="conference-pill rounded-2xl px-4 py-3 text-sm font-medium">Dates: {c.startDate} - {c.endDate}</span>
-                <span className="conference-pill rounded-2xl px-4 py-3 text-sm font-medium">Venue: {organizerConference?.venue || c.location}</span>
+              <div className="mt-3 sm:mt-4 grid sm:grid-cols-3 gap-2 sm:gap-3">
+                <span className="conference-pill rounded-2xl px-3 py-2 sm:px-4 sm:py-3 text-xs sm:text-sm font-medium">Place: {displayLocation}</span>
+                <span className="conference-pill rounded-2xl px-3 py-2 sm:px-4 sm:py-3 text-xs sm:text-sm font-medium">Dates: {c.startDate} - {c.endDate}</span>
+                <span className="conference-pill rounded-2xl px-3 py-2 sm:px-4 sm:py-3 text-xs sm:text-sm font-medium">Venue: {organizerConference?.venue || c.location}</span>
               </div>
             </div>
           </div>
