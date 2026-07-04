@@ -33,6 +33,7 @@ export default function PaymentReturnPage() {
     }
 
     let cancelled = false;
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
     const poll = async (attempt: number) => {
       try {
         const res = await fetch(`/api/payments/cashfree/orders/${encodeURIComponent(orderId)}`, {
@@ -60,7 +61,7 @@ export default function PaymentReturnPage() {
         }
 
         if (attempt < 8) {
-          window.setTimeout(() => void poll(attempt + 1), 2000);
+          timeoutId = window.setTimeout(() => void poll(attempt + 1), 2000);
           return;
         }
 
@@ -77,6 +78,7 @@ export default function PaymentReturnPage() {
     void poll(0);
     return () => {
       cancelled = true;
+      if (timeoutId !== undefined) window.clearTimeout(timeoutId);
     };
   }, [authReady, isLoggedIn, orderId, eventKey, router, refreshUserProfile]);
 

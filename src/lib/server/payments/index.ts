@@ -1,6 +1,6 @@
 import type { PaymentIntentStatus, PaymentProvider } from "@/generated/prisma/enums";
 import { RegistrationStatus } from "@/generated/prisma/enums";
-import { prisma } from "@/lib/server/prisma";
+import { prisma, runPrismaTransaction } from "@/lib/server/prisma";
 import { getAppConfig } from "@/lib/app-config";
 
 /** One active registration per user per event (see DB partial unique index). */
@@ -25,6 +25,8 @@ export type RegistrationCheckoutResult = {
   /** True when payment is deferred until allotment is released (ALLOT_FIRST mode). */
   deferredPayment?: boolean;
 };
+
+const ALLOT_FIRST_PI_NOTES = "Payment due after allotment release (allot-first mode)";
 
 /**
  * Creates registration row + payment intent (FREE or Cashfree).
@@ -51,6 +53,12 @@ export async function createRegistrationAndPayment(params: {
   deferPayment?: boolean;
 }): Promise<RegistrationCheckoutResult> {
   const { paymentsMode } = getAppConfig();
+  if (paymentsMode !== "free" && paymentsMode !== "cashfree") {
+    throw new Error(
+      `Unsupported payments mode: ${paymentsMode}. Set PAYMENTS_MODE=cashfree or free.`
+    );
+  }
+
   const amount = Math.max(0, Math.round(params.amount * 100) / 100);
 
   const duplicate = await prisma.registration.findFirst({
@@ -85,39 +93,8 @@ export async function createRegistrationAndPayment(params: {
     allottedAt: null as Date | null,
   };
 
-  if (useFreeDriver) {
-    const registration = await prisma.registration.create({
-      data: {
-        ...registrationData,
-        paid: true,
-      },
-    });
-
-    const pi = await prisma.paymentIntent.create({
-      data: {
-        registrationId: registration.id,
-        provider: "FREE",
-        amount,
-        currency: params.currency,
-        status: "CONFIRMED",
-        confirmedAt: new Date(),
-        notes: "Free registration",
-      },
-    });
-
-    return {
-      registrationId: registration.id,
-      paymentIntentId: pi.id,
-      provider: "FREE",
-      paymentStatus: "CONFIRMED",
-      paid: true,
-      amount,
-      currency: params.currency,
-    };
-  }
-
   // Allot-first: application is submitted unpaid; payment intent is created on allotment release.
-  if (params.deferPayment) {
+  if (!useFreeDriver && params.deferPayment) {
     const registration = await prisma.registration.create({
       data: {
         ...registrationData,
@@ -137,61 +114,126 @@ export async function createRegistrationAndPayment(params: {
     };
   }
 
-  const registration = await prisma.registration.create({
-    data: {
-      ...registrationData,
-      paid: false,
-    },
-  });
+  return runPrismaTransaction(async (tx) => {
+    if (useFreeDriver) {
+      const registration = await tx.registration.create({
+        data: {
+          ...registrationData,
+          paid: true,
+        },
+      });
 
-  if (paymentsMode !== "cashfree") {
-    throw new Error(`Unsupported payments mode: ${paymentsMode}. Set PAYMENTS_MODE=cashfree or free.`);
-  }
+      const pi = await tx.paymentIntent.create({
+        data: {
+          registrationId: registration.id,
+          provider: "FREE",
+          amount,
+          currency: params.currency,
+          status: "CONFIRMED",
+          confirmedAt: new Date(),
+          notes: "Free registration",
+        },
+      });
 
-  const pi = await prisma.paymentIntent.create({
-    data: {
+      return {
+        registrationId: registration.id,
+        paymentIntentId: pi.id,
+        provider: "FREE" as const,
+        paymentStatus: "CONFIRMED" as const,
+        paid: true,
+        amount,
+        currency: params.currency,
+      };
+    }
+
+    const registration = await tx.registration.create({
+      data: {
+        ...registrationData,
+        paid: false,
+      },
+    });
+
+    const pi = await tx.paymentIntent.create({
+      data: {
+        registrationId: registration.id,
+        provider: "CASHFREE",
+        amount,
+        currency: params.currency,
+        status: "PENDING",
+        notes: "Awaiting Cashfree online payment",
+      },
+    });
+
+    return {
       registrationId: registration.id,
-      provider: "CASHFREE",
+      paymentIntentId: pi.id,
+      provider: "CASHFREE" as const,
+      paymentStatus: pi.status,
+      paid: false,
       amount,
       currency: params.currency,
-      status: "PENDING",
-      notes: "Awaiting Cashfree online payment",
-    },
+    };
   });
-
-  return {
-    registrationId: registration.id,
-    paymentIntentId: pi.id,
-    provider: "CASHFREE",
-    paymentStatus: pi.status,
-    paid: false,
-    amount,
-    currency: params.currency,
-  };
 }
 
-/** Ensure a PENDING Cashfree intent exists for an unpaid registration (used on allotment release). */
+/**
+ * Ensure a PENDING Cashfree intent exists for an unpaid registration (used on allotment release).
+ * Revives CANCELLED/REFUNDED intents so re-release after expiry or decline can charge again.
+ */
 export async function ensurePendingPaymentIntent(params: {
   registrationId: string;
   amount: number;
   currency: string;
 }): Promise<string> {
+  const amount = Math.max(0, Math.round(params.amount * 100) / 100);
   const existing = await prisma.paymentIntent.findUnique({
     where: { registrationId: params.registrationId },
     select: { id: true, status: true },
   });
-  if (existing) return existing.id;
 
-  const amount = Math.max(0, Math.round(params.amount * 100) / 100);
-  const pi = await prisma.paymentIntent.create({
+  if (!existing) {
+    const pi = await prisma.paymentIntent.create({
+      data: {
+        registrationId: params.registrationId,
+        provider: "CASHFREE",
+        amount,
+        currency: params.currency,
+        status: "PENDING",
+        notes: ALLOT_FIRST_PI_NOTES,
+      },
+    });
+    return pi.id;
+  }
+
+  if (existing.status === "PENDING") {
+    await prisma.paymentIntent.update({
+      where: { id: existing.id },
+      data: {
+        amount,
+        currency: params.currency,
+        notes: ALLOT_FIRST_PI_NOTES,
+      },
+    });
+    return existing.id;
+  }
+
+  if (existing.status === "CONFIRMED") {
+    return existing.id;
+  }
+
+  // CANCELLED or REFUNDED — revive for a new payment attempt; clear Cashfree order reference.
+  await prisma.paymentIntent.update({
+    where: { id: existing.id },
     data: {
-      registrationId: params.registrationId,
+      status: "PENDING",
       provider: "CASHFREE",
       amount,
       currency: params.currency,
-      status: "PENDING",
-      notes: "Payment due after allotment release (allot-first mode)",
+      confirmedAt: null,
+      confirmedByUserId: null,
+      reference: null,
+      notes: ALLOT_FIRST_PI_NOTES,
     },
   });
-  return pi.id;
+  return existing.id;
 }

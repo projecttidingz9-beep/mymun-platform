@@ -1140,13 +1140,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [notifications, setNotifications] = useState<UserNotification[]>([]);
 
   const refetchMyEvents = React.useCallback(
-    async (identity?: { id?: string | null; email?: string | null }) => {
+    async (
+      identity?: { id?: string | null; email?: string | null },
+      options?: { isCancelled?: () => boolean }
+    ) => {
+      const isCancelled = options?.isCancelled;
       const evRes = await fetch("/api/organizers/my-events", { credentials: "include" });
+      if (isCancelled?.()) return;
       if (!evRes.ok) {
         setOrganizerConferences([]);
         return;
       }
       const evJson = (await evRes.json().catch(() => ({}))) as { conferences?: unknown[] };
+      if (isCancelled?.()) return;
       const list = Array.isArray(evJson.conferences) ? evJson.conferences : [];
       const id = identity?.id ?? user?.id;
       const email = identity?.email ?? user?.email;
@@ -1158,6 +1164,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .filter((conference) =>
           hasOrganizerConferenceAccess({ id, email }, conference)
         );
+      if (isCancelled?.()) return;
       setOrganizerConferences(normalized);
     },
     [user?.id, user?.email]
@@ -1263,9 +1270,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     let cancelled = false;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- async organizer fetch; setState runs after await inside refetchMyEvents
-    void refetchMyEvents({ id: user.id, email: user.email }).finally(() => {
-      if (cancelled) return;
-    });
+    void refetchMyEvents(
+      { id: user.id, email: user.email },
+      { isCancelled: () => cancelled }
+    );
     return () => {
       cancelled = true;
     };

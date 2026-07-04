@@ -4,6 +4,7 @@ import { RegistrationStatus } from "@/generated/prisma/enums";
 import { getRequestActor, requireEventOrganizerAccess, requireOrganizer } from "@/lib/server/auth";
 import { ensurePendingPaymentIntent } from "@/lib/server/payments";
 import { moneyNumber } from "@/lib/server/decimal-money";
+import { logger } from "@/lib/server/logger";
 import { prisma } from "@/lib/server/prisma";
 
 /**
@@ -76,6 +77,35 @@ export async function POST(
     return NextResponse.json({ ok: true, releasedCount: 0, released: [] });
   }
 
+  // Allot-first: ensure payment intents before releasing so delegates can always pay.
+  if (allotFirst) {
+    const currency = eventConfig?.currency?.trim() || "INR";
+    try {
+      for (const reg of pending) {
+        if (reg.paid) continue;
+        const amount = moneyNumber(reg.amount);
+        if (amount <= 0) continue;
+        await ensurePendingPaymentIntent({
+          registrationId: reg.id,
+          amount,
+          currency,
+        });
+      }
+    } catch (error) {
+      logger.error("release_allotments_payment_intent_failed", {
+        eventId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return NextResponse.json(
+        {
+          error:
+            "Could not prepare payment for released allotments. Try again or contact support.",
+        },
+        { status: 500 }
+      );
+    }
+  }
+
   const now = new Date();
   const paymentDeadlineAt = allotFirst
     ? new Date(now.getTime() + deadlineDays * 24 * 60 * 60 * 1000)
@@ -90,24 +120,6 @@ export async function POST(
       allotmentDeclinedAt: null,
     },
   });
-
-  if (allotFirst) {
-    const currency = eventConfig?.currency?.trim() || "INR";
-    for (const reg of pending) {
-      if (reg.paid) continue;
-      const amount = moneyNumber(reg.amount);
-      if (amount <= 0) continue;
-      try {
-        await ensurePendingPaymentIntent({
-          registrationId: reg.id,
-          amount,
-          currency,
-        });
-      } catch {
-        // Non-blocking — release already succeeded.
-      }
-    }
-  }
 
   const deadlineLabel = paymentDeadlineAt
     ? paymentDeadlineAt.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })

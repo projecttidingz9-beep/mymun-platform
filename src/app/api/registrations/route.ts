@@ -83,17 +83,11 @@ export async function POST(request: NextRequest) {
       committeePreferencesJson: prefs.committeePreferencesJson,
       portfolioPreferencesJson: prefs.portfolioPreferencesJson,
       countryPreferencesJson: prefs.countryPreferencesJson,
+      formAnswersJson: prefs.formAnswersJson,
       amount: validated.pricing.amount,
       currency: validated.pricing.currency,
       deferPayment: allotFirst && validated.pricing.amount > 0,
     });
-
-    if (prefs.formAnswersJson) {
-      await prisma.registration.update({
-        where: { id: result.registrationId },
-        data: { formAnswersJson: prefs.formAnswersJson },
-      });
-    }
 
     try {
       await prisma.notification.create({

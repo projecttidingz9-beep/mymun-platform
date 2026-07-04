@@ -120,10 +120,12 @@ export default function AuthModal({
   }, [defaultTab, defaultRegisterRole, onClose]);
 
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") closeModal();
+    };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
-  }, [onClose]);
+  }, [closeModal]);
 
   useEffect(() => {
     if (!isOpen) return;

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { RegistrationStatus } from "@/generated/prisma/enums";
 import { getRequestActor, resolveActorUserId } from "@/lib/server/auth";
-import { prisma } from "@/lib/server/prisma";
+import { prisma, runPrismaTransaction } from "@/lib/server/prisma";
 
 /**
  * Delegate declines a released allotment (allot-first mode) instead of paying.
@@ -51,36 +51,38 @@ export async function POST(
   }
 
   const now = new Date();
-  await prisma.registration.update({
-    where: { id: registrationId },
-    data: {
-      status: RegistrationStatus.PENDING,
-      committeeName: null,
-      portfolioName: null,
-      portfolioId: null,
-      allottedAt: null,
-      released: false,
-      releasedAt: null,
-      paymentDeadlineAt: null,
-      allotmentDeclinedAt: now,
-    },
-  });
+  await runPrismaTransaction(async (tx) => {
+    await tx.registration.update({
+      where: { id: registrationId },
+      data: {
+        status: RegistrationStatus.PENDING,
+        committeeName: null,
+        portfolioName: null,
+        portfolioId: null,
+        allottedAt: null,
+        released: false,
+        releasedAt: null,
+        paymentDeadlineAt: null,
+        allotmentDeclinedAt: now,
+      },
+    });
 
-  await prisma.paymentIntent.updateMany({
-    where: { registrationId, status: "PENDING" },
-    data: { status: "CANCELLED" },
-  });
+    await tx.paymentIntent.updateMany({
+      where: { registrationId, status: "PENDING" },
+      data: { status: "CANCELLED" },
+    });
 
-  await prisma.notification.create({
-    data: {
-      userId: actorUserId,
-      eventId: registration.eventId,
-      registrationId,
-      title: "Allotment declined",
-      message: `You declined your allotment for ${registration.event.title}. Organizers may reassign the seat.`,
-      type: "APP_STATUS",
-      read: false,
-    },
+    await tx.notification.create({
+      data: {
+        userId: actorUserId,
+        eventId: registration.eventId,
+        registrationId,
+        title: "Allotment declined",
+        message: `You declined your allotment for ${registration.event.title}. Organizers may reassign the seat.`,
+        type: "APP_STATUS",
+        read: false,
+      },
+    });
   });
 
   return NextResponse.json({ ok: true });

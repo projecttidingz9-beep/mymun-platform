@@ -101,6 +101,67 @@ function SceneController({
   return <group ref={groupRef} />;
 }
 
+/** God-ray plane sizes from BrandLogoMark, plus bloom pad. */
+const RAYS_SIZE_FULL = 5.8;
+const RAYS_SIZE_LITE = 4.2;
+const BLOOM_PAD = 1.25;
+const EDGE_MARGIN = 0.35;
+
+function computeMarkLayout(
+  width: number,
+  height: number,
+  lite: boolean,
+): { scale: number; x: number; y: number } {
+  const fitSize = (lite ? RAYS_SIZE_LITE : RAYS_SIZE_FULL) * BLOOM_PAD;
+  const maxScale = lite ? 0.9 : 1.05;
+  const widthFactor = lite ? 0.7 : 0.42;
+  const scale = Math.min(
+    maxScale,
+    (width * widthFactor) / fitSize,
+    (height * 0.55) / fitSize,
+  );
+  const radius = (fitSize * scale) / 2;
+  const x = lite
+    ? 0
+    : Math.min(width * 0.22, width / 2 - radius - EDGE_MARGIN);
+  const y = lite ? -0.8 : 0.05;
+  return { scale, x, y };
+}
+
+/**
+ * Positions and scales the brand mark from the live R3F viewport every frame
+ * so the full glow stays on-screen (React viewport subscriptions can go stale).
+ * World scale is applied on the outer group; BrandLogoMark keeps scale={1} so
+ * its entrance animation still runs on the local group.
+ */
+function ResponsiveBrandMark({
+  tier,
+  reducedMotion,
+}: {
+  tier: Tier;
+  reducedMotion: boolean;
+}) {
+  const groupRef = useRef<Group>(null);
+  const lite = tier === "lite";
+
+  useFrame((state) => {
+    const group = groupRef.current;
+    if (!group) return;
+    const { width, height } = state.viewport;
+    if (width <= 0 || height <= 0) return;
+
+    const layout = computeMarkLayout(width, height, lite);
+    group.position.set(layout.x, layout.y, 0);
+    group.scale.setScalar(layout.scale);
+  });
+
+  return (
+    <group ref={groupRef}>
+      <BrandLogoMark scale={1} reducedMotion={reducedMotion} lite={lite} />
+    </group>
+  );
+}
+
 function SceneContents({
   tier,
   reducedMotion,
@@ -136,20 +197,14 @@ function SceneContents({
             floatIntensity={reducedMotion ? 0 : lite ? 0.35 : 0.6}
             rotationIntensity={reducedMotion ? 0 : lite ? 0.2 : 0.35}
           >
-            <group position={lite ? [0, -0.8, 0] : [4.4, 0.05, 0]}>
-              <BrandLogoMark
-                scale={lite ? 0.85 : 1.35}
-                reducedMotion={reducedMotion}
-                lite={lite}
-              />
-            </group>
+            <ResponsiveBrandMark tier={tier} reducedMotion={reducedMotion} />
           </Float>
         </CursorParallax>
 
         {!lite && (
           <EffectComposer multisampling={0} enableNormalPass={false}>
             <Bloom
-              intensity={1.1}
+              intensity={0.85}
               luminanceThreshold={0.3}
               luminanceSmoothing={0.22}
               mipmapBlur
