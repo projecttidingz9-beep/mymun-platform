@@ -298,7 +298,7 @@ export default function HomePage() {
             className="absolute inset-0 pointer-events-none"
             style={{
               background:
-                "linear-gradient(105deg, rgba(11,13,18,0.97) 0%, rgba(11,13,18,0.88) 38%, rgba(11,13,18,0.45) 62%, rgba(11,13,18,0.15) 100%)",
+                "linear-gradient(100deg, rgba(11,13,18,0.96) 0%, rgba(11,13,18,0.84) 30%, rgba(11,13,18,0.38) 50%, rgba(11,13,18,0.06) 70%, rgba(11,13,18,0) 88%)",
             }}
           />
 

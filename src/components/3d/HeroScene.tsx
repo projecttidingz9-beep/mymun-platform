@@ -107,10 +107,10 @@ const RAYS_SIZE_LITE = 4.2;
 const BLOOM_PAD = 1.25;
 const EDGE_MARGIN = 0.35;
 
-/** Pre-change desktop defaults — only shrink on narrow viewports. */
-const MARK_X_FULL = 4.4;
-const MARK_Y_FULL = 0.05;
-const MARK_SCALE_FULL = 1.35;
+/** Desktop hero focal — larger, right-column placement; shrink only on overflow. */
+const MARK_X_FULL = 5.2;
+const MARK_Y_FULL = -0.12;
+const MARK_SCALE_FULL = 1.62;
 const MARK_X_LITE = 0;
 const MARK_Y_LITE = -0.8;
 const MARK_SCALE_LITE = 0.85;
@@ -131,7 +131,8 @@ function clampMarkLayout(
   const raysSize = lite ? RAYS_SIZE_LITE : RAYS_SIZE_FULL;
   const baseY = lite ? MARK_Y_LITE : MARK_Y_FULL;
   let scale = lite ? MARK_SCALE_LITE : MARK_SCALE_FULL;
-  let x = lite ? MARK_X_LITE : MARK_X_FULL;
+  const desiredX = lite ? MARK_X_LITE : Math.min(MARK_X_FULL, width * 0.36);
+  let x = desiredX;
 
   if (width <= 0 || height <= 0) {
     return { scale, x, y: baseY };
@@ -174,7 +175,7 @@ function clampMarkLayout(
       (2 * Math.min(x - minX, maxX - x)) / (raysSize * BLOOM_PAD);
     scale = Math.min(scale, maxScaleForWidth);
     r = glowRadius(raysSize, scale);
-    x = Math.min(MARK_X_FULL, maxX - r);
+    x = Math.min(desiredX, maxX - r);
     if (x - r < minX) {
       scale = Math.min(scale, (2 * (maxX - minX)) / (raysSize * BLOOM_PAD));
       r = glowRadius(raysSize, scale);
