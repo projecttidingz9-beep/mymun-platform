@@ -16,7 +16,7 @@ Complete these so login, register, and DB-backed routes work on the target envir
 
 **Resend (password reset in production):** Set `RESEND_API_KEY` and `RESEND_FROM_EMAIL` with a verified sender; without them, forgot-password returns **503** in production (see `.env.example`).
 
-**Google OAuth (optional):** Set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`, add redirect URLs in Supabase (`https://<domain>/auth/callback` and `http://localhost:3000/auth/callback` for dev), and enable the Google provider — or use legacy `GOOGLE_CLIENT_ID` / `NEXT_PUBLIC_GOOGLE_CLIENT_ID` when Supabase Auth vars are unset (see deploy-vercel.md §2).
+**Google OAuth (optional):** Prefer `GOOGLE_CLIENT_ID` / `NEXT_PUBLIC_GOOGLE_CLIENT_ID` (GIS button). Fallback: set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`, add redirect URLs in Supabase (`https://<domain>/auth/callback` and `http://localhost:3000/auth/callback` for dev), and enable the Google provider (see deploy-vercel.md §2).
 
 ## Accounts
 

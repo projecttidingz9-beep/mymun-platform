@@ -37,6 +37,29 @@ type GoogleApi = {
   };
 };
 
+/** Map Supabase Auth errors to short, actionable copy for the sign-in modal. */
+function mapSupabaseOAuthError(message: string): string {
+  const m = message.toLowerCase();
+  if (m.includes("provider is not enabled") || m.includes("unsupported provider")) {
+    return "Google sign-in is not enabled yet. Use email and password, or ask an admin to enable Google in Supabase Auth.";
+  }
+  if (m.includes("redirect") && (m.includes("url") || m.includes("uri") || m.includes("whitelist") || m.includes("allow"))) {
+    return "Google sign-in redirect is misconfigured. Add this site’s /auth/callback URL in Supabase, or use email and password.";
+  }
+  if (
+    m.includes("invalid api key") ||
+    m.includes("invalid jwt") ||
+    m.includes("malformed") ||
+    (m.includes("api key") && m.includes("invalid"))
+  ) {
+    return "Google sign-in is misconfigured (API keys). Use email and password for now.";
+  }
+  if (m.includes("failed to fetch") || m.includes("networkerror") || m.includes("network request failed")) {
+    return "Could not reach Google sign-in. Check your connection and try again.";
+  }
+  return message.trim() || "Google sign-in failed.";
+}
+
 export default function AuthModal({
   isOpen,
   onClose,
@@ -65,8 +88,9 @@ export default function AuthModal({
   const overlayRef = useRef<HTMLDivElement>(null);
   const googleButtonRef = useRef<HTMLDivElement>(null);
   const googleClientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || "";
-  const supabaseOAuthEnabled = isSupabaseOAuthConfigured();
-  const legacyGoogleEnabled = googleClientId.trim().length > 0 && !supabaseOAuthEnabled;
+  /** Prefer GIS (id_token → /api/auth/google) when a client ID is set; Supabase OAuth is fallback only. */
+  const legacyGoogleEnabled = googleClientId.trim().length > 0;
+  const supabaseOAuthEnabled = !legacyGoogleEnabled && isSupabaseOAuthConfigured();
   const oauthEnabled = supabaseOAuthEnabled || legacyGoogleEnabled;
 
   useEffect(() => {
@@ -166,21 +190,20 @@ export default function AuthModal({
         body: JSON.stringify(tab === "register" ? { role: registerRole } : {}),
       });
       const supabase = createSupabaseBrowserClient();
-      const publicOrigin =
-        process.env.NODE_ENV === "production"
-          ? (process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "").trim() || window.location.origin)
-          : window.location.origin;
-      const redirectTo = `${publicOrigin}/auth/callback?next=${encodeURIComponent("/dashboard")}`;
+      // Same origin as the page so PKCE cookies are sent to /auth/callback.
+      const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent("/dashboard")}`;
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: { redirectTo },
       });
       if (error) {
-        setError(error.message);
+        setError(mapSupabaseOAuthError(error.message));
         setGoogleLoading(false);
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Google sign-in failed.");
+      setError(
+        mapSupabaseOAuthError(e instanceof Error ? e.message : "Google sign-in failed.")
+      );
       setGoogleLoading(false);
     }
   }, [tab, registerRole]);
@@ -468,7 +491,7 @@ export default function AuthModal({
           )}
           {!oauthEnabled && !forgotMode && (
             <p className="text-xs text-center" style={{ color: "var(--fg-muted)" }}>
-              Google Sign-In is not configured (add Supabase URL/key or Google client ID).
+              Google Sign-In is not configured (add NEXT_PUBLIC_GOOGLE_CLIENT_ID, or Supabase URL/key).
             </p>
           )}
           {tab === "register" && (

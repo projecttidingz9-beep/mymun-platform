@@ -39,10 +39,13 @@ export async function POST(request: NextRequest) {
       email.split("@")[0] ||
       "User";
 
+    const emailVerified = Boolean(
+      user.email_confirmed_at || user.confirmed_at || email
+    );
     const result = await bridgeOAuthSignIn({
       email,
       name,
-      emailVerified: Boolean(user.email_confirmed_at),
+      emailVerified,
       requestedRole: parsed.data.role,
     });
 

@@ -43,6 +43,9 @@ const required = [
 
 const recommended = [
   "DIRECT_URL",
+  // Prefer GIS client IDs for Google Sign-In; Supabase Auth is fallback when these are unset.
+  "GOOGLE_CLIENT_ID",
+  "NEXT_PUBLIC_GOOGLE_CLIENT_ID",
   "NEXT_PUBLIC_SUPABASE_URL",
   "NEXT_PUBLIC_SUPABASE_ANON_KEY",
   "SENTRY_DSN",

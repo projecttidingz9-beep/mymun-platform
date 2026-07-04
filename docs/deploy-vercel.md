@@ -25,7 +25,7 @@ Critical:
 | `NEXT_PUBLIC_ADMIN_EMAIL` | Same value as `ADMIN_EMAIL` — Super Dashboard nav link visibility in the UI. |
 | `NEXT_PUBLIC_APP_URL` | **HTTPS** production URL, e.g. `https://your-domain.com`. |
 
-Optional: `RESEND_*`, **`NEXT_PUBLIC_SUPABASE_URL`** + **`NEXT_PUBLIC_SUPABASE_ANON_KEY`** (Supabase Auth — Google OAuth via redirect to `/auth/callback`; configure providers and redirect URLs in the Supabase dashboard), legacy Google GIS (`GOOGLE_CLIENT_ID` / `NEXT_PUBLIC_GOOGLE_CLIENT_ID` only if Supabase Auth is not configured), `SENTRY_DSN` (server/edge) and `NEXT_PUBLIC_SENTRY_DSN`. Set `SENTRY_AUTH_TOKEN` in CI or Vercel when you want **source maps uploaded** during build (`next.config` disables upload when this is unset).
+Optional: `RESEND_*`, **Google Sign-In** — prefer **`GOOGLE_CLIENT_ID`** + **`NEXT_PUBLIC_GOOGLE_CLIENT_ID`** (Google Identity Services → `/api/auth/google`; Authorized JavaScript origins must include the site origin). If those are unset, Supabase Auth is used when **`NEXT_PUBLIC_SUPABASE_URL`** + **`NEXT_PUBLIC_SUPABASE_ANON_KEY`** are set (enable Google provider and add `https://<domain>/auth/callback` under Authentication → URL). Also `SENTRY_DSN` (server/edge) and `NEXT_PUBLIC_SENTRY_DSN`. Set `SENTRY_AUTH_TOKEN` in CI or Vercel when you want **source maps uploaded** during build (`next.config` disables upload when this is unset).
 
 Set `DB_POOL_MAX` low per isolate (e.g. **5–10**) if you see Supabase connection limits under load.
 
