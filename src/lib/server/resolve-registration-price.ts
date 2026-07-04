@@ -1,4 +1,5 @@
 import type { OrganizerConference, RegistrationCategory } from "@/lib/types";
+import { resolveRegistrationPrice } from "@/lib/pricing";
 import { moneyNumber } from "@/lib/server/decimal-money";
 import { getOrganizerStoredBlob } from "@/lib/server/organizer-config-store";
 import { prisma } from "@/lib/server/prisma";
@@ -27,60 +28,54 @@ function getActivePhaseRow(phases: PhaseRow[], reference: Date): PhaseRow | null
   return sortedByEnd.find((phase) => dayStart(reference) > dayStart(phase.endDate)) ?? null;
 }
 
-function resolveFromCategoryPhases(
+function normalizeResolvedPrice(result: {
+  amount: number;
+  phaseId?: string;
+  phaseName?: string;
+}): { amount: number; phaseId?: string; phaseName?: string } {
+  return {
+    amount: Math.max(0, moneyNumber(result.amount as never)),
+    phaseId: result.phaseId,
+    phaseName: result.phaseName,
+  };
+}
+
+function resolveFromCategory(
   category: RegistrationCategory,
   committeeConfigId: string | undefined,
   ref: Date
-): { amount: number; phaseId?: string; phaseName?: string } | null {
-  const phases = category.pricingPhases ?? [];
-  const active = phases.length ? getActivePhaseRow(
-    phases.map((p) => ({
-      id: p.id,
-      name: p.name,
-      startDate: new Date(p.startDate),
-      endDate: new Date(p.endDate),
-      basePrice: p.basePrice,
-      committeePriceJson: JSON.stringify(
-        Object.fromEntries((p.committeePrices ?? []).map((cp) => [cp.committeeId, cp.price]))
-      ),
-    })),
-    ref
-  ) : null;
+): { amount: number; phaseId?: string; phaseName?: string } {
+  return normalizeResolvedPrice(
+    resolveRegistrationPrice(category, committeeConfigId, ref)
+  );
+}
 
-  if (!active && phases.length === 0) {
-    return { amount: Math.max(0, Number(category.basePrice) || 0) };
-  }
-
-  if (!active) {
-    if (phases.length > 0) {
-      const current = dayStart(ref);
-      const allUpcoming = phases.every(
-        (phase) => dayStart(new Date(phase.startDate)) > current
-      );
-      if (allUpcoming) {
-        return { amount: Math.max(0, Number(category.basePrice) || 0) };
+function legacyPhasesToCategoryPhases(
+  phases: PhaseRow[]
+): RegistrationCategory["pricingPhases"] {
+  return phases.map((phase) => {
+    let committeePrices: Array<{ committeeId: string; committeeName: string; price: number }> = [];
+    if (phase.committeePriceJson) {
+      try {
+        const map = JSON.parse(phase.committeePriceJson) as Record<string, number>;
+        committeePrices = Object.entries(map).map(([committeeId, price]) => ({
+          committeeId,
+          committeeName: committeeId,
+          price,
+        }));
+      } catch {
+        committeePrices = [];
       }
     }
-    return null;
-  }
-
-  if (committeeConfigId && active.committeePriceJson) {
-    try {
-      const map = JSON.parse(active.committeePriceJson) as Record<string, number>;
-      const v = map[committeeConfigId];
-      if (typeof v === "number" && Number.isFinite(v)) {
-        return { amount: v, phaseId: active.id, phaseName: active.name };
-      }
-    } catch {
-      // ignore
-    }
-  }
-
-  return {
-    amount: moneyNumber(active.basePrice as never),
-    phaseId: active.id,
-    phaseName: active.name,
-  };
+    return {
+      id: phase.id,
+      name: phase.name,
+      startDate: phase.startDate.toISOString(),
+      endDate: phase.endDate.toISOString(),
+      basePrice: moneyNumber(phase.basePrice),
+      committeePrices,
+    };
+  });
 }
 
 export class RegistrationPricingError extends Error {
@@ -116,17 +111,25 @@ export async function resolveServerRegistrationAmount(params: {
 
   const currency = event?.currency?.trim() || "INR";
   const categoryId = params.categoryId?.trim();
+  const committeeConfigId = params.committeeConfigId?.trim();
+
+  // Pricing phases live on the registrationCategories JSON blob (source of truth), matching checkout UI.
+  let categoryFromBlob: RegistrationCategory | undefined;
+  if (categoryId) {
+    const blob = (await getOrganizerStoredBlob(params.eventId)) as unknown as OrganizerConference | null;
+    categoryFromBlob = blob?.registrationCategories?.find((c) => c.id === categoryId);
+  }
+
+  if (categoryFromBlob) {
+    const resolved = resolveFromCategory(categoryFromBlob, committeeConfigId, ref);
+    return { ...resolved, currency };
+  }
 
   const categoryFromDb = categoryId
     ? event?.organizerConfig?.registrationCategories.find((c) => c.categoryKey === categoryId)
     : undefined;
 
-  let categoryFromBlob: RegistrationCategory | undefined;
-  if (!categoryFromDb && categoryId) {
-    const blob = (await getOrganizerStoredBlob(params.eventId)) as unknown as OrganizerConference | null;
-    categoryFromBlob = blob?.registrationCategories?.find((c) => c.id === categoryId);
-  }
-
+  // Fallback: DB category + legacy event-wide PricingPhaseConfig rows (pre-blob-phase data).
   if (categoryFromDb) {
     const catPhases = event?.organizerConfig?.pricingPhases ?? [];
     const syntheticCategory: RegistrationCategory = {
@@ -138,49 +141,10 @@ export async function resolveServerRegistrationAmount(params: {
       basePrice: moneyNumber(categoryFromDb.basePrice),
       requiresCommitteeSelection: categoryFromDb.requiresCommitteeSelection,
       formFields: [],
-      pricingPhases: catPhases.map((phase) => {
-        let committeePrices: Array<{ committeeId: string; committeeName: string; price: number }> = [];
-        if (phase.committeePriceJson) {
-          try {
-            const map = JSON.parse(phase.committeePriceJson) as Record<string, number>;
-            committeePrices = Object.entries(map).map(([committeeId, price]) => ({
-              committeeId,
-              committeeName: committeeId,
-              price,
-            }));
-          } catch {
-            committeePrices = [];
-          }
-        }
-        return {
-          id: phase.id,
-          name: phase.name,
-          startDate: phase.startDate.toISOString(),
-          endDate: phase.endDate.toISOString(),
-          basePrice: moneyNumber(phase.basePrice),
-          committeePrices,
-        };
-      }),
+      pricingPhases: legacyPhasesToCategoryPhases(catPhases),
     };
-    const resolved = resolveFromCategoryPhases(
-      syntheticCategory,
-      params.committeeConfigId?.trim(),
-      ref
-    );
-    if (resolved) {
-      return { ...resolved, currency };
-    }
-  }
-
-  if (categoryFromBlob) {
-    const resolved = resolveFromCategoryPhases(
-      categoryFromBlob,
-      params.committeeConfigId?.trim(),
-      ref
-    );
-    if (resolved) {
-      return { ...resolved, currency };
-    }
+    const resolved = resolveFromCategory(syntheticCategory, committeeConfigId, ref);
+    return { ...resolved, currency };
   }
 
   if (!event?.organizerConfig) {
@@ -200,7 +164,7 @@ export async function resolveServerRegistrationAmount(params: {
       const firstCategory = event.organizerConfig.registrationCategories[0];
       if (firstCategory) {
         return {
-          amount: moneyNumber(firstCategory.basePrice),
+          amount: Math.max(0, moneyNumber(firstCategory.basePrice)),
           currency,
         };
       }
@@ -210,12 +174,11 @@ export async function resolveServerRegistrationAmount(params: {
     );
   }
 
-  const committeeId = params.committeeConfigId?.trim();
-  if (committeeId) {
-    const committee = event.organizerConfig.committees.find((c) => c.id === committeeId);
+  if (committeeConfigId) {
+    const committee = event.organizerConfig.committees.find((c) => c.id === committeeConfigId);
     if (committee?.basePrice != null) {
       return {
-        amount: moneyNumber(committee.basePrice),
+        amount: Math.max(0, moneyNumber(committee.basePrice)),
         currency,
         phaseId: active.id,
         phaseName: active.name,
@@ -224,10 +187,10 @@ export async function resolveServerRegistrationAmount(params: {
     if (active.committeePriceJson) {
       try {
         const map = JSON.parse(active.committeePriceJson) as Record<string, number>;
-        const v = map[committeeId];
+        const v = map[committeeConfigId];
         if (typeof v === "number" && Number.isFinite(v)) {
           return {
-            amount: v,
+            amount: Math.max(0, v),
             currency,
             phaseId: active.id,
             phaseName: active.name,
@@ -240,7 +203,7 @@ export async function resolveServerRegistrationAmount(params: {
   }
 
   return {
-    amount: moneyNumber(active.basePrice),
+    amount: Math.max(0, moneyNumber(active.basePrice)),
     currency,
     phaseId: active.id,
     phaseName: active.name,
