@@ -1958,44 +1958,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         });
       }
 
-      updateUserRegistrationAssignment(priorApplicant?.registrationId, {
-        status: "Confirmed",
-        organizerStatus: "Allotted",
-        assignedCommitteeId: committeeId,
-        assignedCommitteeName: result.committeeName,
-        assignedPortfolioId: portfolioId,
-        assignedPortfolioName: result.portfolioName,
-        assignedAt: new Date().toISOString(),
-      });
-
-      if (priorApplicant) {
-        addNotification({
-          id: `ntf-${Date.now()}`,
-          conferenceId,
-          registrationId: priorApplicant.registrationId,
-          userId: priorApplicant.userId,
-          userEmail: priorApplicant.userEmail,
-          title: "Committee Allocation Confirmed",
-          message: `You have been allotted to ${result.committeeName}${result.portfolioName ? ` (${result.portfolioName})` : ""}.`,
-          type: "assignment",
-          createdAt: new Date().toISOString(),
-          read: false,
-        });
-        const updatedConference = next.find((entry) => entry.id === conferenceId);
-        const updatedApplicant = updatedConference?.applicants.find((entry) => entry.id === applicantId);
-        if (updatedConference && updatedApplicant) {
-          triggerStatusEmail({
-            conference: updatedConference,
-            applicant: updatedApplicant,
-            status: "Allotted",
-            assignedCommitteeName: result.committeeName,
-            assignedPortfolioName: result.portfolioName,
-          });
-        }
-      }
+      // Draft allotment only — do not notify the delegate or update their visible registration
+      // until the organizer explicitly releases the batch via releaseAllotments.
     })();
 
-    return { ok: true, message: "Applicant allotted successfully." };
+    return { ok: true, message: "Draft allotment saved. Release when ready." };
   };
 
   const allotChairWithRole: AuthContextType["allotChairWithRole"] = ({
@@ -2074,43 +2041,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         });
       }
 
-      updateUserRegistrationAssignment(applicant.registrationId, {
-        status: "Confirmed",
-        organizerStatus: "Allotted",
-        assignedCommitteeId: committeeId,
-        assignedCommitteeName: result.committeeName,
-        assignedPortfolioId: undefined,
-        assignedPortfolioName: undefined,
-        assignedAt: new Date().toISOString(),
-      });
-
-      addNotification({
-        id: `ntf-${Date.now()}`,
-        conferenceId,
-        registrationId: applicant.registrationId,
-        userId: applicant.userId,
-        userEmail: applicant.userEmail,
-        title: "Committee Allocation Confirmed",
-        message: `You have been allotted to ${result.committeeName} as ${trimmedRole}.`,
-        type: "assignment",
-        createdAt: new Date().toISOString(),
-        read: false,
-      });
-
-      const updatedConference = withChairs.find((entry) => entry.id === conferenceId);
-      const updatedApplicant = updatedConference?.applicants.find((entry) => entry.id === applicantId);
-      if (updatedConference && updatedApplicant) {
-        triggerStatusEmail({
-          conference: updatedConference,
-          applicant: updatedApplicant,
-          status: "Allotted",
-          assignedCommitteeName: result.committeeName,
-          assignedPortfolioName: undefined,
-        });
-      }
+      // Draft allotment only — notifications and delegate-visible status wait for releaseAllotments.
     })();
 
-    return { ok: true, message: "EB member assigned successfully." };
+    return { ok: true, message: "Draft EB assignment saved. Release when ready." };
   };
 
   const moveApplicant: AuthContextType["moveApplicant"] = (payload) => {
@@ -2253,6 +2187,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const payload = (await res.json().catch(() => ({}))) as {
         error?: string;
         releasedCount?: number;
+        released?: Array<{ registrationId: string }>;
       };
       if (!res.ok) {
         return {
@@ -2261,7 +2196,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           releasedCount: 0,
         };
       }
-      await refetchMyEvents({ id: user?.id, email: user?.email });
+
+      const releasedIds = new Set(
+        (payload.released || []).map((entry) => entry.registrationId).filter(Boolean)
+      );
+      const releasedAt = new Date().toISOString();
+      setOrganizerConferences((prev) =>
+        prev.map((conference) => {
+          if (conference.id !== conferenceId) return conference;
+          return {
+            ...conference,
+            applicants: conference.applicants.map((applicant) => {
+              const matches =
+                applicant.status === "Allotted" &&
+                applicant.released === false &&
+                (releasedIds.size === 0 ||
+                  releasedIds.has(applicant.registrationId || applicant.id));
+              if (!matches) return applicant;
+              return { ...applicant, released: true, releasedAt };
+            }),
+          };
+        })
+      );
+
+      void refetchMyEvents({ id: user?.id, email: user?.email });
       return {
         ok: true,
         message: `Released ${payload.releasedCount ?? 0} allotment(s).`,

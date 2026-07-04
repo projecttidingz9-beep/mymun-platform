@@ -168,12 +168,10 @@ export default function CheckoutPage() {
   const allocationMode =
     organizerConference?.allocationMode || checkoutConfig?.allocationMode || "PAY_FIRST";
   const isAllotFirst = allocationMode === "ALLOT_FIRST";
+  // Country is optional for registration (can be filled later for invoices).
   const profileIncomplete =
     Boolean(user) &&
-    (!(user?.name || "").trim() ||
-      !(user?.school || "").trim() ||
-      !(user?.phone || "").trim() ||
-      !(user?.country || "").trim());
+    (!(user?.name || "").trim() || !(user?.school || "").trim() || !(user?.phone || "").trim());
   const checkoutCurrency =
     (typeof organizerConference?.currency === "string" && organizerConference.currency.trim()
       ? organizerConference.currency.trim()
@@ -225,6 +223,8 @@ export default function CheckoutPage() {
       committee.customTypeLabel?.toLowerCase().includes("press")
   );
   const checkoutCommittees = isPressCategory && pressCommittees.length > 0 ? pressCommittees : committees;
+  const requiredCommitteePrefs = Math.min(3, Math.max(1, checkoutCommittees.length || 1));
+  const requiredPortfolioPrefs = Math.min(3, Math.max(0, selectedCommitteePortfolios.length));
   const preferenceLabel = selectedCommittee
     ? preferenceLabelForCommittee(selectedCommittee.committeeType, selectedCommittee.committeeFormat)
     : "Country";
@@ -393,17 +393,24 @@ export default function CheckoutPage() {
     fullName.trim().length > 0 &&
     school.trim().length > 0 &&
     phone.trim().length > 0;
+  const committeePrefValues = [
+    selectedCommitteeId,
+    secondPreferenceCommitteeId,
+    thirdPreferenceCommitteeId,
+  ].slice(0, requiredCommitteePrefs);
+  const portfolioPrefValues = [
+    portfolioPreferencePrimary,
+    portfolioPreferenceSecondary,
+    portfolioPreferenceTertiary,
+  ].slice(0, requiredPortfolioPrefs);
   const isPreferencesValid =
     !needsPreferencesStep ||
-    (!!selectedCommitteeId &&
-      !!secondPreferenceCommitteeId &&
-      !!thirdPreferenceCommitteeId &&
+    (committeePrefValues.every(Boolean) &&
       committeeQuestionsValid &&
       (!needsPortfolioPrefs ||
         selectedCommitteePortfolios.length === 0 ||
-        (!!portfolioPreferencePrimary &&
-          !!portfolioPreferenceSecondary &&
-          !!portfolioPreferenceTertiary)));
+        (portfolioPrefValues.length === requiredPortfolioPrefs &&
+          portfolioPrefValues.every(Boolean))));
   const isQuestionsValid =
     !needsQuestionsStep ||
     (!!selectedCategory &&
@@ -571,7 +578,7 @@ export default function CheckoutPage() {
                 Complete your profile before registering
               </p>
               <p className="text-xs mt-1" style={{ color: "var(--fg-muted)" }}>
-                Add your name, school, phone, and country on your dashboard, then return to register.
+                Add your name, school, and phone on your dashboard, then return to register.
               </p>
               <Link href="/dashboard?tab=profile" className="btn btn-primary text-xs mt-3 inline-flex">
                 Complete profile
@@ -703,13 +710,17 @@ export default function CheckoutPage() {
                 </p>
                 <p className="text-sm mt-1" style={{ color: "var(--fg-muted)" }}>
                   {isChairCategory
-                    ? "Choose 3 committee preferences."
-                    : "Choose 3 committee preferences and 3 portfolio preferences."}
+                    ? `Choose ${requiredCommitteePrefs} committee preference${requiredCommitteePrefs === 1 ? "" : "s"}.`
+                    : `Choose ${requiredCommitteePrefs} committee preference${requiredCommitteePrefs === 1 ? "" : "s"}${
+                        needsPortfolioPrefs && requiredPortfolioPrefs > 0
+                          ? ` and ${requiredPortfolioPrefs} portfolio preference${requiredPortfolioPrefs === 1 ? "" : "s"}`
+                          : ""
+                      }.`}
                 </p>
               </div>
               <div className="space-y-4">
                 <AppSelect
-                  label="Committee preference 1 *"
+                  label={`Committee preference 1 *`}
                   value={selectedCommitteeId}
                   onChange={(event) => {
                     const nextId = event.target.value;
@@ -756,27 +767,39 @@ export default function CheckoutPage() {
                     ))}
                   </div>
                 )}
-                <AppSelect
-                  label="Committee preference 2 *"
-                  value={secondPreferenceCommitteeId}
-                  onChange={(event) => setSecondPreferenceCommitteeId(event.target.value)}
-                >
-                  <option value="">Select second preference</option>
-                  {checkoutCommittees.map((committee) => (
-                    <option key={committee.id} value={committee.id}>{committee.name}</option>
-                  ))}
-                </AppSelect>
-                <AppSelect
-                  label="Committee preference 3 *"
-                  value={thirdPreferenceCommitteeId}
-                  onChange={(event) => setThirdPreferenceCommitteeId(event.target.value)}
-                >
-                  <option value="">Select third preference</option>
-                  {checkoutCommittees.map((committee) => (
-                    <option key={committee.id} value={committee.id}>{committee.name}</option>
-                  ))}
-                </AppSelect>
-                {needsPortfolioPrefs && selectedCommitteePortfolios.length > 0 && (
+                {requiredCommitteePrefs >= 2 && (
+                  <AppSelect
+                    label="Committee preference 2 *"
+                    value={secondPreferenceCommitteeId}
+                    onChange={(event) => setSecondPreferenceCommitteeId(event.target.value)}
+                  >
+                    <option value="">Select second preference</option>
+                    {checkoutCommittees
+                      .filter((committee) => committee.id !== selectedCommitteeId)
+                      .map((committee) => (
+                        <option key={committee.id} value={committee.id}>{committee.name}</option>
+                      ))}
+                  </AppSelect>
+                )}
+                {requiredCommitteePrefs >= 3 && (
+                  <AppSelect
+                    label="Committee preference 3 *"
+                    value={thirdPreferenceCommitteeId}
+                    onChange={(event) => setThirdPreferenceCommitteeId(event.target.value)}
+                  >
+                    <option value="">Select third preference</option>
+                    {checkoutCommittees
+                      .filter(
+                        (committee) =>
+                          committee.id !== selectedCommitteeId &&
+                          committee.id !== secondPreferenceCommitteeId
+                      )
+                      .map((committee) => (
+                        <option key={committee.id} value={committee.id}>{committee.name}</option>
+                      ))}
+                  </AppSelect>
+                )}
+                {needsPortfolioPrefs && requiredPortfolioPrefs > 0 && (
                   <>
                     <AppSelect
                       label={`${preferenceLabel} preference 1 *`}
@@ -791,32 +814,44 @@ export default function CheckoutPage() {
                         <option key={portfolio.id} value={portfolio.name}>{portfolio.name}</option>
                       ))}
                     </AppSelect>
-                    <AppSelect
-                      label={`${preferenceLabel} preference 2 *`}
-                      value={portfolioPreferenceSecondary}
-                      onChange={(event) => {
-                        setPortfolioPreferenceSecondary(event.target.value);
-                        setCountryPreferenceSecondary(event.target.value);
-                      }}
-                    >
-                      <option value="">Select portfolio</option>
-                      {selectedCommitteePortfolios.map((portfolio) => (
-                        <option key={portfolio.id} value={portfolio.name}>{portfolio.name}</option>
-                      ))}
-                    </AppSelect>
-                    <AppSelect
-                      label={`${preferenceLabel} preference 3 *`}
-                      value={portfolioPreferenceTertiary}
-                      onChange={(event) => {
-                        setPortfolioPreferenceTertiary(event.target.value);
-                        setCountryPreferenceTertiary(event.target.value);
-                      }}
-                    >
-                      <option value="">Select portfolio</option>
-                      {selectedCommitteePortfolios.map((portfolio) => (
-                        <option key={portfolio.id} value={portfolio.name}>{portfolio.name}</option>
-                      ))}
-                    </AppSelect>
+                    {requiredPortfolioPrefs >= 2 && (
+                      <AppSelect
+                        label={`${preferenceLabel} preference 2 *`}
+                        value={portfolioPreferenceSecondary}
+                        onChange={(event) => {
+                          setPortfolioPreferenceSecondary(event.target.value);
+                          setCountryPreferenceSecondary(event.target.value);
+                        }}
+                      >
+                        <option value="">Select portfolio</option>
+                        {selectedCommitteePortfolios
+                          .filter((portfolio) => portfolio.name !== portfolioPreferencePrimary)
+                          .map((portfolio) => (
+                            <option key={portfolio.id} value={portfolio.name}>{portfolio.name}</option>
+                          ))}
+                      </AppSelect>
+                    )}
+                    {requiredPortfolioPrefs >= 3 && (
+                      <AppSelect
+                        label={`${preferenceLabel} preference 3 *`}
+                        value={portfolioPreferenceTertiary}
+                        onChange={(event) => {
+                          setPortfolioPreferenceTertiary(event.target.value);
+                          setCountryPreferenceTertiary(event.target.value);
+                        }}
+                      >
+                        <option value="">Select portfolio</option>
+                        {selectedCommitteePortfolios
+                          .filter(
+                            (portfolio) =>
+                              portfolio.name !== portfolioPreferencePrimary &&
+                              portfolio.name !== portfolioPreferenceSecondary
+                          )
+                          .map((portfolio) => (
+                            <option key={portfolio.id} value={portfolio.name}>{portfolio.name}</option>
+                          ))}
+                      </AppSelect>
+                    )}
                   </>
                 )}
               </div>

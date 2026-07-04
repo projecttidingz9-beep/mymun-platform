@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { NotificationType } from "@/generated/prisma/client";
 import { RegistrationStatus } from "@/generated/prisma/enums";
 import { getRequestActor, requireEventOrganizerAccess, requireOrganizer } from "@/lib/server/auth";
+import { ensurePendingPaymentIntent } from "@/lib/server/payments";
+import { moneyNumber } from "@/lib/server/decimal-money";
 import { prisma } from "@/lib/server/prisma";
 
 /**
@@ -9,6 +11,8 @@ import { prisma } from "@/lib/server/prisma";
  * without delegates finding out immediately. Nothing is visible to the delegate — no notification, no
  * status change on their dashboard — until this endpoint is called, which flips `released`/`releasedAt`
  * on the underlying Registration rows and fires the "you've been allotted" notification for each one.
+ *
+ * For ALLOT_FIRST conferences, also sets paymentDeadlineAt and ensures a payment intent exists.
  *
  * Body: `{ registrationIds?: string[] }`. When omitted, every unreleased allotted registration for the
  * event is released ("assign all -> confirm -> release" in one click).
@@ -37,6 +41,18 @@ export async function POST(
     ? body.registrationIds.filter((id): id is string => typeof id === "string" && id.trim().length > 0)
     : undefined;
 
+  const eventConfig = await prisma.event.findUnique({
+    where: { id: eventId },
+    select: {
+      title: true,
+      currency: true,
+      organizerConfig: { select: { allocationMode: true, paymentDeadlineDays: true } },
+    },
+  });
+
+  const allotFirst = eventConfig?.organizerConfig?.allocationMode === "ALLOT_FIRST";
+  const deadlineDays = Math.max(1, eventConfig?.organizerConfig?.paymentDeadlineDays ?? 7);
+
   const pending = await prisma.registration.findMany({
     where: {
       eventId,
@@ -50,7 +66,8 @@ export async function POST(
       userId: true,
       committeeName: true,
       portfolioName: true,
-      event: { select: { title: true } },
+      amount: true,
+      paid: true,
       user: { select: { name: true, email: true } },
     },
   });
@@ -60,29 +77,67 @@ export async function POST(
   }
 
   const now = new Date();
+  const paymentDeadlineAt = allotFirst
+    ? new Date(now.getTime() + deadlineDays * 24 * 60 * 60 * 1000)
+    : null;
 
   await prisma.registration.updateMany({
     where: { id: { in: pending.map((r) => r.id) } },
-    data: { released: true, releasedAt: now },
+    data: {
+      released: true,
+      releasedAt: now,
+      ...(paymentDeadlineAt ? { paymentDeadlineAt } : {}),
+      allotmentDeclinedAt: null,
+    },
   });
 
+  if (allotFirst) {
+    const currency = eventConfig?.currency?.trim() || "INR";
+    for (const reg of pending) {
+      if (reg.paid) continue;
+      const amount = moneyNumber(reg.amount);
+      if (amount <= 0) continue;
+      try {
+        await ensurePendingPaymentIntent({
+          registrationId: reg.id,
+          amount,
+          currency,
+        });
+      } catch {
+        // Non-blocking — release already succeeded.
+      }
+    }
+  }
+
+  const deadlineLabel = paymentDeadlineAt
+    ? paymentDeadlineAt.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })
+    : null;
+
   await prisma.notification.createMany({
-    data: pending.map((reg) => ({
-      userId: reg.userId,
-      eventId,
-      registrationId: reg.id,
-      title: "Committee allocation confirmed",
-      message: `You have been allotted to ${reg.committeeName || "your committee"}${
+    data: pending.map((reg) => {
+      const base = `You have been allotted to ${reg.committeeName || "your committee"}${
         reg.portfolioName ? ` (${reg.portfolioName})` : ""
-      } for ${reg.event.title}.`,
-      type: NotificationType.APP_STATUS,
-      read: false,
-    })),
+      } for ${eventConfig?.title || "the conference"}.`;
+      const payNote =
+        allotFirst && !reg.paid && moneyNumber(reg.amount) > 0 && deadlineLabel
+          ? ` Please pay by ${deadlineLabel} to confirm your seat, or reject the allotment from your dashboard.`
+          : "";
+      return {
+        userId: reg.userId,
+        eventId,
+        registrationId: reg.id,
+        title: "Committee allocation confirmed",
+        message: `${base}${payNote}`,
+        type: NotificationType.APP_STATUS,
+        read: false,
+      };
+    }),
   });
 
   return NextResponse.json({
     ok: true,
     releasedCount: pending.length,
+    paymentDeadlineAt: paymentDeadlineAt?.toISOString() ?? null,
     released: pending.map((reg) => ({
       registrationId: reg.id,
       userId: reg.userId,

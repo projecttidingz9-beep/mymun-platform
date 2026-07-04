@@ -3,7 +3,7 @@ import { prisma } from "@/lib/server/prisma";
 
 export const MARKETPLACE_CACHE_TAG = "marketplace";
 
-/** Catalog listing: omit description blob (multi-KB JSON) — detail route loads it. */
+/** Catalog listing: omit description blob and heavy committee/portfolio graphs — detail route loads them. */
 const catalogOrganizerConfigSelect = {
   id: true,
   venue: true,
@@ -14,8 +14,15 @@ const catalogOrganizerConfigSelect = {
   linkedinUrl: true,
   twitterUrl: true,
   portfolioMatrixVisibility: true,
-  committees: true,
-  pricingPhases: true,
+  committees: {
+    select: {
+      id: true,
+      name: true,
+      seatCount: true,
+      basePrice: true,
+      visibility: true,
+    },
+  },
 } as const;
 
 export async function fetchPublishedCatalogEvents() {

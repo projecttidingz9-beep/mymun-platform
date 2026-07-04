@@ -7,9 +7,25 @@ import { MARKETPLACE_CATALOG_CACHE_CONTROL } from "@/lib/server/http-cache";
 export async function GET() {
   try {
     const events = await getCachedPublishedCatalog();
-    const conferences = events.map((event) =>
-      mapPublishedEventToConference(event as EventWithListing)
-    );
+    const conferences = events.map((event) => {
+      const full = mapPublishedEventToConference(event as EventWithListing);
+      const description = typeof full.description === "string" ? full.description : "";
+      // Slim list payload: cards only need summary fields, not full portfolio matrices.
+      return {
+        ...full,
+        description: description.length > 220 ? `${description.slice(0, 220)}…` : description,
+        committees: (full.committees || []).map((committee) => ({
+          id: committee.id,
+          name: committee.name,
+          abbreviation: committee.abbreviation,
+          topic1: "",
+          topic2: "",
+          difficulty: committee.difficulty,
+          size: committee.size,
+          allottedCount: committee.allottedCount,
+        })),
+      };
+    });
 
     return NextResponse.json(
       { conferences },

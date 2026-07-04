@@ -587,6 +587,10 @@ export interface Registration {
   registeredAt: string;
   paid: boolean;
   amount: number;
+  /** Allot-first: payment must be completed by this time after allotment release. */
+  paymentDeadlineAt?: string;
+  /** True when an allotment has been released to the delegate (not a draft). */
+  allotmentReleased?: boolean;
   userId?: string;
   userEmail?: string;
   organizerStatus?: "Pending" | "Allotted" | "Waitlisted" | "Rejected" | "Invited";

@@ -16,17 +16,22 @@ export class DuplicateActiveRegistrationError extends Error {
 
 export type RegistrationCheckoutResult = {
   registrationId: string;
-  paymentIntentId: string;
-  provider: PaymentProvider;
-  paymentStatus: PaymentIntentStatus;
+  paymentIntentId: string | null;
+  provider: PaymentProvider | "DEFERRED";
+  paymentStatus: PaymentIntentStatus | "DEFERRED";
   paid: boolean;
   amount: number;
   currency: string;
+  /** True when payment is deferred until allotment is released (ALLOT_FIRST mode). */
+  deferredPayment?: boolean;
 };
 
 /**
  * Creates registration row + payment intent (FREE or Cashfree).
  * Payment does not imply allotment — status stays PENDING until organizer allots.
+ *
+ * When `deferPayment` is true (ALLOT_FIRST conferences with a positive fee), the registration is
+ * created unpaid with no payment intent — intent is created when the organizer releases allotments.
  */
 export async function createRegistrationAndPayment(params: {
   registrationId: string;
@@ -42,6 +47,8 @@ export async function createRegistrationAndPayment(params: {
   formAnswersJson?: string | null;
   amount: number;
   currency: string;
+  /** Allot-first: submit application without creating a payment intent yet. */
+  deferPayment?: boolean;
 }): Promise<RegistrationCheckoutResult> {
   const { paymentsMode } = getAppConfig();
   const amount = Math.max(0, Math.round(params.amount * 100) / 100);
@@ -109,6 +116,27 @@ export async function createRegistrationAndPayment(params: {
     };
   }
 
+  // Allot-first: application is submitted unpaid; payment intent is created on allotment release.
+  if (params.deferPayment) {
+    const registration = await prisma.registration.create({
+      data: {
+        ...registrationData,
+        paid: false,
+      },
+    });
+
+    return {
+      registrationId: registration.id,
+      paymentIntentId: null,
+      provider: "DEFERRED",
+      paymentStatus: "DEFERRED",
+      paid: false,
+      amount,
+      currency: params.currency,
+      deferredPayment: true,
+    };
+  }
+
   const registration = await prisma.registration.create({
     data: {
       ...registrationData,
@@ -140,4 +168,30 @@ export async function createRegistrationAndPayment(params: {
     amount,
     currency: params.currency,
   };
+}
+
+/** Ensure a PENDING Cashfree intent exists for an unpaid registration (used on allotment release). */
+export async function ensurePendingPaymentIntent(params: {
+  registrationId: string;
+  amount: number;
+  currency: string;
+}): Promise<string> {
+  const existing = await prisma.paymentIntent.findUnique({
+    where: { registrationId: params.registrationId },
+    select: { id: true, status: true },
+  });
+  if (existing) return existing.id;
+
+  const amount = Math.max(0, Math.round(params.amount * 100) / 100);
+  const pi = await prisma.paymentIntent.create({
+    data: {
+      registrationId: params.registrationId,
+      provider: "CASHFREE",
+      amount,
+      currency: params.currency,
+      status: "PENDING",
+      notes: "Payment due after allotment release (allot-first mode)",
+    },
+  });
+  return pi.id;
 }

@@ -69,8 +69,18 @@ const formatInvoiceAddress = (registration: Registration, userAddress?: {
 };
 
 export default function DashboardPage() {
-  const { user, isLoggedIn, authReady, notifications, markNotificationRead, updateDelegateProfile, logout, addRegistration, openAuthModal } =
-    useAuth();
+  const {
+    user,
+    isLoggedIn,
+    authReady,
+    notifications,
+    markNotificationRead,
+    updateDelegateProfile,
+    logout,
+    addRegistration,
+    openAuthModal,
+    refreshUserProfile,
+  } = useAuth();
   const toast = useToast();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -770,6 +780,29 @@ export default function DashboardPage() {
     }
   };
 
+  const onRejectAllotment = async (registration: Registration) => {
+    if (registration.paid || !registration.allotmentReleased) return;
+    const confirmed = window.confirm(
+      "Reject this allotment? The seat will be released and you will not be assigned to that committee."
+    );
+    if (!confirmed) return;
+    try {
+      const res = await fetch(`/api/registrations/${registration.id}/reject-allotment`, {
+        method: "POST",
+        credentials: "include",
+      });
+      const payload = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        toast.show(payload.error || "Could not reject allotment.", "error");
+        return;
+      }
+      toast.show("Allotment declined.", "info");
+      await refreshUserProfile();
+    } catch {
+      toast.show("Could not reject allotment.", "error");
+    }
+  };
+
   const onSaveNotificationPreferences = async () => {
     setNotificationPrefsStatus("");
     setNotificationPrefsSaving(true);
@@ -1029,7 +1062,22 @@ export default function DashboardPage() {
                                 {payingRegistrationId === reg.id ? "Opening payment…" : "Pay now"}
                               </button>
                             )}
-                            {!reg.paid && reg.organizerStatus !== "Rejected" && (
+                            {reg.allotmentReleased && !reg.paid && reg.organizerStatus === "Allotted" && (
+                              <button
+                                type="button"
+                                className="btn btn-ghost text-xs"
+                                style={{ padding: "6px 14px", borderRadius: "8px", color: "#b91c1c" }}
+                                onClick={() => void onRejectAllotment(reg)}
+                              >
+                                Reject allotment
+                              </button>
+                            )}
+                            {reg.paymentDeadlineAt && !reg.paid && reg.allotmentReleased && (
+                              <span className="text-xs" style={{ color: "var(--fg-muted)" }}>
+                                Pay by {new Date(reg.paymentDeadlineAt).toLocaleDateString("en-IN")}
+                              </span>
+                            )}
+                            {!reg.paid && reg.organizerStatus !== "Rejected" && !reg.allotmentReleased && (
                               <button
                                 type="button"
                                 className="btn btn-ghost text-xs"

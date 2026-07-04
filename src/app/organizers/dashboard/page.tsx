@@ -477,6 +477,7 @@ export default function OrganizerDashboardPage() {
     lastOrganizerSyncError,
     clearOrganizerSyncError,
     refetchMyEvents,
+    releaseAllotments,
   } = useAuth();
   const toast = useToast();
 
@@ -3322,6 +3323,7 @@ export default function OrganizerDashboardPage() {
                               onClick={() =>
                                 updateOrganizerConferenceConfig(selectedConference.id, {
                                   allocationMode: "ALLOT_FIRST",
+                                  paymentDeadlineDays: 7,
                                 })
                               }
                             >
@@ -6884,28 +6886,12 @@ export default function OrganizerDashboardPage() {
           void (async () => {
             setReleasingAllotments(true);
             try {
-              const res = await fetch(
-                `/api/organizers/conferences/${selectedConference.id}/release-allotments`,
-                {
-                  method: "POST",
-                  credentials: "include",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({}),
-                }
-              );
-              const payload = (await res.json().catch(() => ({}))) as {
-                error?: string;
-                releasedCount?: number;
-              };
-              if (!res.ok) {
-                toast.show(payload.error || "Could not release allotments.", "error");
+              const result = await releaseAllotments(selectedConference.id);
+              if (!result.ok) {
+                toast.show(result.message, "error");
                 return;
               }
-              toast.show(
-                `Released ${payload.releasedCount ?? 0} allotment(s) to students.`,
-                "success"
-              );
-              window.location.reload();
+              toast.show(result.message, "success");
             } finally {
               setReleasingAllotments(false);
             }

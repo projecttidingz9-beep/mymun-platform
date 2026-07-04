@@ -6,6 +6,7 @@ This project targets **Vercel** for production hosting with **PostgreSQL** (e.g.
 
 - Git repository connected to Vercel.
 - Supabase (or other Postgres) with migrations applied: `npx prisma migrate deploy` using `DIRECT_URL`.
+- After a GitHub repo transfer/rename, reconnect Vercel Git: Project Settings → Git → Connect to `projecttidingz9-beep/mymun-platform`, Production Branch **`master`** (this repo uses `master`, not `main`). If auto-deploy fails, run `vercel deploy --prod` from the project root while logged into the Vercel account that owns `tidingz.com`.
 - Domain DNS pointed at Vercel when going live.
 
 ## 2. Environment variables

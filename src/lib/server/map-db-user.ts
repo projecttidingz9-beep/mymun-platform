@@ -54,6 +54,8 @@ function mapRegistrationToClient(
     registeredAt: reg.createdAt.toISOString(),
     paid: reg.paid,
     amount: moneyNumber(reg.amount),
+    paymentDeadlineAt: reg.paymentDeadlineAt?.toISOString(),
+    allotmentReleased: isAllotted ? true : undefined,
     userId: reg.userId,
     organizerStatus: org,
     delegationId: reg.delegationId ?? undefined,

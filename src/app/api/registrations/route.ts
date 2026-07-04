@@ -39,7 +39,12 @@ export async function POST(request: NextRequest) {
         deletedAt: null,
         status: "PUBLISHED",
       },
-      select: { id: true, title: true, ownerUserId: true },
+      select: {
+        id: true,
+        title: true,
+        ownerUserId: true,
+        organizerConfig: { select: { allocationMode: true } },
+      },
     });
 
     if (!event) {
@@ -66,6 +71,7 @@ export async function POST(request: NextRequest) {
         : undefined;
 
     const prefs = serializeRegistrationPreferences(body);
+    const allotFirst = event.organizerConfig?.allocationMode === "ALLOT_FIRST";
 
     const result = await createRegistrationAndPayment({
       registrationId,
@@ -79,6 +85,7 @@ export async function POST(request: NextRequest) {
       countryPreferencesJson: prefs.countryPreferencesJson,
       amount: validated.pricing.amount,
       currency: validated.pricing.currency,
+      deferPayment: allotFirst && validated.pricing.amount > 0,
     });
 
     if (prefs.formAnswersJson) {
