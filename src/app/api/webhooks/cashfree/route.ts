@@ -8,6 +8,7 @@ import {
   verifyCashfreeWebhook,
   CashfreeWebhookVerificationError,
 } from "@/lib/server/payments/cashfree";
+import { isNonRecoverablePaymentConfirmFailure } from "@/lib/server/payments/cashfree/confirm-payment";
 
 export async function GET() {
   return NextResponse.json({ ok: true, service: "cashfree-webhook" });
@@ -39,6 +40,9 @@ export async function POST(request: NextRequest) {
       const result = await confirmPaymentByOrderId(orderId, { trustVerifiedWebhookSuccess: true });
       if (!result.ok) {
         logger.warn("cashfree_webhook_confirm_failed", { orderId, reason: result.reason });
+        if (isNonRecoverablePaymentConfirmFailure(result.reason)) {
+          return NextResponse.json({ ok: true, skipped: true, reason: result.reason });
+        }
         return NextResponse.json(
           { error: "Payment confirmation failed.", reason: result.reason },
           { status: 500 }

@@ -141,7 +141,11 @@ export async function POST(request: NextRequest) {
           { status: 409 }
         );
       }
-      throw error;
+      logger.error("checkin_transaction_failed", {
+        email: actor.email,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return NextResponse.json({ error: "Check-in failed." }, { status: 500 });
     }
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {

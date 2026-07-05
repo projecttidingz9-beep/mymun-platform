@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useEffect, useState, ReactNode } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useState, ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import {
   ConferenceReview,
@@ -36,7 +36,19 @@ const PROTECTED_API_PREFIXES = [
   "/api/passes/me",
   "/api/organizers/",
   "/api/admin/",
-];
+] as const;
+
+function parsedPathMatchesProtectedApi(url: string): boolean {
+  if (typeof window === "undefined") {
+    return PROTECTED_API_PREFIXES.some((prefix) => url.includes(prefix));
+  }
+  try {
+    const pathname = new URL(url, window.location.origin).pathname;
+    return PROTECTED_API_PREFIXES.some((prefix) => pathname.startsWith(prefix));
+  } catch {
+    return PROTECTED_API_PREFIXES.some((prefix) => url.includes(prefix));
+  }
+}
 
 export type LoginHydrateFailure = "session" | "user_me" | "network";
 
@@ -1250,7 +1262,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           : input instanceof URL
             ? input.href
             : input.url;
-      if (!PROTECTED_API_PREFIXES.some((prefix) => url.includes(prefix))) {
+      try {
+        const parsed = new URL(url, window.location.origin);
+        if (parsed.origin !== window.location.origin) {
+          return response;
+        }
+      } catch {
+        return response;
+      }
+      if (!PROTECTED_API_PREFIXES.some(() => parsedPathMatchesProtectedApi(url))) {
+        return response;
+      }
+      const credentials =
+        init?.credentials ??
+        (input instanceof Request ? input.credentials : "same-origin");
+      if (credentials === "omit") {
         return response;
       }
       setUser(null);
@@ -1489,13 +1515,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .catch(() => undefined);
   };
 
-  const persistNotifications = (next: UserNotification[]) => {
-    setNotifications(next);
-  };
 
-  const addNotification = (notification: UserNotification) => {
+  const addNotification = useCallback((notification: UserNotification) => {
     if (!notification.registrationId) {
-      persistNotifications([notification, ...notifications]);
+      setNotifications((prev) => [notification, ...prev]);
       return;
     }
     void fetch("/api/organizers/notifications", {
@@ -1508,10 +1531,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         message: notification.message,
         type: notification.type,
       }),
-    }).then(() => {
-      void refreshUserAndNotifications();
-    });
-  };
+    })
+      .then((response) => {
+        if (response.ok) {
+          void refreshUserAndNotifications();
+          return;
+        }
+        console.warn("[addNotification] server create failed", response.status);
+      })
+      .catch((error) => {
+        console.warn("[addNotification] request failed", error);
+      });
+  }, [refreshUserAndNotifications]);
 
   const updateUserRegistrationAssignment = (
     registrationId: string | undefined,
@@ -2149,18 +2180,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     persistOrganizerConferences(next, conferenceId);
   };
 
-  const markNotificationRead: AuthContextType["markNotificationRead"] = (notificationId) => {
-    const next = notifications.map((notification) =>
-      notification.id === notificationId ? { ...notification, read: true } : notification
+  const markNotificationRead = useCallback((notificationId: string) => {
+    setNotifications((prev) =>
+      prev.map((notification) =>
+        notification.id === notificationId ? { ...notification, read: true } : notification
+      )
     );
-    persistNotifications(next);
     void fetch("/api/notifications/me", {
       method: "PATCH",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id: notificationId, read: true }),
+    }).catch((error) => {
+      console.warn("[markNotificationRead] PATCH failed", error);
     });
-  };
+  }, []);
+
+  const openAuthModal = useCallback(() => setAuthModalOpen(true), []);
+  const dismissAuthModal = useCallback(() => setAuthModalOpen(false), []);
 
   const updateDelegateProfile: AuthContextType["updateDelegateProfile"] = async (patch) => {
     if (!user) return false;
@@ -2245,8 +2282,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isLoggedIn: !!user,
         authReady,
         authModalOpen,
-        openAuthModal: () => setAuthModalOpen(true),
-        dismissAuthModal: () => setAuthModalOpen(false),
+        openAuthModal,
+        dismissAuthModal,
         organizerConferences,
         lastOrganizerSyncError,
         clearOrganizerSyncError,

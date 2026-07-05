@@ -495,7 +495,7 @@ export default function ReviewDetail({ eventId, onModerated, onClose }: ReviewDe
             <div className="rounded-xl border border-rose-500/30 bg-rose-500/5 p-4">
               <p className="text-xs uppercase tracking-wide text-rose-700 dark:text-rose-300 mb-1">Danger zone</p>
               <p className="text-sm text-[var(--fg-muted)] mb-2">
-                Permanently delete the organizer account ({detail.organizer.email}) — typically only after they've
+                Permanently delete the organizer account ({detail.organizer.email}) — typically only after they&apos;ve
                 emailed requesting deletion and own no active conferences.
               </p>
               <button

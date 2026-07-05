@@ -1,6 +1,6 @@
 "use client";
 
-import { ChangeEvent, useEffect, useState } from "react";
+import { ChangeEvent, Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
@@ -68,7 +68,7 @@ const formatInvoiceAddress = (registration: Registration, userAddress?: {
   return "Billing address not added";
 };
 
-export default function DashboardPage() {
+function DashboardPageContent() {
   const {
     user,
     isLoggedIn,
@@ -167,6 +167,8 @@ export default function DashboardPage() {
   const [verifyRedirectNotice, setVerifyRedirectNotice] = useState<{ tone: "success" | "error"; message: string } | null>(null);
   const [withdrawingRegistrationId, setWithdrawingRegistrationId] = useState<string | null>(null);
   const [payingRegistrationId, setPayingRegistrationId] = useState<string | null>(null);
+  const [rejectingAllotmentId, setRejectingAllotmentId] = useState<string | null>(null);
+  const [downloadingInvoiceId, setDownloadingInvoiceId] = useState<string | null>(null);
   const [withdrawNotice, setWithdrawNotice] = useState("");
   const [notificationPreferences, setNotificationPreferences] = useState<
     Array<{ notificationType: string; emailEnabled: boolean; inAppEnabled: boolean }>
@@ -311,16 +313,29 @@ export default function DashboardPage() {
       (!notification.userEmail || notification.userEmail === user.email) &&
       (!notification.userId || notification.userId === user.id)
   );
-  const mergedNotifications = [
-    ...serverNotifications,
-    ...myNotifications.map((notification) => ({
-      id: notification.id,
-      title: notification.title,
-      message: notification.message,
-      createdAt: notification.createdAt,
-      read: notification.read,
-    })),
-  ].sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt));
+  const mergedNotifications = (() => {
+    const byId = new Map<
+      string,
+      { id: string; title: string; message: string; createdAt: string; read: boolean }
+    >();
+    for (const notification of serverNotifications) {
+      byId.set(notification.id, notification);
+    }
+    for (const notification of myNotifications) {
+      if (!byId.has(notification.id)) {
+        byId.set(notification.id, {
+          id: notification.id,
+          title: notification.title,
+          message: notification.message,
+          createdAt: notification.createdAt,
+          read: notification.read,
+        });
+      }
+    }
+    return Array.from(byId.values()).sort(
+      (a, b) => +new Date(b.createdAt) - +new Date(a.createdAt)
+    );
+  })();
   const confirmed = registrations.filter(r => r.status === "Confirmed").length;
 
   const STATUS_STYLE: Record<string, { class: string }> = {
@@ -577,9 +592,11 @@ export default function DashboardPage() {
 
   const onDownloadInvoicePdf = async (registration: Registration) => {
     if (!registration.paid) {
-      alert("Invoice is available after payment is completed.");
+      toast.show("Invoice is available after payment is completed.", "error");
       return;
     }
+    if (downloadingInvoiceId === registration.id) return;
+    setDownloadingInvoiceId(registration.id);
     try {
       const { downloadRegistrationInvoice } = await import("@/lib/client/invoice-pdf");
       await downloadRegistrationInvoice(registration, {
@@ -588,21 +605,23 @@ export default function DashboardPage() {
         invoiceAddress: user.invoiceAddress,
       });
     } catch (error) {
-      alert(error instanceof Error ? error.message : "Could not download invoice.");
+      toast.show(error instanceof Error ? error.message : "Could not download invoice.", "error");
+    } finally {
+      setDownloadingInvoiceId(null);
     }
   };
 
   const onChangePassword = async () => {
     if (!changePasswordCurrent || !changePasswordNext || !changePasswordConfirm) {
-      alert("Please fill all password fields.");
+      toast.show("Please fill all password fields.", "error");
       return;
     }
     if (changePasswordNext.length < 8) {
-      alert("New password must be at least 8 characters.");
+      toast.show("New password must be at least 8 characters.", "error");
       return;
     }
     if (changePasswordNext !== changePasswordConfirm) {
-      alert("New password and confirmation do not match.");
+      toast.show("New password and confirmation do not match.", "error");
       return;
     }
     setChangePasswordLoading(true);
@@ -625,6 +644,8 @@ export default function DashboardPage() {
       setChangePasswordNext("");
       setChangePasswordConfirm("");
       toast.show("Password updated successfully.", "success");
+    } catch {
+      toast.show("Could not change password. Check your connection and try again.", "error");
     } finally {
       setChangePasswordLoading(false);
     }
@@ -632,7 +653,7 @@ export default function DashboardPage() {
 
   const onDeleteAccount = async () => {
     if (!deletePassword.trim()) {
-      alert("Please confirm your password to delete account.");
+      toast.show("Please confirm your password to delete account.", "error");
       return;
     }
     const confirmed = window.confirm(
@@ -781,11 +802,12 @@ export default function DashboardPage() {
   };
 
   const onRejectAllotment = async (registration: Registration) => {
-    if (registration.paid || !registration.allotmentReleased) return;
+    if (registration.paid || !registration.allotmentReleased || rejectingAllotmentId === registration.id) return;
     const confirmed = window.confirm(
       "Reject this allotment? The seat will be released and you will not be assigned to that committee."
     );
     if (!confirmed) return;
+    setRejectingAllotmentId(registration.id);
     try {
       const res = await fetch(`/api/registrations/${registration.id}/reject-allotment`, {
         method: "POST",
@@ -800,6 +822,8 @@ export default function DashboardPage() {
       await refreshUserProfile();
     } catch {
       toast.show("Could not reject allotment.", "error");
+    } finally {
+      setRejectingAllotmentId(null);
     }
   };
 
@@ -819,6 +843,8 @@ export default function DashboardPage() {
         return;
       }
       setNotificationPrefsStatus("Preferences saved.");
+    } catch {
+      setNotificationPrefsStatus("Could not save preferences.");
     } finally {
       setNotificationPrefsSaving(false);
     }
@@ -1067,9 +1093,10 @@ export default function DashboardPage() {
                                 type="button"
                                 className="btn btn-ghost text-xs"
                                 style={{ padding: "6px 14px", borderRadius: "8px", color: "#b91c1c" }}
+                                disabled={rejectingAllotmentId === reg.id}
                                 onClick={() => void onRejectAllotment(reg)}
                               >
-                                Reject allotment
+                                {rejectingAllotmentId === reg.id ? "Rejecting…" : "Reject allotment"}
                               </button>
                             )}
                             {reg.paymentDeadlineAt && !reg.paid && reg.allotmentReleased && (
@@ -1126,10 +1153,10 @@ export default function DashboardPage() {
                           <button
                             type="button"
                             className="btn btn-outline-blue text-xs w-full sm:w-auto"
-                            onClick={() => onDownloadInvoicePdf(reg)}
-                            disabled={!reg.paid}
+                            onClick={() => void onDownloadInvoicePdf(reg)}
+                            disabled={!reg.paid || downloadingInvoiceId === reg.id}
                           >
-                            Download Invoice (PDF)
+                            {downloadingInvoiceId === reg.id ? "Downloading…" : "Download Invoice (PDF)"}
                           </button>
                           {!reg.paid && (
                             <p className="text-xs" style={{ color: "var(--fg-muted)" }}>
@@ -1997,10 +2024,14 @@ export default function DashboardPage() {
                         </div>
                         <button
                           className="btn btn-ghost text-xs mt-2 w-full"
-                          disabled={!registration.paid}
-                          onClick={() => onDownloadInvoicePdf(registration)}
+                          disabled={!registration.paid || downloadingInvoiceId === registration.id}
+                          onClick={() => void onDownloadInvoicePdf(registration)}
                         >
-                          {registration.paid ? "Download Invoice (PDF)" : "Invoice available after payment"}
+                          {downloadingInvoiceId === registration.id
+                            ? "Downloading…"
+                            : registration.paid
+                              ? "Download Invoice (PDF)"
+                              : "Invoice available after payment"}
                         </button>
                         {!registration.paid && registration.amount > 0 && (
                           <button
@@ -2107,5 +2138,21 @@ export default function DashboardPage() {
       </div>
       <Footer />
     </>
+  );
+}
+
+export default function DashboardPage() {
+  return (
+    <Suspense
+      fallback={
+        <>
+          <Navbar />
+          <AppRouteSkeleton />
+          <Footer />
+        </>
+      }
+    >
+      <DashboardPageContent />
+    </Suspense>
   );
 }

@@ -15,13 +15,14 @@ type SyncRegistrationPayload = {
   portfolioName?: string | null;
   amount: number;
   paid: boolean;
-  organizerStatus?: "Pending" | "Allotted" | "Waitlisted" | "Rejected";
+  organizerStatus?: "Pending" | "Allotted" | "Waitlisted" | "Rejected" | "Invited";
 };
 
 const mapStatus = (status?: SyncRegistrationPayload["organizerStatus"]): RegistrationStatus => {
   if (status === "Allotted") return RegistrationStatus.ALLOTTED;
   if (status === "Waitlisted") return RegistrationStatus.WAITLISTED;
   if (status === "Rejected") return RegistrationStatus.REJECTED;
+  if (status === "Invited") return RegistrationStatus.PENDING;
   return RegistrationStatus.PENDING;
 };
 

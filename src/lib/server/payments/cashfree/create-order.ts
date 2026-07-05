@@ -97,11 +97,59 @@ export async function createCashfreeOrderForPaymentIntent(params: {
     throw new CashfreeOrderError("Invalid payment amount.");
   }
 
-  const orderId = typedIntent.reference?.trim() || toCashfreeOrderId(typedIntent.id);
+  const existingReference = typedIntent.reference?.trim();
+  if (existingReference) {
+    const raw =
+      typeof typedIntent.raw === "object" && typedIntent.raw !== null
+        ? (typedIntent.raw as Record<string, unknown>)
+        : {};
+    const cashfreeOrder = raw.cashfreeOrder as { payment_session_id?: string } | undefined;
+    if (cashfreeOrder?.payment_session_id) {
+      return {
+        orderId: existingReference,
+        paymentSessionId: cashfreeOrder.payment_session_id,
+        amount,
+        currency: typedIntent.currency,
+      };
+    }
+  }
+
+  const orderId = existingReference || toCashfreeOrderId(typedIntent.id);
   const appUrl = getSiteUrl();
   const returnUrl = `${appUrl}/checkout/${encodeURIComponent(params.eventSlugOrId)}/payment-return?order_id={order_id}`;
 
   const phone = (params.customerPhone || "").replace(/\D/g, "").slice(-10) || "9999999999";
+
+  // Serialize concurrent order creation: only one request may claim a new reference.
+  if (!existingReference) {
+    const claim = await prisma.paymentIntent.updateMany({
+      where: { id: typedIntent.id, reference: null },
+      data: { reference: orderId },
+    });
+      if (claim.count === 0) {
+        const claimed = await prisma.paymentIntent.findUnique({
+          where: { id: typedIntent.id },
+          select: { reference: true, raw: true, amount: true, currency: true },
+        });
+        const claimedReference = claimed?.reference?.trim();
+        if (claimed && claimedReference) {
+          const raw =
+            typeof claimed.raw === "object" && claimed.raw !== null
+              ? (claimed.raw as Record<string, unknown>)
+              : {};
+          const cashfreeOrder = raw.cashfreeOrder as { payment_session_id?: string } | undefined;
+          if (cashfreeOrder?.payment_session_id) {
+            return {
+              orderId: claimedReference,
+              paymentSessionId: cashfreeOrder.payment_session_id,
+              amount: Number(claimed.amount),
+              currency: claimed.currency,
+            };
+          }
+          throw new CashfreeOrderError("Payment is being prepared. Please try again in a moment.");
+        }
+      }
+  }
 
   const cashfree = getCashfreeClient();
   const response = await cashfree.PGCreateOrder({

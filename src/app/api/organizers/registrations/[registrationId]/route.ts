@@ -11,6 +11,8 @@ import {
   resolveReleaseAt,
 } from "@/lib/server/issue-delegate-pass";
 import { prisma } from "@/lib/server/prisma";
+import { logger } from "@/lib/server/logger";
+import { organizerRegistrationPatchSchema } from "@/lib/server/validators/registration";
 
 function mapOrganizerStatusToDb(
   status: string | undefined
@@ -57,22 +59,28 @@ export async function PATCH(
   }
 
   const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
+  const parsedBody = organizerRegistrationPatchSchema.safeParse(body);
+  if (!parsedBody.success) {
+    const msg = parsedBody.error.issues[0]?.message ?? "Invalid input.";
+    return NextResponse.json({ error: msg }, { status: 400 });
+  }
+  const validated = parsedBody.data;
 
   const statusDb =
-    typeof body.organizerStatus === "string"
-      ? mapOrganizerStatusToDb(body.organizerStatus)
-      : typeof body.status === "string"
-        ? mapOrganizerStatusToDb(body.status)
+    typeof validated.organizerStatus === "string"
+      ? mapOrganizerStatusToDb(validated.organizerStatus)
+      : typeof validated.status === "string"
+        ? mapOrganizerStatusToDb(validated.status)
         : undefined;
 
   const committeeName =
-    typeof body.committeeName === "string" ? body.committeeName.trim() || null : undefined;
+    typeof validated.committeeName === "string" ? validated.committeeName.trim() || null : undefined;
   const portfolioName =
-    typeof body.portfolioName === "string" ? body.portfolioName.trim() || null : undefined;
+    typeof validated.portfolioName === "string" ? validated.portfolioName.trim() || null : undefined;
   const portfolioId =
-    typeof body.portfolioId === "string" ? body.portfolioId.trim() || null : undefined;
+    typeof validated.portfolioId === "string" ? validated.portfolioId.trim() || null : undefined;
 
-  const allottedAtRaw = body.allottedAt;
+  const allottedAtRaw = validated.allottedAt;
   const allottedAt =
     typeof allottedAtRaw === "string" && allottedAtRaw
       ? new Date(allottedAtRaw)
@@ -80,7 +88,7 @@ export async function PATCH(
         ? new Date()
         : undefined;
 
-  const paid = typeof body.paid === "boolean" ? body.paid : undefined;
+  const paid = typeof validated.paid === "boolean" ? validated.paid : undefined;
 
   const nextAllottedAt =
     statusDb === RegistrationStatus.ALLOTTED
@@ -151,7 +159,11 @@ export async function PATCH(
         { status: 409 }
       );
     }
-    throw error;
+    logger.error("organizer_registration_patch_failed", {
+      registrationId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return NextResponse.json({ error: "Could not update registration." }, { status: 500 });
   }
 
   const organizerUser = actor
@@ -206,8 +218,11 @@ export async function PATCH(
       await issueDelegatePassForRegistration(registrationId, {
         releaseAt: resolveReleaseAt(registration.event.startDate),
       });
-    } catch {
-      // PATCH succeeded; pass issuance is best-effort.
+    } catch (passError) {
+      logger.warn("organizer_registration_pass_issue_failed", {
+        registrationId,
+        error: passError instanceof Error ? passError.message : String(passError),
+      });
     }
   }
 

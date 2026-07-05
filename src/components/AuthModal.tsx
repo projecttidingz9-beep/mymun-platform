@@ -140,45 +140,48 @@ export default function AuthModal({
     if (!credential) return;
     setError("");
     setGoogleLoading(true);
-    const response = await fetch("/api/auth/google", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify({
-        idToken: credential,
-        role: selectedRole,
-      }),
-    });
-    const payload = (await response.json().catch(() => ({}))) as {
-      ok?: boolean;
-      error?: string;
-      requiresRole?: boolean;
-      email?: string;
-      name?: string;
-      role?: "delegate" | "organizer" | "admin";
-    };
-    if (payload.requiresRole) {
-      setGooglePendingCredential(credential);
-      setShowGoogleRoleStep(true);
+    try {
+      const response = await fetch("/api/auth/google", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          idToken: credential,
+          role: selectedRole,
+        }),
+      });
+      const payload = (await response.json().catch(() => ({}))) as {
+        ok?: boolean;
+        error?: string;
+        requiresRole?: boolean;
+        email?: string;
+        name?: string;
+        role?: "delegate" | "organizer" | "admin";
+      };
+      if (payload.requiresRole) {
+        setGooglePendingCredential(credential);
+        setShowGoogleRoleStep(true);
+        return;
+      }
+      if (!response.ok || !payload.email) {
+        setError(payload.error || "Google sign-in failed.");
+        return;
+      }
+      const signedIn = await login(
+        payload.email,
+        payload.name || undefined,
+        payload.role || "delegate"
+      );
+      if (!signedIn.ok) {
+        setError(loginHydrateErrorMessage(signedIn.failure));
+        return;
+      }
+      closeModal();
+    } catch {
+      setError("Google sign-in failed. Check your connection and try again.");
+    } finally {
       setGoogleLoading(false);
-      return;
     }
-    if (!response.ok || !payload.email) {
-      setError(payload.error || "Google sign-in failed.");
-      setGoogleLoading(false);
-      return;
-    }
-    const signedIn = await login(
-      payload.email,
-      payload.name || undefined,
-      payload.role || "delegate"
-    );
-    if (!signedIn.ok) {
-      setError(loginHydrateErrorMessage(signedIn.failure));
-      setGoogleLoading(false);
-      return;
-    }
-    closeModal();
   }, [closeModal, login]);
 
   const startSupabaseGoogleOAuth = useCallback(async () => {
@@ -308,6 +311,8 @@ export default function AuthModal({
         return;
       }
       setForgotNotice("Password reset link sent. Please check your email.");
+    } catch {
+      setError("Could not start password reset. Check your connection and try again.");
     } finally {
       setForgotLoading(false);
     }

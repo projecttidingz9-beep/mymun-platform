@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Navbar from "@/components/Navbar";
@@ -9,7 +9,7 @@ import AppRouteSkeleton from "@/components/AppRouteSkeleton";
 import { useAuth } from "@/lib/auth-context";
 import { CONFERENCES_PATH } from "@/lib/paths";
 
-export default function PaymentReturnPage() {
+function PaymentReturnPageContent() {
   const params = useParams();
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -27,13 +27,14 @@ export default function PaymentReturnPage() {
       return;
     }
     if (!orderId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- validate query param before polling
       setStatus("error");
       setMessage("Missing payment reference. Return to checkout and try again.");
       return;
     }
 
     let cancelled = false;
-    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    let timeoutId: number | undefined;
     const poll = async (attempt: number) => {
       try {
         const res = await fetch(`/api/payments/cashfree/orders/${encodeURIComponent(orderId)}`, {
@@ -122,5 +123,21 @@ export default function PaymentReturnPage() {
       </div>
       <Footer />
     </>
+  );
+}
+
+export default function PaymentReturnPage() {
+  return (
+    <Suspense
+      fallback={
+        <>
+          <Navbar />
+          <AppRouteSkeleton />
+          <Footer />
+        </>
+      }
+    >
+      <PaymentReturnPageContent />
+    </Suspense>
   );
 }

@@ -112,8 +112,11 @@ export async function POST(request: NextRequest) {
           },
         });
       }
-    } catch {
-      // Non-blocking — registration already succeeded.
+    } catch (notifyError) {
+      logger.warn("registration_notification_failed", {
+        registrationId: result.registrationId,
+        error: notifyError instanceof Error ? notifyError.message : String(notifyError),
+      });
     }
 
     const registeredAt = new Date().toLocaleDateString("en-IN", {

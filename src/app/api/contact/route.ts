@@ -4,6 +4,7 @@ import { env } from "@/lib/server/env";
 import { consumeRateLimitBucket } from "@/lib/server/rate-limit-db";
 import { getClientIp } from "@/lib/server/request-ip";
 import { contactBodySchema } from "@/lib/server/validators/contact";
+import { logger } from "@/lib/server/logger";
 
 export async function POST(request: NextRequest) {
   const raw = await request.json().catch(() => ({}));
@@ -42,12 +43,19 @@ export async function POST(request: NextRequest) {
 
   const resend = new Resend(apiKey);
   const support = process.env.NEXT_PUBLIC_SUPPORT_EMAIL?.trim() || "support@tidingz.com";
-  await resend.emails.send({
-    from,
-    to: support,
-    subject: `[Tidingz Contact] ${email}`,
-    text: `From: ${email}\n\n${message}`,
-  });
+  try {
+    await resend.emails.send({
+      from,
+      to: support,
+      subject: `[Tidingz Contact] ${email}`,
+      text: `From: ${email}\n\n${message}`,
+    });
+  } catch (error) {
+    logger.error("contact_email_failed", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return NextResponse.json({ error: "Could not send your message. Please try again later." }, { status: 500 });
+  }
 
   return NextResponse.json({ ok: true });
 }

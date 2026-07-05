@@ -105,6 +105,19 @@ describe("cashfree webhook helpers", () => {
 
     expect(isCashfreePaymentSuccess(event)).toBe(false);
   });
+
+  it("returns false for event type only without paid status fields", () => {
+    const event = {
+      type: "PAYMENT_SUCCESS_WEBHOOK",
+      raw: "{}",
+      object: {
+        type: "PAYMENT_SUCCESS_WEBHOOK",
+        data: {},
+      },
+    };
+
+    expect(isCashfreePaymentSuccess(event)).toBe(false);
+  });
 });
 
 describe("isCashfreeWebhookConnectivityCheck", () => {

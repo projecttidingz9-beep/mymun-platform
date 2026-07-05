@@ -5,6 +5,7 @@ import { loadClientUserByEmail } from "@/lib/server/load-client-user";
 import { logger } from "@/lib/server/logger";
 import { prismaUserToClientUser } from "@/lib/server/map-db-user";
 import { prisma } from "@/lib/server/prisma";
+import { userMePatchBodySchema } from "@/lib/server/validators/registration";
 
 export async function GET(request: NextRequest) {
   const actor = await getRequestActor(request);
@@ -47,7 +48,13 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ error: "User not found." }, { status: 404 });
   }
 
-  const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
+  const raw = await request.json().catch(() => ({}));
+  const parsed = userMePatchBodySchema.safeParse(raw);
+  if (!parsed.success) {
+    const msg = parsed.error.issues[0]?.message ?? "Invalid input.";
+    return NextResponse.json({ error: msg }, { status: 400 });
+  }
+  const body = parsed.data;
 
   try {
     const nextProfile =

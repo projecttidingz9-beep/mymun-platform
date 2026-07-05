@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { NotificationType } from "@/generated/prisma/client";
 import { getRequestActor, requireEventOrganizerAccess, requireOrganizer } from "@/lib/server/auth";
 import { prisma } from "@/lib/server/prisma";
+import { logger } from "@/lib/server/logger";
+import { organizerNotificationBodySchema } from "@/lib/server/validators/registration";
 
 export async function POST(request: NextRequest) {
   const actor = await getRequestActor(request);
@@ -9,17 +11,16 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Organizer role required." }, { status: 403 });
   }
 
-  const body = (await request.json().catch(() => ({}))) as {
-    registrationId?: string;
-    title?: string;
-    message?: string;
-    type?: string;
-  };
+  try {
+    const raw = await request.json().catch(() => ({}));
+    const parsed = organizerNotificationBodySchema.safeParse(raw);
+    if (!parsed.success) {
+      const msg = parsed.error.issues[0]?.message ?? "Invalid input.";
+      return NextResponse.json({ error: msg }, { status: 400 });
+    }
+    const body = parsed.data;
 
-  const registrationId = String(body.registrationId || "").trim();
-  if (!registrationId) {
-    return NextResponse.json({ error: "registrationId is required." }, { status: 400 });
-  }
+    const registrationId = body.registrationId;
 
   const registration = await prisma.registration.findFirst({
     where: { id: registrationId, deletedAt: null },
@@ -57,4 +58,10 @@ export async function POST(request: NextRequest) {
   });
 
   return NextResponse.json({ ok: true });
+  } catch (error) {
+    logger.error("organizer_notification_create_failed", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return NextResponse.json({ error: "Could not create notification." }, { status: 500 });
+  }
 }

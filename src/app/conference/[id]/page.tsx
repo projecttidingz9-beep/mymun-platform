@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
@@ -45,7 +45,7 @@ const DEFAULT_OVERVIEW_AWARDS = [
 
 const DEFAULT_OVERVIEW_DOCUMENTS: { title: string; category: string; url: string }[] = [];
 
-export default function ConferenceDetailPage() {
+function ConferenceDetailPageContent() {
   const params = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -85,29 +85,37 @@ export default function ConferenceDetailPage() {
   const [catalogLoading, setCatalogLoading] = useState(true);
   const [publicFetchGeneration, setPublicFetchGeneration] = useState(0);
 
-  const loadPublicConference = useCallback(async () => {
+  const loadPublicConference = useCallback(async (signal?: AbortSignal) => {
     setCatalogLoading(true);
     try {
       const detailRes = await fetch(`/api/marketplace/${encodeURIComponent(eventKey)}`, {
         cache: "no-store",
+        signal,
       });
+      if (signal?.aborted) return;
       let detail: PublicConferenceDetail | null = null;
       if (detailRes.ok) {
         const detailData = (await detailRes.json()) as { conference?: PublicConferenceDetail };
         detail = detailData.conference ?? null;
       }
+      if (signal?.aborted) return;
       setPublicDetail(detail);
       setCatalogConference(detail);
-    } catch {
+    } catch (error) {
+      if (signal?.aborted) return;
       setCatalogConference(null);
       setPublicDetail(null);
     } finally {
-      setCatalogLoading(false);
+      if (!signal?.aborted) {
+        setCatalogLoading(false);
+      }
     }
   }, [eventKey, refreshNonce]);
 
   useEffect(() => {
-    void loadPublicConference();
+    const controller = new AbortController();
+    void loadPublicConference(controller.signal);
+    return () => controller.abort();
   }, [eventKey, refreshNonce, publicFetchGeneration, loadPublicConference]);
 
   useEffect(() => {
@@ -1528,5 +1536,21 @@ export default function ConferenceDetailPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function ConferenceDetailPage() {
+  return (
+    <Suspense
+      fallback={
+        <>
+          <Navbar />
+          <AppRouteSkeleton />
+          <Footer />
+        </>
+      }
+    >
+      <ConferenceDetailPageContent />
+    </Suspense>
   );
 }

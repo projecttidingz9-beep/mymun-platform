@@ -212,6 +212,8 @@ export async function ensurePendingPaymentIntent(params: {
         amount,
         currency: params.currency,
         notes: ALLOT_FIRST_PI_NOTES,
+        // Clear stale Cashfree order so a new order is created at the updated amount.
+        reference: null,
       },
     });
     return existing.id;

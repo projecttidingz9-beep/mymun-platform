@@ -68,13 +68,11 @@ export function isCashfreePaymentSuccess(event: PGWebhookEvent): boolean {
     };
   };
 
-  const eventType = (event.type || payload?.type || "").toUpperCase();
   const orderStatus = payload?.data?.order?.order_status?.toUpperCase();
   const paymentStatus = payload?.data?.payment?.payment_status?.toUpperCase();
 
   if (orderStatus === "PAID") return true;
   if (paymentStatus === "SUCCESS" || paymentStatus === "PAID") return true;
-  if (eventType.includes("PAYMENT_SUCCESS")) return true;
 
   return false;
 }

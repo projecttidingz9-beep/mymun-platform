@@ -23,15 +23,6 @@ export default function NotificationsPage() {
     void ensureServerSession();
   }, [isLoggedIn, user]);
 
-  useEffect(() => {
-    if (!isLoggedIn || !user) return;
-    for (const notification of notifications) {
-      if (!notification.read) {
-        markNotificationRead(notification.id);
-      }
-    }
-  }, [isLoggedIn, user, notifications, markNotificationRead]);
-
   if (!authReady || !isLoggedIn || !user) {
     return <AppRouteSkeleton />;
   }

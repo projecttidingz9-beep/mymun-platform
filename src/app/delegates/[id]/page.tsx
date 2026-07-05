@@ -45,6 +45,9 @@ function DelegateProfileInner({ delegateId }: { delegateId: string }) {
         const data = (await response.json().catch(() => ({}))) as { user?: User };
         setRemoteProfile(data.user ?? null);
       })
+      .catch(() => {
+        if (!cancelled) setRemoteProfile(null);
+      })
       .finally(() => {
         if (!cancelled) setOthersLoaded(true);
       });

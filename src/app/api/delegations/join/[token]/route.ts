@@ -3,6 +3,7 @@ import { Prisma } from "@/generated/prisma/client";
 import { DelegationStatus } from "@/generated/prisma/enums";
 import { getRequestActor, resolveActorUserId } from "@/lib/server/auth";
 import { getDelegationInviteByToken } from "@/lib/server/delegation-invite";
+import { logger } from "@/lib/server/logger";
 import { prisma } from "@/lib/server/prisma";
 
 export async function GET(
@@ -136,6 +137,10 @@ export async function POST(
         );
       }
     }
-    throw error;
+    logger.error("delegation_join_failed", {
+      token,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return NextResponse.json({ error: "Could not join delegation." }, { status: 500 });
   }
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { ChangeEvent, useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { ChangeEvent, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import Image from "next/image";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
@@ -503,6 +503,13 @@ export default function OrganizerDashboardPage() {
   >("all");
   const [broadcastSending, setBroadcastSending] = useState(false);
   const [payingRegistrationId, setPayingRegistrationId] = useState<string | null>(null);
+  const [applicantActionId, setApplicantActionId] = useState<string | null>(null);
+  const [issuingPassId, setIssuingPassId] = useState<string | null>(null);
+  const [issuingCertId, setIssuingCertId] = useState<string | null>(null);
+  const [refundingRegistrationId, setRefundingRegistrationId] = useState<string | null>(null);
+  const [partnerActionInFlight, setPartnerActionInFlight] = useState(false);
+  const [savingCommitteeDetails, setSavingCommitteeDetails] = useState(false);
+  const applicantActionRef = useRef<string | null>(null);
   const [paymentActionStatus, setPaymentActionStatus] = useState("");
   const [templatesSavedJson, setTemplatesSavedJson] = useState("");
   const [templatesSaving, setTemplatesSaving] = useState(false);
@@ -928,33 +935,38 @@ export default function OrganizerDashboardPage() {
   };
 
   const saveCommitteeDetails = (conferenceId: string) => {
-    if (!detailsEditorCommitteeId) return;
-    const agendaLines = detailsEditorDraft.agendasText
-      .split("\n")
-      .map((line) => line.trim())
-      .filter(Boolean);
-    const primaryAgenda = agendaLines[0] || detailsEditorDraft.agenda.trim() || "Agenda will be announced";
-    const additionalAgendas = agendaLines.slice(1);
-    const normalizedChairs = detailsEditorDraft.chairs
-      .map((chair, index) => ({
-        id: chair.id || `${detailsEditorCommitteeId}-chair-${index}`,
-        name: chair.name.trim(),
-        email: chair.email.trim() || undefined,
-        role: chair.role.trim() || undefined,
-      }))
-      .filter((chair) => chair.name);
-    updateOrganizerCommitteeConfig(conferenceId, detailsEditorCommitteeId, {
-      name: detailsEditorDraft.name.trim() || "Committee",
-      description: detailsEditorDraft.description.trim() || undefined,
-      agenda: primaryAgenda,
-      additionalAgendas,
-      logoImageUrl: detailsEditorDraft.logoImageUrl.trim() || undefined,
-      chairs: normalizedChairs,
-      chairName: normalizedChairs[0]?.name,
-      chairEmail: normalizedChairs[0]?.email,
-    });
-    setDetailsEditorOpen(false);
-    setDetailsEditorCommitteeId("");
+    if (!detailsEditorCommitteeId || savingCommitteeDetails) return;
+    setSavingCommitteeDetails(true);
+    try {
+      const agendaLines = detailsEditorDraft.agendasText
+        .split("\n")
+        .map((line) => line.trim())
+        .filter(Boolean);
+      const primaryAgenda = agendaLines[0] || detailsEditorDraft.agenda.trim() || "Agenda will be announced";
+      const additionalAgendas = agendaLines.slice(1);
+      const normalizedChairs = detailsEditorDraft.chairs
+        .map((chair, index) => ({
+          id: chair.id || `${detailsEditorCommitteeId}-chair-${index}`,
+          name: chair.name.trim(),
+          email: chair.email.trim() || undefined,
+          role: chair.role.trim() || undefined,
+        }))
+        .filter((chair) => chair.name);
+      updateOrganizerCommitteeConfig(conferenceId, detailsEditorCommitteeId, {
+        name: detailsEditorDraft.name.trim() || "Committee",
+        description: detailsEditorDraft.description.trim() || undefined,
+        agenda: primaryAgenda,
+        additionalAgendas,
+        logoImageUrl: detailsEditorDraft.logoImageUrl.trim() || undefined,
+        chairs: normalizedChairs,
+        chairName: normalizedChairs[0]?.name,
+        chairEmail: normalizedChairs[0]?.email,
+      });
+      setDetailsEditorOpen(false);
+      setDetailsEditorCommitteeId("");
+    } finally {
+      setSavingCommitteeDetails(false);
+    }
   };
 
   const tryDeleteCommittee = (conference: OrganizerConference, committee: OrganizerConference["committees"][number]) => {
@@ -962,7 +974,7 @@ export default function OrganizerDashboardPage() {
       (applicant) => applicant.status === "Allotted" && applicant.assignedCommitteeId === committee.id
     ).length;
     if (allottedCount > 0) {
-      alert("Cannot delete this committee while applicants are allotted to it. Unassign them first.");
+      toast.show("Cannot delete this committee while applicants are allotted to it. Unassign them first.", "error");
       return;
     }
     const confirmed = confirm(`Delete committee "${committee.name}"?`);
@@ -971,9 +983,10 @@ export default function OrganizerDashboardPage() {
   };
 
   const syncAndIssuePass = async (conference: OrganizerConference, applicantId: string) => {
+    if (issuingPassId === applicantId) return;
     const applicant = conference.applicants.find((entry) => entry.id === applicantId);
     if (!applicant || !applicant.registrationId) {
-      alert("Applicant registration record is missing.");
+      toast.show("Applicant registration record is missing.", "error");
       return;
     }
 
@@ -999,28 +1012,43 @@ export default function OrganizerDashboardPage() {
       organizerStatus: applicant.status,
     };
 
-    await fetch("/api/registrations/sync", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify(syncPayload),
-    });
+    setIssuingPassId(applicantId);
+    try {
+      const syncResponse = await fetch("/api/registrations/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(syncPayload),
+      });
+      if (!syncResponse.ok) {
+        const syncPayloadError = (await syncResponse.json().catch(() => ({}))) as { error?: string };
+        toast.show(syncPayloadError.error || "Could not sync registration before issuing pass.", "error");
+        return;
+      }
 
-    const issueResponse = await fetch("/api/passes/issue", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify({
-        registrationId: applicant.registrationId,
-        syncPayload,
-      }),
-    });
-    const issueData = await issueResponse.json();
-    if (!issueResponse.ok) {
-      alert(issueData.error || "Failed to issue pass.");
-      return;
+      const issueResponse = await fetch("/api/passes/issue", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          registrationId: applicant.registrationId,
+          syncPayload,
+        }),
+      });
+      const issueData = await issueResponse.json();
+      if (!issueResponse.ok) {
+        toast.show(issueData.error || "Failed to issue pass.", "error");
+        return;
+      }
+      toast.show(
+        issueData.alreadyIssued ? "Pass already issued." : "Delegate pass issued successfully.",
+        "success"
+      );
+    } catch {
+      toast.show("Failed to issue pass.", "error");
+    } finally {
+      setIssuingPassId(null);
     }
-    alert(issueData.alreadyIssued ? "Pass already issued." : "Delegate pass issued successfully.");
   };
 
   useEffect(() => {
@@ -1512,7 +1540,8 @@ export default function OrganizerDashboardPage() {
   };
 
   const sendPartnerInvite = async () => {
-    if (!selectedConference || !partnerInviteTargetId) return;
+    if (!selectedConference || !partnerInviteTargetId || partnerActionInFlight) return;
+    setPartnerActionInFlight(true);
     setPartnerActionStatus("Sending invite...");
     try {
       const response = await fetch(`/api/organizers/partners/${selectedConference.id}`, {
@@ -1530,6 +1559,8 @@ export default function OrganizerDashboardPage() {
       setPartnerActionStatus("Invite sent.");
     } catch (error) {
       setPartnerActionStatus(error instanceof Error ? error.message : "Failed to send invitation.");
+    } finally {
+      setPartnerActionInFlight(false);
     }
   };
 
@@ -1537,7 +1568,8 @@ export default function OrganizerDashboardPage() {
     partnershipId: string,
     action: "accept" | "reject" | "cancel" | "unlink"
   ) => {
-    if (!selectedConference) return;
+    if (!selectedConference || partnerActionInFlight) return;
+    setPartnerActionInFlight(true);
     setPartnerActionStatus("Updating partnership...");
     try {
       const response =
@@ -1560,6 +1592,8 @@ export default function OrganizerDashboardPage() {
       setPartnerActionStatus("Partnership updated.");
     } catch (error) {
       setPartnerActionStatus(error instanceof Error ? error.message : "Failed to update partnership.");
+    } finally {
+      setPartnerActionInFlight(false);
     }
   };
 
@@ -3766,24 +3800,34 @@ export default function OrganizerDashboardPage() {
                                     <button
                                       type="button"
                                       className="btn btn-primary text-xs"
-                                      disabled={applicant.status === "Allotted"}
+                                      disabled={applicant.status === "Allotted" || applicantActionId === applicant.id}
                                       onClick={() => {
+                                        if (applicantActionRef.current === applicant.id) return;
+                                        applicantActionRef.current = applicant.id;
+                                        setApplicantActionId(applicant.id);
                                         updateApplicantStatus(selectedConference.id, applicant.id, "Allotted");
                                         toast.show("Organiser application accepted.", "success");
+                                        applicantActionRef.current = null;
+                                        setApplicantActionId(null);
                                       }}
                                     >
-                                      Accept
+                                      {applicantActionId === applicant.id ? "Saving…" : "Accept"}
                                     </button>
                                     <button
                                       type="button"
                                       className="btn btn-ghost text-xs"
-                                      disabled={applicant.status === "Rejected"}
+                                      disabled={applicant.status === "Rejected" || applicantActionId === applicant.id}
                                       onClick={() => {
+                                        if (applicantActionRef.current === applicant.id) return;
+                                        applicantActionRef.current = applicant.id;
+                                        setApplicantActionId(applicant.id);
                                         updateApplicantStatus(selectedConference.id, applicant.id, "Rejected");
                                         toast.show("Organiser application rejected.", "info");
+                                        applicantActionRef.current = null;
+                                        setApplicantActionId(null);
                                       }}
                                     >
-                                      Reject
+                                      {applicantActionId === applicant.id ? "Saving…" : "Reject"}
                                     </button>
                                   </>
                                 ) : (
@@ -3815,6 +3859,9 @@ export default function OrganizerDashboardPage() {
                                 ) : (
                                 <button
                                   onClick={() => {
+                                    if (applicantActionRef.current === applicant.id) return;
+                                    applicantActionRef.current = applicant.id;
+                                    setApplicantActionId(applicant.id);
                                     const result = assignApplicant({
                                       conferenceId: selectedConference.id,
                                       applicantId: applicant.id,
@@ -3823,60 +3870,89 @@ export default function OrganizerDashboardPage() {
                                     });
                                     if (!result.ok) toast.show(result.message, "error");
                                     else toast.show("Draft allotment saved. Release when ready.", "success");
+                                    applicantActionRef.current = null;
+                                    setApplicantActionId(null);
                                   }}
                                   className="btn btn-primary text-xs"
-                                  disabled={!selectedCommitteeId}
+                                  disabled={!selectedCommitteeId || applicantActionId === applicant.id}
                                 >
-                                  Allot (draft)
+                                  {applicantActionId === applicant.id ? "Saving…" : "Allot (draft)"}
                                 </button>
                                 )}
                                 <button
                                   onClick={() => {
+                                    if (applicantActionRef.current === applicant.id) return;
+                                    applicantActionRef.current = applicant.id;
+                                    setApplicantActionId(applicant.id);
                                     const result = unassignApplicant(selectedConference.id, applicant.id);
                                     if (!result.ok) toast.show(result.message, "error");
+                                    applicantActionRef.current = null;
+                                    setApplicantActionId(null);
                                   }}
                                   className="btn btn-ghost text-xs"
+                                  disabled={applicantActionId === applicant.id}
                                 >
-                                  Unassign
+                                  {applicantActionId === applicant.id ? "Saving…" : "Unassign"}
                                 </button>
                                 <button
                                   onClick={() => {
+                                    if (applicantActionRef.current === applicant.id) return;
+                                    applicantActionRef.current = applicant.id;
+                                    setApplicantActionId(applicant.id);
                                     updateApplicantStatus(selectedConference.id, applicant.id, "Rejected");
                                     toast.show("Applicant rejected.", "info");
+                                    applicantActionRef.current = null;
+                                    setApplicantActionId(null);
                                   }}
                                   className="btn btn-ghost text-xs"
+                                  disabled={applicantActionId === applicant.id}
                                 >
-                                  Reject
+                                  {applicantActionId === applicant.id ? "Saving…" : "Reject"}
                                 </button>
                                 <button
                                   onClick={() => void syncAndIssuePass(selectedConference, applicant.id)}
                                   className="btn btn-outline-blue text-xs"
+                                  disabled={issuingPassId === applicant.id}
                                 >
-                                  Issue Pass
+                                  {issuingPassId === applicant.id ? "Issuing…" : "Issue Pass"}
                                 </button>
                                 <button
                                   type="button"
                                   className="btn btn-ghost text-xs"
-                                  disabled={applicant.status !== "Allotted" || !applicant.registrationId}
+                                  disabled={
+                                    applicant.status !== "Allotted" ||
+                                    !applicant.registrationId ||
+                                    issuingCertId === applicant.id
+                                  }
                                   onClick={() => {
-                                    if (!applicant.registrationId || !selectedConference) return;
+                                    if (!applicant.registrationId || !selectedConference || issuingCertId) return;
                                     void (async () => {
-                                      const res = await fetch(
-                                        `/api/organizers/registrations/${applicant.registrationId}/certificate`,
-                                        { method: "POST", credentials: "include" }
-                                      );
-                                      if (!res.ok) {
-                                        const payload = (await res.json().catch(() => ({}))) as {
-                                          error?: string;
-                                        };
-                                        alert(payload.error || "Could not issue certificate.");
-                                        return;
+                                      setIssuingCertId(applicant.id);
+                                      try {
+                                        const res = await fetch(
+                                          `/api/organizers/registrations/${applicant.registrationId}/certificate`,
+                                          { method: "POST", credentials: "include" }
+                                        );
+                                        if (!res.ok) {
+                                          const payload = (await res.json().catch(() => ({}))) as {
+                                            error?: string;
+                                          };
+                                          toast.show(payload.error || "Could not issue certificate.", "error");
+                                          return;
+                                        }
+                                        toast.show(
+                                          "Participation certificate issued. The delegate can download it from their dashboard.",
+                                          "success"
+                                        );
+                                      } catch {
+                                        toast.show("Could not issue certificate.", "error");
+                                      } finally {
+                                        setIssuingCertId(null);
                                       }
-                                      alert("Participation certificate issued. The delegate can download it from their dashboard.");
                                     })();
                                   }}
                                 >
-                                  Issue Certificate
+                                  {issuingCertId === applicant.id ? "Issuing…" : "Issue Certificate"}
                                 </button>
                                   </>
                                 )}
@@ -5017,31 +5093,44 @@ export default function OrganizerDashboardPage() {
                                     )}
                                     <button
                                       className="btn btn-ghost text-xs"
-                                      disabled={!row.paid || row.refundStatus === "Refunded"}
+                                      disabled={
+                                        !row.paid ||
+                                        row.refundStatus === "Refunded" ||
+                                        refundingRegistrationId === row.registrationId
+                                      }
                                       onClick={() => {
-                                        if (!row.registrationId || !selectedConference) return;
+                                        if (!row.registrationId || !selectedConference || refundingRegistrationId) return;
                                         void (async () => {
                                           const confirmed = confirm(
                                             `Refund registration for ${row.name}? This cannot be undone.`
                                           );
                                           if (!confirmed) return;
-                                          const res = await fetch(
-                                            `/api/organizers/registrations/${row.registrationId}/refund`,
-                                            { method: "POST", credentials: "include" }
-                                          );
-                                          if (!res.ok) {
-                                            const payload = (await res.json().catch(() => ({}))) as {
-                                              error?: string;
-                                            };
-                                            toast.show(payload.error || "Refund failed.", "error");
-                                            return;
+                                          const registrationId = row.registrationId;
+                                          if (!registrationId) return;
+                                          setRefundingRegistrationId(registrationId);
+                                          try {
+                                            const res = await fetch(
+                                              `/api/organizers/registrations/${registrationId}/refund`,
+                                              { method: "POST", credentials: "include" }
+                                            );
+                                            if (!res.ok) {
+                                              const payload = (await res.json().catch(() => ({}))) as {
+                                                error?: string;
+                                              };
+                                              toast.show(payload.error || "Refund failed.", "error");
+                                              return;
+                                            }
+                                            toast.show("Refund processed.", "success");
+                                            await syncOrganizerConferenceById(selectedConference.id);
+                                          } catch {
+                                            toast.show("Refund failed.", "error");
+                                          } finally {
+                                            setRefundingRegistrationId(null);
                                           }
-                                          toast.show("Refund processed.", "success");
-                                          await syncOrganizerConferenceById(selectedConference.id);
                                         })();
                                       }}
                                     >
-                                      Refund
+                                      {refundingRegistrationId === row.registrationId ? "Refunding…" : "Refund"}
                                     </button>
                                   </div>
                                 </div>
@@ -5129,10 +5218,10 @@ export default function OrganizerDashboardPage() {
                             </select>
                             <button
                               className="btn btn-primary text-xs"
-                              disabled={!partnerInviteTargetId}
+                              disabled={!partnerInviteTargetId || partnerActionInFlight}
                               onClick={() => void sendPartnerInvite()}
                             >
-                              Send Invite
+                              {partnerActionInFlight ? "Sending…" : "Send Invite"}
                             </button>
                           </div>
                           {partnerActionStatus && (
@@ -5153,7 +5242,11 @@ export default function OrganizerDashboardPage() {
                                 <div key={entry.id} className="flex items-center justify-between gap-2">
                                   <p className="text-xs" style={{ color: "var(--fg)" }}>{entry.partnerEvent.title}</p>
                                   <div className="flex gap-1">
-                                    <button className="btn btn-ghost text-xs" onClick={() => void actOnPartnership(entry.id, "accept")}>
+                                    <button
+                                      className="btn btn-ghost text-xs"
+                                      disabled={partnerActionInFlight}
+                                      onClick={() => void actOnPartnership(entry.id, "accept")}
+                                    >
                                       Accept
                                     </button>
                                     <DestructiveConfirmButton
@@ -6863,8 +6956,12 @@ export default function OrganizerDashboardPage() {
 
             <div className="flex gap-2 mt-4">
               <button className="btn btn-ghost flex-1" onClick={() => setDetailsEditorOpen(false)}>Cancel</button>
-              <button className="btn btn-primary flex-1" onClick={() => saveCommitteeDetails(selectedConference.id)}>
-                Save Details
+              <button
+                className="btn btn-primary flex-1"
+                disabled={savingCommitteeDetails}
+                onClick={() => saveCommitteeDetails(selectedConference.id)}
+              >
+                {savingCommitteeDetails ? "Saving…" : "Save Details"}
               </button>
             </div>
           </div>

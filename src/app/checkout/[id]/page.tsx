@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import Navbar from "@/components/Navbar";
@@ -34,6 +34,7 @@ export default function CheckoutPage() {
   const router = useRouter();
   const { isLoggedIn, user, authReady, addRegistration, organizerConferences, openAuthModal } = useAuth();
   const toast = useToast();
+  const payingOnlineRef = useRef(false);
 
   const [step, setStep] = useState<Step>(1);
   const [fullName, setFullName] = useState(user?.name || "");
@@ -259,8 +260,10 @@ export default function CheckoutPage() {
     );
   })();
 
-  const startOnlinePayment = async (paymentIntentId: string, amount: number) => {
-    if (amount <= 0) return;
+  const startOnlinePayment = async (paymentIntentId: string, amount: number): Promise<boolean> => {
+    if (amount <= 0) return true;
+    if (payingOnlineRef.current) return false;
+    payingOnlineRef.current = true;
     setPayingOnline(true);
     try {
       const order = await createCashfreeOrder({
@@ -269,9 +272,12 @@ export default function CheckoutPage() {
         customerPhone: phone.trim(),
       });
       await openCashfreeCheckout(order.paymentSessionId);
+      return true;
     } catch (error) {
       toast.show(error instanceof Error ? error.message : "Could not start payment.", "error");
+      return false;
     } finally {
+      payingOnlineRef.current = false;
       setPayingOnline(false);
     }
   };

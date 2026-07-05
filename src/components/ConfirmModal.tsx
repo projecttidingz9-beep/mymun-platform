@@ -11,7 +11,7 @@ export type ConfirmModalProps = {
   confirmLabel?: string;
   cancelLabel?: string;
   danger?: boolean;
-  onConfirm: () => void;
+  onConfirm: () => void | Promise<void>;
   onClose: () => void;
 };
 
@@ -33,19 +33,24 @@ export default function ConfirmModal({
   onClose,
 }: ConfirmModalProps) {
   const [typedText, setTypedText] = useState("");
+  const [confirming, setConfirming] = useState(false);
 
   useEffect(() => {
-    if (!open) setTypedText("");
+    if (!open) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- reset modal fields when closed
+      setTypedText("");
+      setConfirming(false);
+    }
   }, [open]);
 
   useEffect(() => {
     if (!open) return;
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
+      if (event.key === "Escape" && !confirming) onClose();
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [open, onClose]);
+  }, [open, onClose, confirming]);
 
   if (!open) return null;
 
@@ -64,7 +69,10 @@ export default function ConfirmModal({
         className="absolute inset-0"
         style={{ background: "rgba(0,0,0,0.65)" }}
         aria-label="Close dialog"
-        onClick={onClose}
+        disabled={confirming}
+        onClick={() => {
+          if (!confirming) onClose();
+        }}
       />
       <div
         className="relative w-full max-w-md rounded-2xl p-6 shadow-2xl"
@@ -87,26 +95,37 @@ export default function ConfirmModal({
               className="input-base text-sm mt-1 w-full"
               value={typedText}
               onChange={(event) => setTypedText(event.target.value)}
+              disabled={confirming}
               autoFocus
             />
           </div>
         )}
         <div className="mt-6 flex justify-end gap-3">
-          <button type="button" className="btn btn-ghost text-sm" onClick={onClose}>
+          <button
+            type="button"
+            className="btn btn-ghost text-sm"
+            disabled={confirming}
+            onClick={onClose}
+          >
             {cancelLabel}
           </button>
           <button
             type="button"
             className={danger ? "btn btn-danger text-sm" : "btn btn-primary text-sm"}
-            disabled={!typedOk}
-            style={!typedOk ? { opacity: 0.5, cursor: "not-allowed" } : undefined}
+            disabled={!typedOk || confirming}
+            style={!typedOk || confirming ? { opacity: 0.5, cursor: "not-allowed" } : undefined}
             onClick={() => {
-              if (!typedOk) return;
-              onConfirm();
-              onClose();
+              if (!typedOk || confirming) return;
+              setConfirming(true);
+              void Promise.resolve(onConfirm())
+                .then(() => onClose())
+                .catch((error) => {
+                  console.error("[ConfirmModal] onConfirm failed", error);
+                })
+                .finally(() => setConfirming(false));
             }}
           >
-            {confirmLabel}
+            {confirming ? "Working…" : confirmLabel}
           </button>
         </div>
       </div>
@@ -122,7 +141,7 @@ export type DestructiveConfirmButtonProps = {
   confirmLabel?: string;
   className?: string;
   disabled?: boolean;
-  onConfirm: () => void;
+  onConfirm: () => void | Promise<void>;
 };
 
 /** Small wrapper: renders a trigger button + its own ConfirmModal, so callsites stay one-liners. */
