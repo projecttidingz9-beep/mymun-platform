@@ -45,19 +45,28 @@ export async function syncRegistrationCategoriesToDb(
   });
 
   if (registrationCategories.length > 0) {
+    const rows = registrationCategories.map((cat) => ({
+      categoryKey: cat.id,
+      organizerConfigId,
+      name: cat.name,
+      applicationType: cat.applicationType || "delegate",
+      description: cat.description ?? null,
+      isOpen: cat.isOpen !== false,
+      basePrice: coercePrice(cat.basePrice),
+      requiresCommitteeSelection: cat.requiresCommitteeSelection !== false,
+      registrationDeadline: parseDeadline(cat),
+      maxDelegatesPerDelegation: cat.maxDelegatesPerDelegation ?? null,
+    }));
+
+    // Last writer wins when the client sends duplicate category keys (e.g. two "cat-delegate").
+    const uniqueByKey = new Map<string, (typeof rows)[number]>();
+    for (const row of rows) {
+      uniqueByKey.set(row.categoryKey, row);
+    }
+
     await tx.registrationCategoryConfig.createMany({
-      data: registrationCategories.map((cat) => ({
-        categoryKey: cat.id,
-        organizerConfigId,
-        name: cat.name,
-        applicationType: cat.applicationType || "delegate",
-        description: cat.description ?? null,
-        isOpen: cat.isOpen !== false,
-        basePrice: coercePrice(cat.basePrice),
-        requiresCommitteeSelection: cat.requiresCommitteeSelection !== false,
-        registrationDeadline: parseDeadline(cat),
-        maxDelegatesPerDelegation: cat.maxDelegatesPerDelegation ?? null,
-      })),
+      data: [...uniqueByKey.values()],
+      skipDuplicates: true,
     });
   }
 

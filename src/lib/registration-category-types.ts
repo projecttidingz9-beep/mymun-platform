@@ -61,7 +61,7 @@ export const getDefaultCategoryForType = (
   };
 
   const base: RegistrationCategory = {
-    id: `cat-${type}`,
+    id: `cat-${type}-${Date.now()}`,
     name: getCategoryRegistrationLabel(type),
     description: descriptions[type],
     applicationType: type,

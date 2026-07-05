@@ -31,7 +31,7 @@ vi.mock("./prisma", () => ({
   }),
 }));
 
-import { persistRegistrationCategories } from "./persist-registration-categories";
+import { persistRegistrationCategories, syncRegistrationCategoriesToDb } from "./persist-registration-categories";
 
 const chairCategory: RegistrationCategory = {
   id: "cat-chair",
@@ -66,6 +66,7 @@ describe("persistRegistrationCategories", () => {
           name: "Chair Registration",
         }),
       ],
+      skipDuplicates: true,
     });
     expect(deleteManyPhases).toHaveBeenCalled();
   });
@@ -103,5 +104,57 @@ describe("persistRegistrationCategories", () => {
       persistRegistrationCategories("evt-1", [categoryWithIncompletePhase])
     ).rejects.toThrow(/New Phase/);
     expect(createManyPhases).not.toHaveBeenCalled();
+  });
+});
+
+describe("syncRegistrationCategoriesToDb", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("deduplicates duplicate category keys before createMany", async () => {
+    const duplicateDelegate: RegistrationCategory = {
+      id: "cat-delegate",
+      name: "Delegate Registration",
+      description: "First",
+      applicationType: "delegate",
+      isOpen: true,
+      basePrice: 0,
+      requiresCommitteeSelection: true,
+      formFields: [],
+      pricingPhases: [],
+    };
+    const duplicateDelegateUpdated: RegistrationCategory = {
+      ...duplicateDelegate,
+      name: "Delegate Registration (updated)",
+      description: "Second wins",
+    };
+
+    const tx = {
+      registrationCategoryConfig: {
+        deleteMany: deleteManyCategories,
+        createMany: createManyCategories,
+      },
+      pricingPhaseConfig: {
+        deleteMany: deleteManyPhases,
+      },
+    };
+
+    await syncRegistrationCategoriesToDb(
+      tx as never,
+      "cfg-1",
+      [duplicateDelegate, duplicateDelegateUpdated]
+    );
+
+    expect(createManyCategories).toHaveBeenCalledWith({
+      data: [
+        expect.objectContaining({
+          categoryKey: "cat-delegate",
+          name: "Delegate Registration (updated)",
+          description: "Second wins",
+        }),
+      ],
+      skipDuplicates: true,
+    });
   });
 });

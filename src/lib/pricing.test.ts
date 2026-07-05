@@ -153,4 +153,21 @@ describe("resolveRegistrationPrice", () => {
     expect(result.amount).toBe(1200);
     expect(result.source).toBe("phase-base");
   });
+
+  it("does not throw when pricing phase omits committeePrices", () => {
+    const phaseWithoutCommitteePrices = {
+      id: "p1",
+      name: "Active",
+      startDate: "2020-01-01",
+      endDate: "2030-12-31",
+      basePrice: 0,
+    } as PricingPhase;
+    delete (phaseWithoutCommitteePrices as { committeePrices?: unknown }).committeePrices;
+    const sparse: RegistrationCategory = {
+      ...category,
+      pricingPhases: [phaseWithoutCommitteePrices],
+    };
+    const result = resolveRegistrationPrice(sparse, "c1", new Date("2026-06-01"));
+    expect(result.amount).toBe(0);
+  });
 });

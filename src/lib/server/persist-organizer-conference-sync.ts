@@ -1,5 +1,6 @@
 import type { OrganizerConference } from "@/lib/types";
 import type { EventStatus } from "@/generated/prisma/enums";
+import type { CommitteeVisibility } from "@/generated/prisma/client";
 import { prisma, runPrismaTransaction } from "./prisma";
 import { mergeOrganizerStoredBlob } from "./organizer-config-store";
 import { syncRegistrationCategoriesToDb } from "./persist-registration-categories";
@@ -184,38 +185,46 @@ export async function persistOrganizerConferenceSync(
     });
 
     if (conference.committees.length > 0) {
+      const committeeRows = conference.committees.map((c) => {
+        const noPortfolio = c.noPortfolio === true;
+        const derivedSeatCount = noPortfolio
+          ? c.seatCount
+          : (c.portfolios ?? []).length > 0
+            ? (c.portfolios ?? []).reduce((sum, p) => sum + (p.seatCount > 0 ? p.seatCount : 0), 0)
+            : c.seatCount;
+        return {
+          id: c.id,
+          organizerConfigId: configRow.id,
+          name: c.name,
+          agenda: c.agenda,
+          agendasJson:
+            c.additionalAgendas && c.additionalAgendas.length > 0
+              ? JSON.stringify(c.additionalAgendas)
+              : null,
+          type: c.type ?? c.committeeType ?? c.customTypeLabel ?? null,
+          committeeFormat: c.committeeFormat ?? null,
+          metadataJson: c.metadata ? JSON.stringify(c.metadata) : null,
+          // Position papers are retired — never write deadlines for the legacy column.
+          positionPaperDeadline: null,
+          logoImageUrl: c.logoImageUrl ?? null,
+          noPortfolio,
+          seatCount: derivedSeatCount > 0 ? derivedSeatCount : 1,
+          basePrice: c.basePrice ?? null,
+          chairName: c.chairs?.[0]?.name ?? c.chairName ?? null,
+          chairEmail: c.chairs?.[0]?.email ?? c.chairEmail ?? null,
+          chairsJson: c.chairs && c.chairs.length > 0 ? JSON.stringify(c.chairs) : null,
+          visibility: (c.isPublic === false ? "PRIVATE" : "PUBLIC") as CommitteeVisibility,
+        };
+      });
+
+      const uniqueCommittees = new Map<string, (typeof committeeRows)[number]>();
+      for (const row of committeeRows) {
+        uniqueCommittees.set(row.id, row);
+      }
+
       await tx.committeeConfig.createMany({
-        data: conference.committees.map((c) => {
-          const noPortfolio = c.noPortfolio === true;
-          const derivedSeatCount = noPortfolio
-            ? c.seatCount
-            : (c.portfolios ?? []).length > 0
-              ? (c.portfolios ?? []).reduce((sum, p) => sum + (p.seatCount > 0 ? p.seatCount : 0), 0)
-              : c.seatCount;
-          return {
-            id: c.id,
-            organizerConfigId: configRow.id,
-            name: c.name,
-            agenda: c.agenda,
-            agendasJson:
-              c.additionalAgendas && c.additionalAgendas.length > 0
-                ? JSON.stringify(c.additionalAgendas)
-                : null,
-            type: c.type ?? c.committeeType ?? c.customTypeLabel ?? null,
-            committeeFormat: c.committeeFormat ?? null,
-            metadataJson: c.metadata ? JSON.stringify(c.metadata) : null,
-            // Position papers are retired — never write deadlines for the legacy column.
-            positionPaperDeadline: null,
-            logoImageUrl: c.logoImageUrl ?? null,
-            noPortfolio,
-            seatCount: derivedSeatCount > 0 ? derivedSeatCount : 1,
-            basePrice: c.basePrice ?? null,
-            chairName: c.chairs?.[0]?.name ?? c.chairName ?? null,
-            chairEmail: c.chairs?.[0]?.email ?? c.chairEmail ?? null,
-            chairsJson: c.chairs && c.chairs.length > 0 ? JSON.stringify(c.chairs) : null,
-            visibility: c.isPublic === false ? "PRIVATE" : "PUBLIC",
-          };
-        }),
+        data: [...uniqueCommittees.values()],
+        skipDuplicates: true,
       });
 
       const questionRows = conference.committees.flatMap((c) =>
@@ -239,7 +248,15 @@ export async function persistOrganizerConferenceSync(
         }))
       );
       if (portfolioRows.length > 0) {
-        await tx.portfolio.createMany({ data: portfolioRows });
+        const uniquePortfolios = new Map<string, (typeof portfolioRows)[number]>();
+        for (const row of portfolioRows) {
+          const key = `${row.committeeId}::${row.name.trim().toLowerCase()}`;
+          uniquePortfolios.set(key, row);
+        }
+        await tx.portfolio.createMany({
+          data: [...uniquePortfolios.values()],
+          skipDuplicates: true,
+        });
       }
 
       const documentRows = conference.committees.flatMap((c) =>

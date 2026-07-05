@@ -6,7 +6,14 @@ import { MARKETPLACE_CATALOG_CACHE_CONTROL } from "@/lib/server/http-cache";
 /** Public catalog: published events only (no client/local demo data). */
 export async function GET() {
   try {
-    const events = await getCachedPublishedCatalog();
+    let events;
+    try {
+      events = await getCachedPublishedCatalog();
+    } catch (cacheError) {
+      console.warn("[marketplace] cache miss — fetching catalog without unstable_cache", cacheError);
+      const { fetchPublishedCatalogEvents } = await import("@/lib/server/marketplace-queries");
+      events = await fetchPublishedCatalogEvents();
+    }
     const conferences = events.map((event) => {
       const full = mapPublishedEventToConference(event as EventWithListing);
       const description = typeof full.description === "string" ? full.description : "";

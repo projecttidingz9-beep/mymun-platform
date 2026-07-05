@@ -66,11 +66,11 @@ export function upsertPhaseCommitteePrice(
   price: number
 ): PricingPhase {
   const normalizedPrice = Math.max(0, Number(price) || 0);
-  const existing = phase.committeePrices.find((entry) => entry.committeeId === committeeId);
+  const existing = (phase.committeePrices ?? []).find((entry) => entry.committeeId === committeeId);
   if (existing) {
     return {
       ...phase,
-      committeePrices: phase.committeePrices.map((entry) =>
+      committeePrices: (phase.committeePrices ?? []).map((entry) =>
         entry.committeeId === committeeId
           ? { ...entry, committeeName, price: normalizedPrice }
           : entry
@@ -80,7 +80,7 @@ export function upsertPhaseCommitteePrice(
   return {
     ...phase,
     committeePrices: [
-      ...phase.committeePrices,
+      ...(phase.committeePrices ?? []),
       { committeeId, committeeName, price: normalizedPrice },
     ],
   };
@@ -105,7 +105,7 @@ export function mergeNewCommitteesIntoPhases(
     const defaultForPhase = fallbackPrice ?? phase.basePrice;
     let next = phase;
     for (const committee of committees) {
-      const hasEntry = next.committeePrices.some((entry) => entry.committeeId === committee.id);
+      const hasEntry = (next.committeePrices ?? []).some((entry) => entry.committeeId === committee.id);
       if (!hasEntry) {
         next = upsertPhaseCommitteePrice(next, committee.id, committee.name, defaultForPhase);
       }
@@ -168,7 +168,7 @@ export function resolveRegistrationPrice(
   const resolvedPhase = activePhase || latestEndedPhase!;
 
   if (selectedCommitteeId) {
-    const committeePrice = resolvedPhase.committeePrices.find(
+    const committeePrice = (resolvedPhase.committeePrices ?? []).find(
       (override) => override.committeeId === selectedCommitteeId
     );
 
@@ -202,7 +202,7 @@ export function getCategoryStartingPrice(
 
   const prices = [phase.basePrice];
   for (const committee of committees) {
-    const override = phase.committeePrices.find((entry) => entry.committeeId === committee.id);
+    const override = (phase.committeePrices ?? []).find((entry) => entry.committeeId === committee.id);
     if (override) prices.push(override.price);
   }
   return Math.min(...prices);

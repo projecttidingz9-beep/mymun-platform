@@ -20,6 +20,8 @@
     "db:seed": "npx tsx prisma/seed.ts",
     "bootstrap:admin": "npx tsx scripts/bootstrap-super-admin.ts",
     "create:cashfree-test-mun": "npx tsx scripts/create-cashfree-test-conference.ts",
+    "test:mock-mun": "npx tsx scripts/mock-mun-test/run-mock-mun.ts",
+    "test:mock-mun:cleanup": "npx tsx scripts/mock-mun-test/cleanup-mock-mun.ts",
     "db:reset": "prisma migrate reset --force",
     "test": "vitest run",
     "test:watch": "vitest",

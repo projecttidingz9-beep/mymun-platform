@@ -79,6 +79,33 @@ export async function issueDelegatePassForRegistration(
 
   const existingPass = registration.pass;
   if (existingPass?.status === PassStatus.ISSUED && !existingPass.deletedAt) {
+    if (options.immediateRelease) {
+      const releaseAt = new Date();
+      const qrNonce = existingPass.qrNonce || randomUUID();
+      await prisma.delegatePass.update({
+        where: { id: existingPass.id },
+        data: {
+          releaseAt,
+          qrNonce,
+          qrTokenHash: existingPass.qrTokenHash === "pending" ? "pending" : existingPass.qrTokenHash,
+        },
+      });
+      const token = await bindPassQrToken({
+        passId: existingPass.id,
+        registrationId: registration.id,
+        eventId: registration.eventId,
+        eventEndDate: registration.event.endDate,
+        qrNonce,
+      });
+      return {
+        issued: true,
+        alreadyIssued: true,
+        passId: existingPass.id,
+        releaseAt: releaseAt.toISOString(),
+        qrToken: token,
+      };
+    }
+
     const token = await signPassToken(
       {
         passId: existingPass.id,
