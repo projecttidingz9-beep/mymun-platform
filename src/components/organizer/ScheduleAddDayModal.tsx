@@ -73,10 +73,7 @@ export default function ScheduleAddDayModal({
         aria-label="Close dialog"
         onClick={onClose}
       />
-      <div
-        className="relative w-full max-w-md max-h-[90dvh] overflow-y-auto rounded-2xl p-6 shadow-2xl"
-        style={{ background: "var(--bg-elevated, #101014)", border: "1px solid var(--border)" }}
-      >
+      <div className="relative w-full max-w-md max-h-[90dvh] overflow-y-auto rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-6 shadow-xl">
         <h2 id="schedule-add-day-title" className="text-lg font-semibold text-[var(--fg)]">
           Add schedule day
         </h2>
@@ -86,7 +83,7 @@ export default function ScheduleAddDayModal({
 
         <div className="mt-5 space-y-4">
           <div>
-            <label className="text-xs font-semibold block mb-1" style={{ color: "var(--fg-muted)" }}>
+            <label className="text-xs font-semibold block mb-1 text-[var(--fg-muted)]">
               Day name
             </label>
             <input
@@ -104,12 +101,12 @@ export default function ScheduleAddDayModal({
             className="rounded-xl p-4 space-y-3"
             style={{ border: "1px solid var(--border)", background: "var(--bg-subtle)" }}
           >
-            <p className="text-xs font-semibold" style={{ color: "var(--fg-muted)" }}>
+            <p className="text-xs font-semibold text-[var(--fg-muted)]">
               First event (optional)
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="text-xs font-semibold block mb-1" style={{ color: "var(--fg-muted)" }}>
+                <label className="text-xs font-semibold block mb-1 text-[var(--fg-muted)]">
                   From
                 </label>
                 <input
@@ -123,7 +120,7 @@ export default function ScheduleAddDayModal({
                 />
               </div>
               <div>
-                <label className="text-xs font-semibold block mb-1" style={{ color: "var(--fg-muted)" }}>
+                <label className="text-xs font-semibold block mb-1 text-[var(--fg-muted)]">
                   To
                 </label>
                 <input
@@ -138,7 +135,7 @@ export default function ScheduleAddDayModal({
               </div>
             </div>
             <div>
-              <label className="text-xs font-semibold block mb-1" style={{ color: "var(--fg-muted)" }}>
+              <label className="text-xs font-semibold block mb-1 text-[var(--fg-muted)]">
                 Event
               </label>
               <input

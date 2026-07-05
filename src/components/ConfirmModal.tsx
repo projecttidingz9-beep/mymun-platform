@@ -74,21 +74,18 @@ export default function ConfirmModal({
           if (!confirming) onClose();
         }}
       />
-      <div
-        className="relative w-full max-w-md rounded-2xl p-6 shadow-2xl"
-        style={{ background: "var(--bg-elevated, #101014)", border: "1px solid var(--border)" }}
-      >
-        <h2 id="confirm-modal-title" className="text-lg font-bold" style={{ color: "var(--fg)" }}>
+      <div className="relative w-full max-w-md rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-6 shadow-xl">
+        <h2 id="confirm-modal-title" className="text-lg font-bold text-[var(--fg)]">
           {title}
         </h2>
         {description && (
-          <p className="text-sm mt-2" style={{ color: "var(--fg-muted)" }}>
+          <p className="text-sm mt-2 text-[var(--fg-muted)]">
             {description}
           </p>
         )}
         {requireTypedText && (
           <div className="mt-4">
-            <label className="text-xs font-semibold" style={{ color: "var(--fg-muted)" }}>
+            <label className="text-xs font-semibold text-[var(--fg-muted)]">
               Type &ldquo;{requireTypedText}&rdquo; to confirm
             </label>
             <input

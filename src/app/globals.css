@@ -13,6 +13,7 @@ html.dark .brand-logo-dark {
 
 :root {
   --bg: #f3f1ec;
+  --bg-elevated: #ffffff;
   --bg-subtle: #ece8e2;
   --fg: #15181f;
   --fg-muted: #5e6066;
@@ -56,6 +57,7 @@ html.dark .brand-logo-dark {
 
 html.dark {
   --bg: #0f1218;
+  --bg-elevated: #121823;
   --bg-subtle: #141922;
   --fg: #f4f1ea;
   --fg-muted: #b6afa1;
