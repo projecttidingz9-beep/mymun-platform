@@ -8,7 +8,7 @@ on:
 jobs:
   migrate-and-deploy:
     runs-on: ubuntu-latest
-    environment: production
+    environment: Production
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -18,9 +18,16 @@ jobs:
       - run: npm ci
       - run: npm run prisma:generate
       # Requires DATABASE_URL / DIRECT_URL in GitHub Environment secrets:
-      - run: npx prisma migrate deploy
+      - name: Run prisma migrate deploy
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "::error::DATABASE_URL is not set in the GitHub Production environment secrets."
+            exit 1
+          fi
+          export DIRECT_URL="${DIRECT_URL:-$DATABASE_URL}"
+          npx prisma migrate deploy
       - run: npm run build
       # Add your host deploy step (Vercel CLI, SSH, etc.)

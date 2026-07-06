@@ -1,14 +1,20 @@
 import { test, expect } from "@playwright/test";
+import { isQaMockConferenceLoaded } from "./helpers/seed";
 
 /**
- * UI smoke for QA mock conference. Run as part of `npm run test:mock-mun`
- * while the QA event is PUBLISHED.
+ * UI smoke for QA mock conference. Requires `npm run test:mock-mun` setup on the
+ * target database — skipped in CI and local dev when QA data is absent.
  */
 const QA_EVENT_ID = "evt-qa-mock-mun-2026";
 const QA_SLUG = "qa-mock-mun-2026";
 const QA_TITLE_SNIPPET = "QA-TEST";
 
 test.describe("Mock MUN UI walkthrough", () => {
+  test.beforeEach(async ({ request }) => {
+    const loaded = await isQaMockConferenceLoaded(request);
+    test.skip(!loaded, "Run npm run test:mock-mun setup against DATABASE_URL before mock MUN UI E2E.");
+  });
+
   test("marketplace lists QA conference card", async ({ page }) => {
     await page.goto("/conferences");
     await expect(page.getByText(new RegExp(QA_TITLE_SNIPPET, "i")).first()).toBeVisible({
