@@ -50,8 +50,9 @@ import {
   getCategoryRegistrationLabel,
   getCategoryTypeLabel,
   getDefaultCategoryForType,
-  REGISTRATION_CATEGORY_TYPES,
+  REGISTRATION_CATEGORY_UI_TYPES,
   type RegistrationCategoryType,
+  type RegistrationCategoryUiType,
 } from "@/lib/registration-category-types";
 import { canAccessSuperDashboard, SUPER_ADMIN_HREF, SUPER_ADMIN_LABEL } from "@/lib/admin-nav";
 import ScheduleAddDayModal, {
@@ -536,7 +537,8 @@ export default function OrganizerDashboardPage() {
   >("organizer");
   const [autoAssigning, setAutoAssigning] = useState(false);
   const [autoAssignProgress, setAutoAssignProgress] = useState("");
-  const [pricingCategoryTypeTab, setPricingCategoryTypeTab] = useState<RegistrationCategoryType>("delegate");
+  const [pricingCategoryTypeTab, setPricingCategoryTypeTab] =
+    useState<RegistrationCategoryUiType>("delegate");
   const [applicantProfileDrawerOpen, setApplicantProfileDrawerOpen] = useState(false);
   const [chairAllotModalOpen, setChairAllotModalOpen] = useState(false);
   const [chairAllotApplicantId, setChairAllotApplicantId] = useState("");
@@ -5976,10 +5978,10 @@ export default function OrganizerDashboardPage() {
                           className="input-base text-sm mt-1 block w-full max-w-xs"
                           value={pricingCategoryTypeTab}
                           onChange={(event) =>
-                            setPricingCategoryTypeTab(event.target.value as RegistrationCategoryType)
+                            setPricingCategoryTypeTab(event.target.value as RegistrationCategoryUiType)
                           }
                         >
-                          {REGISTRATION_CATEGORY_TYPES.map((type) => (
+                          {REGISTRATION_CATEGORY_UI_TYPES.map((type) => (
                             <option key={type} value={type}>
                               {getCategoryTypeLabel(type)}
                             </option>

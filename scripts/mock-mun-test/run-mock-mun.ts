@@ -463,8 +463,8 @@ async function main() {
       "naomi",
       registrationBody({
         registrationId: `reg-qa-naomi-${randomUUID().slice(0, 8)}`,
-        categoryId: QA_CATEGORY.PRESS,
-        categoryName: "Press Registration",
+        categoryId: QA_CATEGORY.DELEGATE,
+        categoryName: "Delegate Registration",
         fullName: QA_PERSONAS.naomi.name,
         school: "QA Media Institute",
         phone: "9789012345",

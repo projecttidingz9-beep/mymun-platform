@@ -318,19 +318,6 @@ async function main() {
 
   await prisma.registrationCategoryConfig.create({
     data: {
-      categoryKey: "cat-press",
-      organizerConfigId: organizerConfig.id,
-      name: "International Press",
-      applicationType: "press",
-      description: "Press Corps registration",
-      isOpen: true,
-      basePrice: 999,
-      requiresCommitteeSelection: true,
-    },
-  });
-
-  await prisma.registrationCategoryConfig.create({
-    data: {
       categoryKey: "cat-delegation",
       organizerConfigId: organizerConfig.id,
       name: "Delegation Head",

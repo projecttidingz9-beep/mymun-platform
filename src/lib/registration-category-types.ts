@@ -2,14 +2,30 @@ import { type OrganizerConference, type RegistrationCategory } from "@/lib/types
 
 export type RegistrationCategoryType = NonNullable<RegistrationCategory["applicationType"]>;
 
-export const REGISTRATION_CATEGORY_TYPES: RegistrationCategoryType[] = [
+/** Category types shown in Categories & Pricing (no separate press category — use a press committee instead). */
+export const REGISTRATION_CATEGORY_UI_TYPES = [
   "delegate",
   "chair",
   "delegation",
   "organizer",
-  "press",
   "other",
+] as const satisfies readonly RegistrationCategoryType[];
+
+export type RegistrationCategoryUiType = (typeof REGISTRATION_CATEGORY_UI_TYPES)[number];
+
+/** All supported types including legacy `press` on existing conferences. */
+export const REGISTRATION_CATEGORY_TYPES: RegistrationCategoryType[] = [
+  ...REGISTRATION_CATEGORY_UI_TYPES,
+  "press",
 ];
+
+export const isSupportedCategoryApplicationType = (
+  applicationType?: RegistrationCategory["applicationType"]
+): applicationType is RegistrationCategoryType =>
+  applicationType === "press" ||
+  (REGISTRATION_CATEGORY_UI_TYPES as readonly RegistrationCategoryType[]).includes(
+    applicationType as RegistrationCategoryType
+  );
 
 export const getCategoryTypeLabel = (applicationType?: RegistrationCategory["applicationType"]) => {
   if (applicationType === "delegation") return "Delegation";
@@ -41,7 +57,7 @@ export const getCategoryTypeHint = (applicationType?: RegistrationCategory["appl
 export const normalizeCategoryApplicationType = (
   applicationType?: RegistrationCategory["applicationType"]
 ): RegistrationCategoryType => {
-  if (applicationType && REGISTRATION_CATEGORY_TYPES.includes(applicationType)) {
+  if (isSupportedCategoryApplicationType(applicationType)) {
     return applicationType;
   }
   return "delegate";
