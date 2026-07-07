@@ -244,9 +244,8 @@ export async function setupMockMunConference(): Promise<SetupResult> {
         basePrice: 0,
         isPublic: true,
         committeeFormat: "PRESS_CORPS",
-        portfolios: [
-          { id: "pf-qa-press-unsc", name: "UN Security Council", seatCount: 2 },
-        ],
+        noPortfolio: true,
+        portfolios: [],
       },
     ],
     status: "Published",
@@ -386,10 +385,8 @@ export async function setupMockMunConference(): Promise<SetupResult> {
         seatCount: 6,
         committeeFormat: "PRESS_CORPS",
         type: "International Press",
+        noPortfolio: true,
         visibility: "PUBLIC",
-        portfolios: {
-          create: [{ id: "pf-qa-press-unsc", name: "UN Security Council", seatCount: 2 }],
-        },
       },
     });
 

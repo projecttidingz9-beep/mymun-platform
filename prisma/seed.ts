@@ -281,7 +281,7 @@ async function main() {
     )
   );
 
-  const pressCorps = await prisma.committeeConfig.create({
+  await prisma.committeeConfig.create({
     data: {
       organizerConfigId: organizerConfig.id,
       name: "International Press Corps",
@@ -289,15 +289,11 @@ async function main() {
       seatCount: 6,
       committeeFormat: "PRESS_CORPS",
       type: "International Press",
+      noPortfolio: true,
       metadataJson: JSON.stringify({ pressBeatRequired: true }),
       visibility: "PUBLIC",
     },
   });
-  await Promise.all(
-    ["UN Security Council", "UNHRC", "General Assembly"].map((name) =>
-      prisma.portfolio.create({ data: { committeeId: pressCorps.id, name, seatCount: 2 } })
-    )
-  );
 
   await prisma.committeeDocument.createMany({
     data: [

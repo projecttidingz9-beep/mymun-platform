@@ -68,6 +68,7 @@ import {
 import {
   INDIA_COMMITTEE_PRESETS,
   getCommitteePreset,
+  isPressCommitteeFormat,
   type CommitteeFormatKey,
 } from "@/lib/india-committee-presets";
 import ConfirmModal, { DestructiveConfirmButton } from "@/components/ConfirmModal";
@@ -621,6 +622,7 @@ export default function OrganizerDashboardPage() {
     agenda: "",
     agendasText: "",
     logoImageUrl: "",
+    seatCount: "",
     chairs: [] as Array<{ id: string; name: string; email: string; role: string }>,
     customQuestions: [] as Array<{ id: string; question: string; required: boolean }>,
   });
@@ -746,7 +748,10 @@ export default function OrganizerDashboardPage() {
   const importIndiaPresetIntoCreateDraft = (presetKey: CommitteeFormatKey) => {
     const preset = getCommitteePreset(presetKey);
     if (!preset) return;
-    const totalSeats = preset.members.reduce((sum, member) => sum + member.seatCount, 0);
+    const isPress = preset.noPortfolio === true || isPressCommitteeFormat(preset.key, preset.customTypeLabel);
+    const totalSeats = isPress
+      ? (preset.defaultSeatCount ?? 6)
+      : preset.members.reduce((sum, member) => sum + member.seatCount, 0);
     setCommitteeDraft({
       name: preset.label.split("(")[0]?.trim() || preset.label,
       agenda: "",
@@ -755,14 +760,32 @@ export default function OrganizerDashboardPage() {
       customTypeLabel: preset.customTypeLabel || "",
       committeeFormat: preset.key,
       metadata: preset.metadata,
-      members: preset.members.map((member, index) => ({
-        id: `india-preset-${preset.key}-${index}`,
-        name: member.name,
-        seatCount: String(member.seatCount),
-      })),
+      members: isPress
+        ? []
+        : preset.members.map((member, index) => ({
+            id: `india-preset-${preset.key}-${index}`,
+            name: member.name,
+            seatCount: String(member.seatCount),
+          })),
       memberInput: "",
-      noPortfolio: false,
+      noPortfolio: isPress,
     });
+  };
+
+  const onIndiaPresetSelectionChange = (presetKey: CommitteeFormatKey) => {
+    setIndiaPresetSelection(presetKey);
+    const preset = getCommitteePreset(presetKey);
+    if (!preset) return;
+    const isPress = preset.noPortfolio === true || isPressCommitteeFormat(preset.key, preset.customTypeLabel);
+    if (!isPress) return;
+    setCommitteeDraft((prev) => ({
+      ...prev,
+      noPortfolio: true,
+      members: [],
+      seatCount: String(preset.defaultSeatCount ?? 6),
+      committeeFormat: preset.key,
+      customTypeLabel: preset.customTypeLabel || prev.customTypeLabel,
+    }));
   };
 
   const openCountryEditor = (committee: OrganizerConference["committees"][number]) => {
@@ -843,6 +866,7 @@ export default function OrganizerDashboardPage() {
         .filter(Boolean)
         .join("\n"),
       logoImageUrl: committee.logoImageUrl || "",
+      seatCount: String(committee.seatCount ?? ""),
       chairs:
         (committee.chairs ?? []).length > 0
           ? (committee.chairs ?? []).map((chair, index) => ({
@@ -963,6 +987,11 @@ export default function OrganizerDashboardPage() {
         chairs: normalizedChairs,
         chairName: normalizedChairs[0]?.name,
         chairEmail: normalizedChairs[0]?.email,
+        ...(selectedDetailsEditorCommittee?.noPortfolio
+          ? {
+              seatCount: Math.max(1, Number(detailsEditorDraft.seatCount) || 1),
+            }
+          : {}),
       });
       setDetailsEditorOpen(false);
       setDetailsEditorCommitteeId("");
@@ -4441,6 +4470,14 @@ export default function OrganizerDashboardPage() {
                             onChange={(event) => setCommitteeDraft((prev) => ({ ...prev, agenda: event.target.value }))}
                           />
                         </div>
+                        {isPressCommitteeFormat(
+                          committeeDraft.committeeFormat || undefined,
+                          committeeDraft.customTypeLabel
+                        ) ? (
+                          <p className="text-[11px]" style={{ color: "var(--fg-muted)" }}>
+                            International Press uses total seats only — no countries or beats.
+                          </p>
+                        ) : (
                         <label className="flex items-center gap-2 text-[11px]" style={{ color: "var(--fg-muted)" }}>
                           <input
                             type="checkbox"
@@ -4451,20 +4488,32 @@ export default function OrganizerDashboardPage() {
                           />
                           No named portfolios (e.g. International Press / Press Corps) — delegates are selected directly into the committee
                         </label>
+                        )}
                         {committeeDraft.committeeType === "CUSTOM" && (
                           <>
                           <input
                             className="input-base text-xs"
                             placeholder="Custom type label (e.g. Lok Sabha)"
                             value={committeeDraft.customTypeLabel}
-                            onChange={(event) => setCommitteeDraft((prev) => ({ ...prev, customTypeLabel: event.target.value }))}
+                            onChange={(event) => {
+                              const customTypeLabel = event.target.value;
+                              const press = isPressCommitteeFormat(
+                                committeeDraft.committeeFormat || undefined,
+                                customTypeLabel
+                              );
+                              setCommitteeDraft((prev) => ({
+                                ...prev,
+                                customTypeLabel,
+                                ...(press ? { noPortfolio: true, members: [] } : {}),
+                              }));
+                            }}
                           />
                           <div className="flex items-center gap-2">
                             <select
                               className="input-base text-xs"
                               value={indiaPresetSelection}
                               onChange={(event) =>
-                                setIndiaPresetSelection(event.target.value as CommitteeFormatKey)
+                                onIndiaPresetSelectionChange(event.target.value as CommitteeFormatKey)
                               }
                             >
                               {INDIA_COMMITTEE_PRESETS.map((preset) => (
@@ -4528,7 +4577,7 @@ export default function OrganizerDashboardPage() {
                                   className="input-base text-xs"
                                   value={indiaPresetSelection}
                                   onChange={(event) =>
-                                    setIndiaPresetSelection(event.target.value as CommitteeFormatKey)
+                                    onIndiaPresetSelectionChange(event.target.value as CommitteeFormatKey)
                                   }
                                 >
                                   {INDIA_COMMITTEE_PRESETS.map((preset) => (
@@ -4742,6 +4791,11 @@ export default function OrganizerDashboardPage() {
                             <button className="btn btn-ghost text-xs mt-2 mr-2" onClick={() => openDetailsEditor(committee)}>
                               Edit Details
                             </button>
+                            {!committee.noPortfolio &&
+                              !isPressCommitteeFormat(
+                                committee.committeeFormat,
+                                committee.customTypeLabel ?? committee.type
+                              ) && (
                             <button
                               className="btn btn-ghost text-xs mt-2 mr-2"
                               onClick={() => openCountryEditor(committee)}
@@ -4750,6 +4804,7 @@ export default function OrganizerDashboardPage() {
                                 ? "Edit Countries"
                                 : "Edit Members"}
                             </button>
+                            )}
                             <button
                               className="btn btn-ghost text-xs mt-2 mr-2"
                               onClick={() =>
@@ -6891,6 +6946,21 @@ export default function OrganizerDashboardPage() {
                 onChange={(event) => setDetailsEditorDraft((prev) => ({ ...prev, agenda: event.target.value }))}
               />
               </div>
+              {selectedDetailsEditorCommittee.noPortfolio && (
+                <div>
+                  <p className="text-xs font-semibold mb-1" style={{ color: "var(--fg-muted)" }}>Seat count</p>
+                  <input
+                    className="input-base text-sm"
+                    type="number"
+                    min={1}
+                    placeholder="Total seats"
+                    value={detailsEditorDraft.seatCount}
+                    onChange={(event) =>
+                      setDetailsEditorDraft((prev) => ({ ...prev, seatCount: event.target.value }))
+                    }
+                  />
+                </div>
+              )}
               <div>
                 <p className="text-xs font-semibold mb-1" style={{ color: "var(--fg-muted)" }}>Multiple Topics / Agendas (one per line)</p>
                 <textarea

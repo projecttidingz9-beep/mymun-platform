@@ -18,6 +18,9 @@ export type CommitteePreset = {
   customTypeLabel?: string;
   memberMode: "UN_COUNTRY" | "CUSTOM_MEMBER";
   members: Array<{ name: string; seatCount: number }>;
+  /** When true, organizers set total seats only — no named portfolios (International Press). */
+  noPortfolio?: boolean;
+  defaultSeatCount?: number;
   metadata?: {
     historicalDate?: string;
     crisisEnabled?: boolean;
@@ -60,14 +63,6 @@ const RAJYA_SABHA_STATES = [
   "Kerala",
 ];
 
-const PRESS_BEATS = [
-  "UN Security Council",
-  "UN Human Rights Council",
-  "General Assembly",
-  "Economic and Social Council",
-  "International Press Pool",
-];
-
 const CORPORATE_COMPANIES = [
   "Reliance Industries",
   "Tata Group",
@@ -108,7 +103,9 @@ export const INDIA_COMMITTEE_PRESETS: CommitteePreset[] = [
     committeeType: "CUSTOM",
     customTypeLabel: "International Press",
     memberMode: "CUSTOM_MEMBER",
-    members: PRESS_BEATS.map((name) => ({ name, seatCount: 3 })),
+    members: [],
+    noPortfolio: true,
+    defaultSeatCount: 6,
     metadata: { pressBeatRequired: true },
   },
   {
@@ -117,7 +114,9 @@ export const INDIA_COMMITTEE_PRESETS: CommitteePreset[] = [
     committeeType: "CUSTOM",
     customTypeLabel: "International Press",
     memberMode: "CUSTOM_MEMBER",
-    members: PRESS_BEATS.map((name) => ({ name, seatCount: 2 })),
+    members: [],
+    noPortfolio: true,
+    defaultSeatCount: 6,
     metadata: { pressBeatRequired: true },
   },
   {
@@ -166,6 +165,14 @@ export const INDIA_COMMITTEE_PRESETS: CommitteePreset[] = [
 
 export function getCommitteePreset(key: CommitteeFormatKey): CommitteePreset | undefined {
   return INDIA_COMMITTEE_PRESETS.find((p) => p.key === key);
+}
+
+export function isPressCommitteeFormat(
+  committeeFormat?: string,
+  customTypeLabel?: string
+): boolean {
+  if (committeeFormat === "PRESS_CORPS" || committeeFormat === "IP") return true;
+  return (customTypeLabel ?? "").trim().toLowerCase().includes("press");
 }
 
 export function preferenceLabelForCommittee(committeeType?: string, committeeFormat?: string): string {
