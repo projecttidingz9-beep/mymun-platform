@@ -16,7 +16,6 @@ async function main() {
   const { prisma } = await import("../src/lib/server/prisma");
   const { hashPassword } = await import("../src/lib/server/password");
   const { issueDelegatePassForRegistration } = await import("../src/lib/server/issue-delegate-pass");
-  await prisma.participationCertificate.deleteMany();
   await prisma.documentAcknowledgment.deleteMany();
   await prisma.positionPaper.deleteMany();
   await prisma.committeeDocument.deleteMany();
@@ -414,14 +413,6 @@ async function main() {
       },
     });
   }
-
-  await prisma.participationCertificate.create({
-    data: {
-      registrationId: reg1.id,
-      eventId,
-      issuedByUserId: org1.id,
-    },
-  });
 
   const delegation = await prisma.delegation.create({
     data: {

@@ -37,9 +37,6 @@ export async function cleanupMockMun() {
   });
   const delegationIds = delegations.map((d) => d.id);
 
-  await prisma.participationCertificate.deleteMany({
-    where: { OR: [{ eventId: QA_EVENT_ID }, { registrationId: { in: registrationIds } }] },
-  });
   await prisma.documentAcknowledgment.deleteMany({
     where: { registrationId: { in: registrationIds } },
   });

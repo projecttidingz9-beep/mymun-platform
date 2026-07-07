@@ -1316,38 +1316,6 @@ function DashboardPageContent() {
                               ))}
                             </div>
                           )}
-                          {reg.organizerStatus === "Allotted" && (
-                            <button
-                              type="button"
-                              className="btn btn-ghost text-xs w-full sm:w-auto"
-                              onClick={() => {
-                                void (async () => {
-                                  const res = await fetch(
-                                    `/api/registrations/${reg.id}/participation-certificate`,
-                                    { credentials: "include" }
-                                  );
-                                  if (!res.ok) {
-                                    toast.show("Participation certificate not issued yet.", "error");
-                                    return;
-                                  }
-                                  const data = (await res.json()) as {
-                                    delegateName: string;
-                                    eventName: string;
-                                    committeeName?: string;
-                                    portfolioName?: string;
-                                    categoryName?: string;
-                                    issuedAt: string;
-                                  };
-                                  const { downloadParticipationCertificatePdf } = await import(
-                                    "@/lib/client/participation-certificate-pdf"
-                                  );
-                                  downloadParticipationCertificatePdf(data);
-                                })();
-                              }}
-                            >
-                              Download Participation Certificate (PDF)
-                            </button>
-                          )}
                         </div>
                       </div>
                     );

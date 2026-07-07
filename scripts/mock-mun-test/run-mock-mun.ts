@@ -664,31 +664,6 @@ async function main() {
     track("allot-naomi", assertStep("allot-naomi", res.ok, res.ok ? "Press Naomi allotted" : "Naomi allotment failed", json));
   }
 
-  // Issue certificate for Aisha
-  if (registrations.aisha) {
-    const cert = await organizer.request(
-      `${baseUrl}/api/organizers/registrations/${registrations.aisha}/certificate`,
-      { method: "POST" }
-    );
-    track(
-      "issue-certificate",
-      assertStep("issue-certificate", cert.res.ok, cert.res.ok ? "Certificate issued for Aisha" : "Certificate issuance failed", cert.json)
-    );
-
-    const certGet = await aisha.request(
-      `${baseUrl}/api/registrations/${registrations.aisha}/participation-certificate`
-    );
-    track(
-      "download-certificate",
-      assertStep(
-        "download-certificate",
-        certGet.res.ok,
-        certGet.res.ok ? "Aisha can fetch certificate metadata" : "Certificate download failed",
-        certGet.json
-      )
-    );
-  }
-
   // Organizer delegations list
   {
     const { res, json } = await organizer.request(`${baseUrl}/api/organizers/conferences/${QA_EVENT_ID}/delegations`);

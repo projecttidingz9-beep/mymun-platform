@@ -122,7 +122,6 @@ model User {
   eventTeamMemberships    EventTeamMember[]
   auditLogs               AuditLog[]
   confirmedPaymentIntents PaymentIntent[]              @relation("PaymentConfirmedBy")
-  issuedCertificates      ParticipationCertificate[]   @relation("CertificateIssuedBy")
   delegationOwned         Delegation[]                 @relation("DelegationOwner")
   delegationMembers       DelegationMember[]
   conferenceReviews       ConferenceReview[]
@@ -183,7 +182,6 @@ model Event {
   teamMembers               EventTeamMember[]
   auditLogs                 AuditLog[]
   awards                    ConferenceAward[]
-  participationCertificates ParticipationCertificate[]
   reviews                   ConferenceReview[]
   delegations               Delegation[]
   positionPapers            PositionPaper[]
@@ -274,7 +272,6 @@ model Registration {
   notifications            Notification[]
   paymentIntent            PaymentIntent?
   applicationAnswers       ApplicationAnswer[]
-  participationCertificate ParticipationCertificate?
   positionPapers           PositionPaper[]
   documentAcknowledgments  DocumentAcknowledgment[]
   createdAt                DateTime                  @default(now())
@@ -477,19 +474,6 @@ model RegistrationCategoryConfig {
 
   @@unique([organizerConfigId, categoryKey])
   @@index([organizerConfigId])
-}
-
-model ParticipationCertificate {
-  id             String       @id @default(cuid())
-  registrationId String       @unique
-  eventId        String
-  issuedByUserId String?
-  issuedAt       DateTime     @default(now())
-  registration   Registration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
-  event          Event        @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  issuedBy       User?        @relation("CertificateIssuedBy", fields: [issuedByUserId], references: [id], onDelete: SetNull)
-
-  @@index([eventId])
 }
 
 model ApplicationQuestion {

@@ -79,17 +79,4 @@ test.describe("MUN lifecycle (seeded conference)", () => {
     const body = (await patch.json()) as { ok?: boolean };
     expect(body.ok).toBe(true);
   });
-
-  test("delegate downloads participation certificate metadata", async ({ request }) => {
-    const login = await loginWithCredentials(request, SEED_DELEGATE_EMAIL, SEED_PASSWORD);
-    expect(login.ok()).toBeTruthy();
-
-    const cert = await request.get(
-      `/api/registrations/${SEED_REGISTRATION_ALLOTTED}/participation-certificate`
-    );
-    expect(cert.ok()).toBeTruthy();
-    const body = (await cert.json()) as { eventName: string; delegateName: string };
-    expect(body.eventName).toContain("MUN");
-    expect(body.delegateName.length).toBeGreaterThan(0);
-  });
 });

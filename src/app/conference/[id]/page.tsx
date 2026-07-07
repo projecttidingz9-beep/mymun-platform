@@ -31,7 +31,6 @@ const DEFAULT_WHATS_INCLUDED = [
   "Opening & closing ceremonies",
   "Delegate documentation package",
   "Access to all social events",
-  "Digital certificate of participation",
   "Networking with global delegates",
   "Expert speaker sessions",
   "Best Delegate award consideration",

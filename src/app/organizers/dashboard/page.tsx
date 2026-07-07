@@ -507,7 +507,6 @@ export default function OrganizerDashboardPage() {
   const [payingRegistrationId, setPayingRegistrationId] = useState<string | null>(null);
   const [applicantActionId, setApplicantActionId] = useState<string | null>(null);
   const [issuingPassId, setIssuingPassId] = useState<string | null>(null);
-  const [issuingCertId, setIssuingCertId] = useState<string | null>(null);
   const [refundingRegistrationId, setRefundingRegistrationId] = useState<string | null>(null);
   const [partnerActionInFlight, setPartnerActionInFlight] = useState(false);
   const [savingCommitteeDetails, setSavingCommitteeDetails] = useState(false);
@@ -3053,7 +3052,7 @@ export default function OrganizerDashboardPage() {
                           onChange={(event) => setPreviewDraft((prev) => ({ ...prev, whatIsIncluded: event.target.value }))}
                           className="input-base text-sm"
                           rows={5}
-                          placeholder={"What's Included (one item per line)\nDelegate kit\nSocial events\nCertificate"}
+                          placeholder={"What's Included (one item per line)\nDelegate kit\nSocial events\nNetworking"}
                         />
                         <div
                           className="mt-4 pt-4 space-y-3"
@@ -3946,44 +3945,6 @@ export default function OrganizerDashboardPage() {
                                   disabled={issuingPassId === applicant.id}
                                 >
                                   {issuingPassId === applicant.id ? "Issuing…" : "Issue Pass"}
-                                </button>
-                                <button
-                                  type="button"
-                                  className="btn btn-ghost text-xs"
-                                  disabled={
-                                    applicant.status !== "Allotted" ||
-                                    !applicant.registrationId ||
-                                    issuingCertId === applicant.id
-                                  }
-                                  onClick={() => {
-                                    if (!applicant.registrationId || !selectedConference || issuingCertId) return;
-                                    void (async () => {
-                                      setIssuingCertId(applicant.id);
-                                      try {
-                                        const res = await fetch(
-                                          `/api/organizers/registrations/${applicant.registrationId}/certificate`,
-                                          { method: "POST", credentials: "include" }
-                                        );
-                                        if (!res.ok) {
-                                          const payload = (await res.json().catch(() => ({}))) as {
-                                            error?: string;
-                                          };
-                                          toast.show(payload.error || "Could not issue certificate.", "error");
-                                          return;
-                                        }
-                                        toast.show(
-                                          "Participation certificate issued. The delegate can download it from their dashboard.",
-                                          "success"
-                                        );
-                                      } catch {
-                                        toast.show("Could not issue certificate.", "error");
-                                      } finally {
-                                        setIssuingCertId(null);
-                                      }
-                                    })();
-                                  }}
-                                >
-                                  {issuingCertId === applicant.id ? "Issuing…" : "Issue Certificate"}
                                 </button>
                                   </>
                                 )}
