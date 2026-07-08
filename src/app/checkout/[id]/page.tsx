@@ -741,6 +741,14 @@ export default function CheckoutPage() {
                       }.`}
                 </p>
               </div>
+              {checkoutCommittees.length === 0 ? (
+                <p
+                  className="text-sm rounded-xl p-4"
+                  style={{ color: "var(--fg-muted)", background: "var(--bg-subtle)", border: "1px solid var(--border)" }}
+                >
+                  No committees have been set up for this conference yet. Preferences will be available once committees are added.
+                </p>
+              ) : (
               <div className="space-y-4">
                 <AppSelect
                   label={`Committee preference 1 *`}
@@ -878,6 +886,7 @@ export default function CheckoutPage() {
                   </>
                 )}
               </div>
+              )}
               <div className="flex flex-col-reverse sm:flex-row gap-3">
                 <button type="button" onClick={() => goBackFrom(2)} className="btn btn-ghost flex-1 min-h-[44px]">← Back</button>
                 <button

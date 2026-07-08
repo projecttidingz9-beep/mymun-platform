@@ -399,15 +399,6 @@ const UN_TEMPLATE_COUNTRIES = {
 
 type UnTemplateKey = keyof typeof UN_TEMPLATE_COUNTRIES;
 
-type PartnerRelationship = {
-  id: string;
-  sourceEventId: string;
-  targetEventId: string;
-  status: "PENDING" | "ACCEPTED" | "REJECTED" | "CANCELLED";
-  direction: "incoming" | "outgoing";
-  partnerEvent: { id: string; title: string };
-};
-
 type DocumentDraft = {
   title: string;
   category: OrganizerDocumentCategory;
@@ -595,7 +586,7 @@ const SECTION_SEARCH_KEYWORDS: Record<OrganizerSectionId, string[]> = {
   awards: ["reviews", "awards module", "prizes"],
   team: ["organizer team", "members", "usg", "staff"],
   cameraCheckIn: ["qr scanner", "camera check in", "check-in", "pass"],
-  settings: ["documents", "partner conference", "previous editions", "banking details", "partners"],
+  settings: ["documents", "previous editions", "banking details"],
 };
 
 const isOrganizerSectionId = (value: string): value is OrganizerSectionId =>
@@ -657,7 +648,6 @@ export default function OrganizerDashboardPage() {
   const [globalSearchOpen, setGlobalSearchOpen] = useState(false);
   const [announcementTitle, setAnnouncementTitle] = useState("");
   const [announcementMessage, setAnnouncementMessage] = useState("");
-  const [broadcastAlsoEmail, setBroadcastAlsoEmail] = useState(false);
   const [broadcastFilter, setBroadcastFilter] = useState<
     "all" | "paid" | "allotted" | "committeeId" | "categoryId" | "delegationId"
   >("all");
@@ -666,7 +656,6 @@ export default function OrganizerDashboardPage() {
   const [applicantActionId, setApplicantActionId] = useState<string | null>(null);
   const [issuingPassId, setIssuingPassId] = useState<string | null>(null);
   const [refundingRegistrationId, setRefundingRegistrationId] = useState<string | null>(null);
-  const [partnerActionInFlight, setPartnerActionInFlight] = useState(false);
   const [savingCommitteeDetails, setSavingCommitteeDetails] = useState(false);
   const applicantActionRef = useRef<string | null>(null);
   const [paymentActionStatus, setPaymentActionStatus] = useState("");
@@ -808,9 +797,6 @@ export default function OrganizerDashboardPage() {
   const [pricingSavedCategoriesJson, setPricingSavedCategoriesJson] = useState("");
   const [scheduleAddDayOpen, setScheduleAddDayOpen] = useState(false);
   const [deleteConfirmStep, setDeleteConfirmStep] = useState<0 | 1>(0);
-  const [partnerRelationships, setPartnerRelationships] = useState<PartnerRelationship[]>([]);
-  const [partnerInviteTargetId, setPartnerInviteTargetId] = useState("");
-  const [partnerActionStatus, setPartnerActionStatus] = useState("");
   const [commonDocumentDraft, setCommonDocumentDraft] = useState<DocumentDraft>({
     title: "",
     category: "other",
@@ -1737,135 +1723,6 @@ export default function OrganizerDashboardPage() {
       .catch(() => setServerOverview(null));
   }, [selectedConference]);
 
-  useEffect(() => {
-    if (!selectedConference) return;
-    void fetch(`/api/organizers/partners/${selectedConference.id}`, { credentials: "include" })
-      .then((response) => response.json())
-      .then((data) => {
-        const rows = Array.isArray(data?.partnerships)
-          ? (data.partnerships as PartnerRelationship[])
-          : [];
-        setPartnerRelationships(rows);
-        const acceptedPartnerIds = rows
-          .filter((entry) => entry.status === "ACCEPTED")
-          .map((entry) => entry.partnerEvent.id);
-        const currentPartnerIds = selectedConference.partnerConferenceIds || [];
-        const nextSorted = [...acceptedPartnerIds].sort();
-        const currentSorted = [...currentPartnerIds].sort();
-        const partnerLinks = rows.map((entry) => ({
-          id: entry.id,
-          partnerConferenceId: entry.partnerEvent.id,
-          partnerConferenceTitle: entry.partnerEvent.title,
-          direction: entry.direction,
-          status: entry.status,
-          createdAt: undefined,
-          updatedAt: undefined,
-        }));
-        if (JSON.stringify(nextSorted) !== JSON.stringify(currentSorted)) {
-          updateOrganizerConferenceConfig(
-            selectedConference.id,
-            {
-              partnerConferenceIds: nextSorted,
-              partnerLinks,
-            },
-            { syncStatus: false }
-          );
-        }
-      })
-      .catch(() => setPartnerRelationships([]));
-  }, [selectedConference, updateOrganizerConferenceConfig]);
-
-  const refreshPartnerships = async () => {
-    if (!selectedConference) return;
-    const response = await fetch(`/api/organizers/partners/${selectedConference.id}`, {
-      credentials: "include",
-    });
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      throw new Error(String(data?.error || "Failed to refresh partners."));
-    }
-    const rows = Array.isArray(data?.partnerships) ? (data.partnerships as PartnerRelationship[]) : [];
-    setPartnerRelationships(rows);
-    const acceptedPartnerIds = rows
-      .filter((entry) => entry.status === "ACCEPTED")
-      .map((entry) => entry.partnerEvent.id);
-    const partnerLinks = rows.map((entry) => ({
-      id: entry.id,
-      partnerConferenceId: entry.partnerEvent.id,
-      partnerConferenceTitle: entry.partnerEvent.title,
-      direction: entry.direction,
-      status: entry.status,
-      createdAt: undefined,
-      updatedAt: undefined,
-    }));
-    updateOrganizerConferenceConfig(
-      selectedConference.id,
-      {
-        partnerConferenceIds: acceptedPartnerIds,
-        partnerLinks,
-      },
-      { syncStatus: false }
-    );
-  };
-
-  const sendPartnerInvite = async () => {
-    if (!selectedConference || !partnerInviteTargetId || partnerActionInFlight) return;
-    setPartnerActionInFlight(true);
-    setPartnerActionStatus("Sending invite...");
-    try {
-      const response = await fetch(`/api/organizers/partners/${selectedConference.id}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ targetEventId: partnerInviteTargetId }),
-      });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(String(data?.error || "Failed to send invitation."));
-      }
-      setPartnerInviteTargetId("");
-      await refreshPartnerships();
-      setPartnerActionStatus("Invite sent.");
-    } catch (error) {
-      setPartnerActionStatus(error instanceof Error ? error.message : "Failed to send invitation.");
-    } finally {
-      setPartnerActionInFlight(false);
-    }
-  };
-
-  const actOnPartnership = async (
-    partnershipId: string,
-    action: "accept" | "reject" | "cancel" | "unlink"
-  ) => {
-    if (!selectedConference || partnerActionInFlight) return;
-    setPartnerActionInFlight(true);
-    setPartnerActionStatus("Updating partnership...");
-    try {
-      const response =
-        action === "unlink"
-          ? await fetch(`/api/organizers/partners/${selectedConference.id}/${partnershipId}`, {
-              method: "DELETE",
-              credentials: "include",
-            })
-          : await fetch(`/api/organizers/partners/${selectedConference.id}/${partnershipId}`, {
-              method: "PATCH",
-              headers: { "Content-Type": "application/json" },
-              credentials: "include",
-              body: JSON.stringify({ action }),
-            });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(String(data?.error || "Failed to update partnership."));
-      }
-      await refreshPartnerships();
-      setPartnerActionStatus("Partnership updated.");
-    } catch (error) {
-      setPartnerActionStatus(error instanceof Error ? error.message : "Failed to update partnership.");
-    } finally {
-      setPartnerActionInFlight(false);
-    }
-  };
-
   const resetDocumentDraft = (scope: "common" | "committee") => {
     const resetState: DocumentDraft = {
       title: "",
@@ -1926,7 +1783,7 @@ export default function OrganizerDashboardPage() {
     };
   };
 
-  const addCommonDocument = () => {
+  const addCommonDocument = async () => {
     if (!selectedConference) return;
     const next = createDocumentRecord(commonDocumentDraft);
     if (!next) {
@@ -1938,17 +1795,19 @@ export default function OrganizerDashboardPage() {
     });
     resetDocumentDraft("common");
     setDocumentActionStatus("Common document added.");
+    await syncOrganizerConferenceById(selectedConference.id);
   };
 
-  const removeCommonDocument = (documentId: string) => {
+  const removeCommonDocument = async (documentId: string) => {
     if (!selectedConference) return;
     updateOrganizerConferenceConfig(selectedConference.id, {
       commonDocuments: (selectedConference.commonDocuments || []).filter((entry) => entry.id !== documentId),
     });
     setDocumentActionStatus("Common document removed.");
+    await syncOrganizerConferenceById(selectedConference.id);
   };
 
-  const addCommitteeDocument = () => {
+  const addCommitteeDocument = async () => {
     if (!selectedConference || !committeeDocumentTargetId) return;
     const next = createDocumentRecord(committeeDocumentDraft);
     if (!next) {
@@ -1962,9 +1821,10 @@ export default function OrganizerDashboardPage() {
     });
     resetDocumentDraft("committee");
     setDocumentActionStatus("Committee document added.");
+    await syncOrganizerConferenceById(selectedConference.id);
   };
 
-  const removeCommitteeDocument = (committeeId: string, documentId: string) => {
+  const removeCommitteeDocument = async (committeeId: string, documentId: string) => {
     if (!selectedConference) return;
     const committee = selectedConference.committees.find((entry) => entry.id === committeeId);
     if (!committee) return;
@@ -1972,6 +1832,7 @@ export default function OrganizerDashboardPage() {
       documents: (committee.documents || []).filter((entry) => entry.id !== documentId),
     });
     setDocumentActionStatus("Committee document removed.");
+    await syncOrganizerConferenceById(selectedConference.id);
   };
 
   const selectedConferenceAnalytics = useMemo(() => {
@@ -2435,7 +2296,10 @@ export default function OrganizerDashboardPage() {
     );
     updateRegistrationCategoryConfig(conferenceId, delegateCategory.id, { pricingPhases: nextPhases });
   };
-  const addCategoryPricingPhase = (conferenceId: string, category: OrganizerConference["registrationCategories"][number]) => {
+  const addCategoryPricingPhase = async (
+    conferenceId: string,
+    category: OrganizerConference["registrationCategories"][number]
+  ) => {
     const phaseBase = category.basePrice || 0;
     const committees = selectedConference?.committees ?? [];
     const existingPhases = category.pricingPhases || [];
@@ -2457,6 +2321,7 @@ export default function OrganizerDashboardPage() {
       },
     ];
     updateRegistrationCategoryConfig(conferenceId, category.id, { pricingPhases: nextPhases });
+    await syncOrganizerConferenceById(conferenceId);
   };
   const updateCategoryPricingPhase = (
     conferenceId: string,
@@ -2474,9 +2339,14 @@ export default function OrganizerDashboardPage() {
     });
     updateRegistrationCategoryConfig(conferenceId, category.id, { pricingPhases: nextPhases });
   };
-  const removeCategoryPricingPhase = (conferenceId: string, category: OrganizerConference["registrationCategories"][number], phaseId: string) => {
+  const removeCategoryPricingPhase = async (
+    conferenceId: string,
+    category: OrganizerConference["registrationCategories"][number],
+    phaseId: string
+  ) => {
     const nextPhases = (category.pricingPhases || []).filter((phase) => phase.id !== phaseId);
     updateRegistrationCategoryConfig(conferenceId, category.id, { pricingPhases: nextPhases });
+    await syncOrganizerConferenceById(conferenceId);
   };
   const addCategoryQuestion = (conferenceId: string, category: OrganizerConference["registrationCategories"][number]) => {
     const newField: DynamicFormField = {
@@ -2540,13 +2410,18 @@ export default function OrganizerDashboardPage() {
     const nextFields = (category.formFields || []).filter((field) => field.id !== fieldId);
     updateRegistrationCategoryConfig(conferenceId, category.id, { formFields: nextFields });
   };
-  const endCategoryPricingPhase = (
+  const endCategoryPricingPhase = async (
     conferenceId: string,
     category: OrganizerConference["registrationCategories"][number],
     phaseId: string
   ) => {
     const today = new Date().toISOString().slice(0, 10);
     updateCategoryPricingPhase(conferenceId, category, phaseId, { endDate: today });
+    await syncOrganizerConferenceById(conferenceId);
+  };
+  const saveCategoryPricingPhases = async (conferenceId: string) => {
+    await syncOrganizerConferenceById(conferenceId);
+    toast.show("Pricing phases saved to the public registration form.", "success");
   };
   const saveBankingDetails = () => {
     if (!selectedConference) return;
@@ -5168,7 +5043,7 @@ export default function OrganizerDashboardPage() {
                     <div className="card p-6 rounded-2xl">
                       <h3 className="text-lg font-bold mb-4" style={{ color: "var(--fg)" }}>Broadcast Announcement</h3>
                       <p className="text-sm mb-4" style={{ color: "var(--fg-muted)" }}>
-                        There is no in-app messaging yet. Broadcasts are sent by email only, and only to delegates who have applied (or paid, depending on your allocation mode).
+                        Broadcasts are sent by email to registered delegates who have applied or paid. There is no in-app messaging.
                       </p>
                       <div className="space-y-3">
                         <input
@@ -5177,6 +5052,19 @@ export default function OrganizerDashboardPage() {
                           className="input-base"
                           placeholder="Title"
                         />
+                        <select
+                          className="input-base text-sm app-select-modern"
+                          value={broadcastFilter}
+                          onChange={(event) =>
+                            setBroadcastFilter(
+                              event.target.value as typeof broadcastFilter
+                            )
+                          }
+                        >
+                          <option value="all">All registered delegates (applied or paid)</option>
+                          <option value="paid">Paid delegates only</option>
+                          <option value="allotted">Allotted delegates only</option>
+                        </select>
                         <textarea
                           value={announcementMessage}
                           onChange={(event) => setAnnouncementMessage(event.target.value)}
@@ -5185,29 +5073,6 @@ export default function OrganizerDashboardPage() {
                           placeholder="Share an update with delegates..."
                           style={{ resize: "none" }}
                         />
-                        <label className="flex items-center gap-2 text-sm" style={{ color: "var(--fg-muted)" }}>
-                          <input
-                            type="checkbox"
-                            checked={broadcastAlsoEmail}
-                            onChange={(event) => setBroadcastAlsoEmail(event.target.checked)}
-                          />
-                          Send this announcement by email to registered delegates
-                        </label>
-                        {broadcastAlsoEmail && (
-                          <select
-                            className="input-base text-xs app-select-modern"
-                            value={broadcastFilter}
-                            onChange={(event) =>
-                              setBroadcastFilter(
-                                event.target.value as typeof broadcastFilter
-                              )
-                            }
-                          >
-                            <option value="all">All registrations</option>
-                            <option value="paid">Paid only</option>
-                            <option value="allotted">Allotted only</option>
-                          </select>
-                        )}
                         <button
                           className="btn btn-primary w-full text-sm"
                           disabled={
@@ -5223,58 +5088,34 @@ export default function OrganizerDashboardPage() {
                             const title = announcementTitle.trim();
                             const message = announcementMessage.trim();
                             addAnnouncement(selectedConference.id, title, message);
-                            if (broadcastAlsoEmail) {
-                              setBroadcastSending(true);
-                              void fetch(
-                                `/api/organizers/conferences/${selectedConference.id}/broadcast-email`,
-                                {
-                                  method: "POST",
-                                  credentials: "include",
-                                  headers: { "Content-Type": "application/json" },
-                                  body: JSON.stringify({
-                                    title,
-                                    message,
-                                    filter: broadcastFilter,
-                                  }),
+                            setBroadcastSending(true);
+                            void fetch(
+                              `/api/organizers/conferences/${selectedConference.id}/broadcast-email`,
+                              {
+                                method: "POST",
+                                credentials: "include",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({
+                                  title,
+                                  message,
+                                  filter: broadcastFilter,
+                                }),
+                              }
+                            )
+                              .then(async (res) => {
+                                const data = (await res.json()) as { error?: string; sent?: number };
+                                if (!res.ok) {
+                                  toast.show(data.error || "Email broadcast failed.", "error");
+                                  return;
                                 }
-                              )
-                                .then(async (res) => {
-                                  const data = (await res.json()) as { error?: string; sent?: number };
-                                  if (!res.ok) {
-                                    toast.show(data.error || "Email broadcast failed.", "error");
-                                    return;
-                                  }
-                                  toast.show(`Emailed ${data.sent ?? 0} delegate(s).`, "success");
-                                })
-                                .finally(() => setBroadcastSending(false));
-                            } else {
-                              void Promise.all(
-                                selectedConference.applicants
-                                  .filter(
-                                    (applicant) =>
-                                      applicant.registrationId &&
-                                      applicant.status !== "Rejected"
-                                  )
-                                  .map((applicant) =>
-                                    fetch("/api/organizers/notifications", {
-                                      method: "POST",
-                                      credentials: "include",
-                                      headers: { "Content-Type": "application/json" },
-                                      body: JSON.stringify({
-                                        registrationId: applicant.registrationId,
-                                        title,
-                                        message,
-                                        type: "ANNOUNCEMENT",
-                                      }),
-                                    })
-                                  )
-                              );
-                            }
+                                toast.show(`Emailed ${data.sent ?? 0} delegate(s).`, "success");
+                              })
+                              .finally(() => setBroadcastSending(false));
                             setAnnouncementTitle("");
                             setAnnouncementMessage("");
                           }}
                         >
-                          {broadcastSending ? "Sending…" : "Send Announcement"}
+                          {broadcastSending ? "Sending…" : "Send Email Broadcast"}
                         </button>
                       </div>
                       <div className="space-y-2 mt-4">
@@ -5597,106 +5438,6 @@ export default function OrganizerDashboardPage() {
                             </button>
                           </div>
                         </div>
-                        <div className="p-3 rounded-xl space-y-3" style={{ background: "var(--bg-subtle)" }}>
-                          <p className="text-xs font-semibold" style={{ color: "var(--fg)" }}>Partner MUNs</p>
-                          <div className="flex items-center gap-2">
-                            <select
-                              className="input-base text-xs flex-1"
-                              value={partnerInviteTargetId}
-                              onChange={(event) => setPartnerInviteTargetId(event.target.value)}
-                            >
-                              <option value="">Select organizer conference to invite</option>
-                              {organizerConferences
-                                .filter((entry) => entry.id !== selectedConference.id)
-                                .map((entry) => (
-                                  <option key={entry.id} value={entry.id}>
-                                    {entry.title}
-                                  </option>
-                                ))}
-                            </select>
-                            <button
-                              className="btn btn-primary text-xs"
-                              disabled={!partnerInviteTargetId || partnerActionInFlight}
-                              onClick={() => void sendPartnerInvite()}
-                            >
-                              {partnerActionInFlight ? "Sending…" : "Send Invite"}
-                            </button>
-                          </div>
-                          {partnerActionStatus && (
-                            <div
-                              className={`alert ${/fail|error|unable|cannot|invalid/i.test(partnerActionStatus) ? "alert-danger" : "alert-success"}`}
-                              role="status"
-                            >
-                              <span>{partnerActionStatus}</span>
-                            </div>
-                          )}
-                          <div className="space-y-2">
-                            <p className="text-[11px] font-semibold" style={{ color: "var(--fg-muted)" }}>
-                              Pending received
-                            </p>
-                            {partnerRelationships
-                              .filter((entry) => entry.status === "PENDING" && entry.direction === "incoming")
-                              .map((entry) => (
-                                <div key={entry.id} className="flex items-center justify-between gap-2">
-                                  <p className="text-xs" style={{ color: "var(--fg)" }}>{entry.partnerEvent.title}</p>
-                                  <div className="flex gap-1">
-                                    <button
-                                      className="btn btn-ghost text-xs"
-                                      disabled={partnerActionInFlight}
-                                      onClick={() => void actOnPartnership(entry.id, "accept")}
-                                    >
-                                      Accept
-                                    </button>
-                                    <DestructiveConfirmButton
-                                      label="Reject"
-                                      confirmTitle="Reject this partnership invite?"
-                                      confirmDescription={`This removes the pending partnership link with "${entry.partnerEvent.title}".`}
-                                      onConfirm={() => void actOnPartnership(entry.id, "reject")}
-                                    />
-                                  </div>
-                                </div>
-                              ))}
-                          </div>
-                          <div className="space-y-2">
-                            <p className="text-[11px] font-semibold" style={{ color: "var(--fg-muted)" }}>
-                              Pending sent
-                            </p>
-                            {partnerRelationships
-                              .filter((entry) => entry.status === "PENDING" && entry.direction === "outgoing")
-                              .map((entry) => (
-                                <div key={entry.id} className="flex items-center justify-between gap-2">
-                                  <p className="text-xs" style={{ color: "var(--fg)" }}>{entry.partnerEvent.title}</p>
-                                  <DestructiveConfirmButton
-                                    label="Cancel"
-                                    confirmTitle="Cancel this partnership invite?"
-                                    confirmDescription={`This withdraws the pending invite sent to "${entry.partnerEvent.title}".`}
-                                    onConfirm={() => void actOnPartnership(entry.id, "cancel")}
-                                  />
-                                </div>
-                              ))}
-                          </div>
-                          <div className="space-y-2">
-                            <p className="text-[11px] font-semibold" style={{ color: "var(--fg-muted)" }}>
-                              Accepted partners
-                            </p>
-                            {partnerRelationships
-                              .filter((entry) => entry.status === "ACCEPTED")
-                              .map((entry) => (
-                                <div key={entry.id} className="flex items-center justify-between gap-2">
-                                  <p className="text-xs" style={{ color: "var(--fg)" }}>{entry.partnerEvent.title}</p>
-                                  <DestructiveConfirmButton
-                                    label="Unlink"
-                                    confirmTitle="Unlink this partner conference?"
-                                    confirmDescription={`This removes the accepted partnership with "${entry.partnerEvent.title}". Both sides will need to re-invite to relink.`}
-                                    onConfirm={() => void actOnPartnership(entry.id, "unlink")}
-                                  />
-                                </div>
-                              ))}
-                            {partnerRelationships.filter((entry) => entry.status === "ACCEPTED").length === 0 && (
-                              <p className="text-xs" style={{ color: "var(--fg-muted)" }}>No accepted partner MUNs yet.</p>
-                            )}
-                          </div>
-                        </div>
                         <div className="p-3 rounded-xl" style={{ background: "var(--bg-subtle)" }}>
                           <p className="text-xs font-semibold mb-2" style={{ color: "var(--fg)" }}>Common Documents</p>
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-2">
@@ -5754,23 +5495,8 @@ export default function OrganizerDashboardPage() {
                                 }}
                               />
                             )}
-                            <select
-                              className="input-base text-xs col-span-2"
-                              value={commonDocumentDraft.category ?? "other"}
-                              onChange={(event) =>
-                                setCommonDocumentDraft((prev) => ({
-                                  ...prev,
-                                  category: event.target.value as OrganizerDocumentCategory,
-                                }))
-                              }
-                            >
-                              <option value="other">Purpose: General (no acknowledgment required)</option>
-                              <option value="background-guide">Purpose: Background Guide (delegates must acknowledge before checkout)</option>
-                              <option value="rules">Purpose: Rules of Procedure (delegates must acknowledge before checkout)</option>
-                              <option value="guidelines">Purpose: Guidelines</option>
-                            </select>
                           </div>
-                          <button className="btn btn-primary text-xs" onClick={addCommonDocument}>Add Common Document</button>
+                          <button className="btn btn-primary text-xs" onClick={() => void addCommonDocument()}>Add Common Document</button>
                           <div className="mt-2 space-y-1">
                             {(selectedConference.commonDocuments || []).length === 0 && (
                               <p className="text-xs" style={{ color: "var(--fg-muted)" }}>No common documents yet.</p>
@@ -5778,13 +5504,13 @@ export default function OrganizerDashboardPage() {
                             {(selectedConference.commonDocuments || []).map((doc) => (
                               <div key={doc.id} className="flex items-center justify-between gap-2">
                                 <p className="text-xs" style={{ color: "var(--fg-muted)" }}>
-                                  {doc.title} · {doc.category}
+                                  {doc.title}
                                 </p>
                                 <DestructiveConfirmButton
                                   label="Remove"
                                   confirmTitle={`Remove "${doc.title}"?`}
                                   confirmDescription="This document will no longer be visible on the public conference page."
-                                  onConfirm={() => removeCommonDocument(doc.id)}
+                                  onConfirm={() => void removeCommonDocument(doc.id)}
                                 />
                               </div>
                             ))}
@@ -5858,23 +5584,8 @@ export default function OrganizerDashboardPage() {
                                 }}
                               />
                             )}
-                            <select
-                              className="input-base text-xs col-span-2"
-                              value={committeeDocumentDraft.category ?? "other"}
-                              onChange={(event) =>
-                                setCommitteeDocumentDraft((prev) => ({
-                                  ...prev,
-                                  category: event.target.value as OrganizerDocumentCategory,
-                                }))
-                              }
-                            >
-                              <option value="other">Purpose: General (no acknowledgment required)</option>
-                              <option value="background-guide">Purpose: Background Guide (delegates must acknowledge before checkout)</option>
-                              <option value="rules">Purpose: Rules of Procedure (delegates must acknowledge before checkout)</option>
-                              <option value="guidelines">Purpose: Guidelines</option>
-                            </select>
                           </div>
-                          <button className="btn btn-primary text-xs" onClick={addCommitteeDocument}>
+                          <button className="btn btn-primary text-xs" onClick={() => void addCommitteeDocument()}>
                             Add Committee Document
                           </button>
                           <div className="mt-2 space-y-1">
@@ -5888,13 +5599,13 @@ export default function OrganizerDashboardPage() {
                                   {(committee.documents || []).map((doc) => (
                                     <div key={doc.id} className="flex items-center justify-between gap-2">
                                       <p className="text-xs" style={{ color: "var(--fg-muted)" }}>
-                                        {doc.title} · {doc.category}
+                                        {doc.title}
                                       </p>
                                       <DestructiveConfirmButton
                                         label="Remove"
                                         confirmTitle={`Remove "${doc.title}"?`}
                                         confirmDescription={`This document will no longer be visible under ${committee.name} on the public conference page.`}
-                                        onConfirm={() => removeCommitteeDocument(committee.id, doc.id)}
+                                        onConfirm={() => void removeCommitteeDocument(committee.id, doc.id)}
                                       />
                                     </div>
                                   ))}
@@ -6156,6 +5867,9 @@ export default function OrganizerDashboardPage() {
                         />
                         <div className="col-span-2">
                           <label className="text-xs font-semibold" style={{ color: "var(--fg-muted)" }}>Photo (optional)</label>
+                          <p className="text-[11px] mt-0.5 mb-1" style={{ color: "var(--fg-muted)" }}>
+                            Upload now or skip — you can add a photo later by removing and re-adding the member.
+                          </p>
                           <input
                             type="file"
                             accept="image/*"
@@ -6213,6 +5927,7 @@ export default function OrganizerDashboardPage() {
                           });
                           setTeamDraft({ name: "", email: "", role: "USG", photoUrl: "" });
                           toast.show("Team member added.", "success");
+                          void syncOrganizerConferenceById(selectedConference.id);
                         }}
                       >
                         Add Team Member
@@ -6222,23 +5937,30 @@ export default function OrganizerDashboardPage() {
                           <p className="text-sm" style={{ color: "var(--fg-muted)" }}>No team members added yet.</p>
                         ) : (
                         (selectedConference.organizerTeam || []).map((member) => (
-                          <div key={member.id} className="p-2 rounded-xl flex items-center justify-between gap-3" style={{ background: "var(--bg-subtle)" }}>
-                            <div className="flex items-center gap-3 min-w-0">
+                          <div key={member.id} className="p-3 rounded-xl flex items-start justify-between gap-3" style={{ background: "var(--bg-subtle)" }}>
+                            <div className="flex items-start gap-3 min-w-0">
                               {member.photoUrl ? (
                                 // eslint-disable-next-line @next/next/no-img-element
-                                <img src={member.photoUrl} alt={member.name} className="w-10 h-10 rounded-lg object-cover flex-shrink-0" />
+                                <img src={member.photoUrl} alt={member.name} className="w-12 h-12 rounded-xl object-cover flex-shrink-0" />
                               ) : (
                                 <div
-                                  className="w-10 h-10 rounded-lg flex items-center justify-center text-white text-sm font-bold flex-shrink-0"
+                                  className="w-12 h-12 rounded-xl flex items-center justify-center text-white text-base font-bold flex-shrink-0"
                                   style={{ background: "linear-gradient(135deg, #2563eb, #60a5fa)" }}
                                 >
                                   {member.name[0]?.toUpperCase() || "T"}
                                 </div>
                               )}
                               <div className="min-w-0">
-                              <p className="text-xs font-semibold" style={{ color: "var(--fg)" }}>{member.name} · {member.role}</p>
-                              <p className="text-[11px]" style={{ color: "var(--fg-muted)" }}>{member.email}</p>
-                              <p className="text-[11px]" style={{ color: "var(--fg-muted)" }}>{member.permissions.join(", ")}</p>
+                                <p className="text-sm font-semibold" style={{ color: "var(--fg)" }}>{member.name}</p>
+                                <p className="text-xs mt-0.5" style={{ color: "var(--blue)" }}>{member.role}</p>
+                                <p className="text-xs mt-0.5" style={{ color: "var(--fg-muted)" }}>{member.email}</p>
+                                <div className="flex flex-wrap gap-1 mt-2">
+                                  {member.permissions.map((permission) => (
+                                    <span key={permission} className="badge badge-gray text-[10px]">
+                                      {permission}
+                                    </span>
+                                  ))}
+                                </div>
                               </div>
                             </div>
                             <DestructiveConfirmButton
@@ -6249,6 +5971,7 @@ export default function OrganizerDashboardPage() {
                                 updateOrganizerConferenceConfig(selectedConference.id, {
                                   organizerTeam: (selectedConference.organizerTeam || []).filter((entry) => entry.id !== member.id),
                                 });
+                                void syncOrganizerConferenceById(selectedConference.id);
                               }}
                             />
                           </div>
@@ -6492,15 +6215,25 @@ export default function OrganizerDashboardPage() {
                               </div>
                             )}
                             <div className="rounded-lg p-3 mt-3 space-y-2" style={{ background: "var(--bg)" }}>
-                              <div className="flex items-center justify-between">
+                              <div className="flex items-center justify-between gap-2">
                                 <p className="text-xs font-semibold" style={{ color: "var(--fg)" }}>Category Pricing</p>
                                 {!isNoPhasesCategory && (
-                                  <button
-                                    className="btn btn-ghost text-xs"
-                                    onClick={() => addCategoryPricingPhase(selectedConference.id, category)}
-                                  >
-                                    + Add Phase
-                                  </button>
+                                  <div className="flex gap-2">
+                                    <button
+                                      className="btn btn-ghost text-xs"
+                                      onClick={() => void addCategoryPricingPhase(selectedConference.id, category)}
+                                    >
+                                      + Add Phase
+                                    </button>
+                                    {category.pricingPhases.length > 0 && (
+                                      <button
+                                        className="btn btn-primary text-xs"
+                                        onClick={() => void saveCategoryPricingPhases(selectedConference.id)}
+                                      >
+                                        Save Phases
+                                      </button>
+                                    )}
+                                  </div>
                                 )}
                               </div>
                               <div className="grid md:grid-cols-2 gap-2">
@@ -6580,13 +6313,13 @@ export default function OrganizerDashboardPage() {
                                       <div className="flex justify-end mt-2">
                                         <button
                                           className="btn btn-ghost text-xs mr-2"
-                                          onClick={() => endCategoryPricingPhase(selectedConference.id, category, phase.id)}
+                                          onClick={() => void endCategoryPricingPhase(selectedConference.id, category, phase.id)}
                                         >
                                           End Phase
                                         </button>
                                         <button
                                           className="btn btn-danger-ghost text-xs"
-                                          onClick={() => removeCategoryPricingPhase(selectedConference.id, category, phase.id)}
+                                          onClick={() => void removeCategoryPricingPhase(selectedConference.id, category, phase.id)}
                                         >
                                           Remove Phase
                                         </button>
