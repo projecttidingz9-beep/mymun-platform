@@ -6976,11 +6976,6 @@ export default function OrganizerDashboardPage() {
                                                 Placeholder: {field.placeholder}
                                               </span>
                                             )}
-                                            {field.type === "select" && (
-                                              <span className="badge badge-gray text-[10px]">
-                                                {(field.options || []).filter((option) => option.trim()).length} options
-                                              </span>
-                                            )}
                                             {field.type === "file" && (
                                               <span className="badge badge-gray text-[10px]">
                                                 Max {field.maxFiles ?? 1} file{(field.maxFiles ?? 1) === 1 ? "" : "s"} ·{" "}
@@ -6988,6 +6983,23 @@ export default function OrganizerDashboardPage() {
                                               </span>
                                             )}
                                           </div>
+                                          {field.type === "select" && (
+                                            <div className="mt-1 space-y-1">
+                                              <div className="flex flex-wrap gap-1">
+                                                {(field.options || []).filter((option) => option.trim()).map((option, optionIndex) => (
+                                                  <span key={optionIndex} className="badge badge-gray text-[10px]">
+                                                    {option}
+                                                  </span>
+                                                ))}
+                                                {(field.options || []).filter((option) => option.trim()).length === 0 && (
+                                                  <span className="badge badge-gray text-[10px]">No options</span>
+                                                )}
+                                              </div>
+                                              <p className="text-[10px]" style={{ color: "var(--fg-muted)" }}>
+                                                Edit to add, remove, or change options.
+                                              </p>
+                                            </div>
+                                          )}
                                           <div className="flex justify-end gap-2">
                                             <button
                                               type="button"

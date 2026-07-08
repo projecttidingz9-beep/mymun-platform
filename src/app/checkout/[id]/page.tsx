@@ -647,7 +647,7 @@ export default function CheckoutPage() {
                         {formatMoney(categoryPrice.amount, checkoutCurrency)}
                       </span>
                       {categoryPrice.phaseName && (
-                        <p className="text-[10px] mt-0.5" style={{ color: "var(--fg-muted)" }}>
+                        <p className="text-xs sm:text-sm mt-0.5 font-medium" style={{ color: "var(--blue)" }}>
                           {categoryPrice.phaseName}
                         </p>
                       )}
@@ -658,15 +658,20 @@ export default function CheckoutPage() {
                   </p>
                   <p className="text-sm mt-1" style={{ color: "var(--fg-muted)" }}>{category.description || "No description provided."}</p>
                   {category.pricingPhases.length > 0 && (
-                    <div className="mt-2 flex flex-wrap gap-1.5">
+                    <div className="mt-2 space-y-1.5">
                       {category.pricingPhases.map((phase) => {
                         const status = getPhaseStatus(phase, new Date());
                         const badgeClass =
                           status === "Active" ? "badge-green" : status === "Upcoming" ? "badge-blue" : "badge-gray";
                         return (
-                          <span key={phase.id} className={`badge ${badgeClass}`}>
-                            {phase.name} · {status === "Ended" ? "Ended" : status}
-                          </span>
+                          <div key={phase.id} className="flex flex-wrap items-center gap-2">
+                            <span className="text-sm font-medium" style={{ color: "var(--fg)" }}>
+                              {phase.name}
+                            </span>
+                            <span className={`badge text-xs sm:text-sm ${badgeClass}`}>
+                              {status === "Ended" ? "Ended" : status}
+                            </span>
+                          </div>
                         );
                       })}
                     </div>

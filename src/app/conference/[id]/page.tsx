@@ -651,7 +651,7 @@ function ConferenceDetailPageContent() {
             {/* Registration Card — first on mobile for faster primary action */}
             <div className="order-1 lg:order-none conference-hero-card w-full max-w-[420px] 2xl:max-w-[390px] mx-auto lg:mx-0 lux-card p-6 sm:p-7 flex-shrink-0 lg:sticky lg:top-[calc(6rem+env(safe-area-inset-top,0px))] 2xl:top-28 self-start lg:min-h-[420px] lg:flex lg:flex-col">
               <p
-                className="text-[10px] font-semibold"
+                className="text-xs sm:text-sm font-semibold"
                 style={{
                   color: "var(--fg-muted)",
                   letterSpacing: "0.28em",
@@ -660,6 +660,11 @@ function ConferenceDetailPageContent() {
               >
                 {activeCategoryPhase?.name || "Registration"}
               </p>
+              {activeCategoryPhase && (
+                <p className="mt-2 text-sm sm:text-base font-semibold" style={{ color: "var(--blue)" }}>
+                  {activeCategoryPhase.name} · Active
+                </p>
+              )}
               <div className="flex items-baseline gap-2 mt-3">
                 <span
                   className="text-4xl font-semibold"
@@ -670,12 +675,12 @@ function ConferenceDetailPageContent() {
                 >
                   {formatMoney(dynamicStartingPrice, c.currency)}
                 </span>
-                <span className="text-xs" style={{ color: "var(--fg-muted)" }}>
+                <span className="text-sm" style={{ color: "var(--fg-muted)" }}>
                   {activeCategoryPhase ? `${activeCategoryPhase.name} pricing` : "per delegate"}
                 </span>
               </div>
               <p
-                className="mt-2 text-xs"
+                className="mt-2 text-sm"
                 style={{ color: "var(--fg-muted)" }}
               >
                 {activeCategoryPhase
@@ -683,15 +688,27 @@ function ConferenceDetailPageContent() {
                   : "Pricing details update from organizer dashboard"}
               </p>
               {phaseStatusChips.length > 0 && (
-                <div className="mt-3 flex flex-wrap gap-1.5">
-                  {phaseStatusChips.map((phase) => (
-                    <span
-                      key={phase.id}
-                      className={`badge ${phase.status === "Active" ? "badge-green" : phase.status === "Upcoming" ? "badge-blue" : "badge-gray"}`}
-                    >
-                      {phase.name} · {phase.status}
-                    </span>
-                  ))}
+                <div className="mt-3 space-y-2">
+                  <p className="text-xs sm:text-sm font-medium" style={{ color: "var(--fg-muted)" }}>
+                    Pricing phases
+                  </p>
+                  <div className="flex flex-col gap-2">
+                    {phaseStatusChips.map((phase) => (
+                      <div
+                        key={phase.id}
+                        className="flex flex-wrap items-center gap-2"
+                      >
+                        <span className="text-sm sm:text-base font-medium" style={{ color: "var(--fg)" }}>
+                          {phase.name}
+                        </span>
+                        <span
+                          className={`badge text-xs sm:text-sm ${phase.status === "Active" ? "badge-green" : phase.status === "Upcoming" ? "badge-blue" : "badge-gray"}`}
+                        >
+                          {phase.status}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
 
