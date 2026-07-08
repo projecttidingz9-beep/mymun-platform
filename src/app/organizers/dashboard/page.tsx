@@ -582,20 +582,20 @@ const ORGANIZER_SECTION_META: Record<OrganizerSectionId, { label: string; eyebro
 };
 
 const SECTION_SEARCH_KEYWORDS: Record<OrganizerSectionId, string[]> = {
-  overview: ["workspace", "analytics", "stats"],
-  conferences: ["active conference", "create conference"],
-  preview: ["conference tags", "conference stats", "what's included", "place", "dates", "venue"],
-  schedule: ["conference schedule", "add day", "events", "opening ceremony", "timed events"],
-  applications: ["delegate application", "chair application", "organiser application", "delegation application"],
-  participants: ["participant profile", "allotment", "country matrix"],
-  committees: ["add committee", "edit details", "chairs", "agenda"],
-  pricing: ["registration categories", "pricing phases", "question builder", "steps"],
-  transactions: ["payments", "refunds", "invoices"],
-  communications: ["announcements", "status email templates"],
-  awards: ["reviews", "awards module"],
-  team: ["organizer team", "members"],
-  cameraCheckIn: ["qr scanner", "camera check in"],
-  settings: ["documents", "partner conference", "previous editions", "banking details"],
+  overview: ["workspace", "analytics", "stats", "dashboard", "summary"],
+  conferences: ["active conference", "create conference", "draft", "published"],
+  preview: ["conference tags", "conference stats", "what's included", "place", "dates", "venue", "banner", "logo", "portfolio matrix"],
+  schedule: ["conference schedule", "add day", "events", "opening ceremony", "timed events", "programme"],
+  applications: ["delegate application", "chair application", "organiser application", "delegation application", "delegates", "applicants", "allot"],
+  participants: ["participant profile", "allotment", "country matrix", "portfolio", "delegations", "matrix"],
+  committees: ["add committee", "edit details", "chairs", "agenda", "international press", "press corps", "seat count"],
+  pricing: ["registration categories", "pricing phases", "question builder", "steps", "categories", "fees", "checkout"],
+  transactions: ["payments", "refunds", "invoices", "finance", "revenue"],
+  communications: ["announcements", "status email templates", "broadcast", "email"],
+  awards: ["reviews", "awards module", "prizes"],
+  team: ["organizer team", "members", "usg", "staff"],
+  cameraCheckIn: ["qr scanner", "camera check in", "check-in", "pass"],
+  settings: ["documents", "partner conference", "previous editions", "banking details", "partners"],
 };
 
 const isOrganizerSectionId = (value: string): value is OrganizerSectionId =>
@@ -689,6 +689,7 @@ export default function OrganizerDashboardPage() {
   const [releasingAllotments, setReleasingAllotments] = useState(false);
   const [releaseAllotmentsOpen, setReleaseAllotmentsOpen] = useState(false);
   const [assignmentPortfolio, setAssignmentPortfolio] = useState<Record<string, string>>({});
+  const [allotConfirmStep, setAllotConfirmStep] = useState<Record<string, 0 | 1 | 2>>({});
   const [selectedApplicantId, setSelectedApplicantId] = useState<string>("");
   const [applicationTypeTab, setApplicationTypeTab] = useState<
     "delegate" | "chair" | "organizer" | "delegation"
@@ -1147,7 +1148,7 @@ export default function OrganizerDashboardPage() {
     );
   };
 
-  const saveCommitteeDetails = (conferenceId: string) => {
+  const saveCommitteeDetails = async (conferenceId: string) => {
     if (!detailsEditorCommitteeId || savingCommitteeDetails) return;
     setSavingCommitteeDetails(true);
     try {
@@ -1190,6 +1191,12 @@ export default function OrganizerDashboardPage() {
       });
       setDetailsEditorOpen(false);
       setDetailsEditorCommitteeId("");
+      const syncResult = await syncOrganizerConferenceById(conferenceId);
+      if (!syncResult.ok) {
+        toast.show(syncResult.error || "Saved locally but could not sync to the public page.", "error");
+      } else {
+        toast.show("Committee details saved and synced.", "success");
+      }
     } finally {
       setSavingCommitteeDetails(false);
     }
@@ -1483,6 +1490,42 @@ export default function OrganizerDashboardPage() {
           setApplicantProfileDrawerOpen(true);
           changeActiveSection("participants");
         },
+      });
+    });
+
+    organizerConferences.forEach((conference) => {
+      conference.committees.forEach((committee) => {
+        const haystack = `${committee.name} ${committee.agenda} ${committee.customTypeLabel || ""}`.toLowerCase();
+        if (!haystack.includes(q)) return;
+        pushUnique({
+          id: `committee-${conference.id}-${committee.id}`,
+          title: committee.name,
+          subtitle: `Committee · ${conference.title}`,
+          type: "section",
+          onSelect: () => {
+            setSelectedConferenceId(conference.id);
+            setPreviewDraft(buildPreviewDraft(conference));
+            changeActiveSection("committees");
+          },
+        });
+      });
+    });
+
+    organizerConferences.forEach((conference) => {
+      conference.registrationCategories.forEach((category) => {
+        const haystack = `${category.name} ${category.description || ""}`.toLowerCase();
+        if (!haystack.includes(q)) return;
+        pushUnique({
+          id: `category-${conference.id}-${category.id}`,
+          title: category.name,
+          subtitle: `Registration category · ${conference.title}`,
+          type: "section",
+          onSelect: () => {
+            setSelectedConferenceId(conference.id);
+            setPreviewDraft(buildPreviewDraft(conference));
+            changeActiveSection("pricing");
+          },
+        });
       });
     });
 
@@ -3196,6 +3239,18 @@ export default function OrganizerDashboardPage() {
                       </p>
                       <p style={{ color: "var(--fg-muted)" }}><strong style={{ color: "var(--fg)" }}>Capacity:</strong> {selectedConference.capacity}</p>
                     </div>
+                    <label className="flex items-center gap-2 text-xs mt-4" style={{ color: "var(--fg-muted)" }}>
+                      <input
+                        type="checkbox"
+                        checked={selectedConference.portfolioMatrixVisibility === "PUBLIC"}
+                        onChange={(event) => {
+                          void updateOrganizerConferenceConfigAsync(selectedConference.id, {
+                            portfolioMatrixVisibility: event.target.checked ? "PUBLIC" : "PRIVATE",
+                          });
+                        }}
+                      />
+                      Show allotment status on public portfolio matrix
+                    </label>
                   </div>
                   )}
 
@@ -3953,10 +4008,7 @@ export default function OrganizerDashboardPage() {
                         {filteredApplications.map((applicant) => {
                           const isOcTab = applicationTypeTab === "organizer";
                           const isChairTab = applicationTypeTab === "chair";
-                          const preferenceSummary = formatApplicantPreferences(
-                            applicant,
-                            selectedConference.committees
-                          );
+                          const allotStep = allotConfirmStep[applicant.id] ?? 0;
                           const selectedCommitteeId = assignmentCommittee[applicant.id] || applicant.assignedCommitteeId || "";
                           const selectedCommittee = selectedConference.committees.find((committee) => committee.id === selectedCommitteeId);
                           const selectedPortfolioId = assignmentPortfolio[applicant.id] || applicant.assignedPortfolioId || "";
@@ -3982,10 +4034,20 @@ export default function OrganizerDashboardPage() {
                                   <p className="text-base mt-1" style={{ color: "var(--fg-muted)" }}>
                                     Category: {applicant.categoryName || "N/A"} · Country: {applicant.countryPreference || "N/A"}
                                   </p>
-                                  {preferenceSummary && !isOcTab && (
-                                    <p className="text-base mt-1" style={{ color: "var(--blue)" }}>
-                                      Preferences: {preferenceSummary}
-                                    </p>
+                                  {((applicant.committeePreferences || []).length > 0) && !isOcTab && (
+                                    <div className="mt-1 space-y-0.5">
+                                      {(applicant.committeePreferences || []).slice(0, 3).map((pref, prefIndex) => {
+                                        const portfolioPref = applicant.portfolioPreferencesByCommittee?.[pref]?.[0];
+                                        return (
+                                          <p key={`${applicant.id}-pref-${prefIndex}`} className="text-sm" style={{ color: "var(--blue)" }}>
+                                            {prefIndex + 1}. {resolvePreferenceLabel(pref, selectedConference.committees)}
+                                            {portfolioPref
+                                              ? ` → ${resolvePreferenceLabel(portfolioPref, selectedConference.committees)}`
+                                              : ""}
+                                          </p>
+                                        );
+                                      })}
+                                    </div>
                                   )}
                                   {isDraftAllotment && (
                                     <p className="text-sm mt-1" style={{ color: "var(--fg-muted)" }}>
@@ -4011,9 +4073,14 @@ export default function OrganizerDashboardPage() {
                                 <select
                                   className="input-base text-sm app-select-modern"
                                   value={selectedCommitteeId}
-                                  onChange={(event) =>
-                                    setAssignmentCommittee((prev) => ({ ...prev, [applicant.id]: event.target.value }))
-                                  }
+                                  onChange={(event) => {
+                                    setAssignmentCommittee((prev) => ({ ...prev, [applicant.id]: event.target.value }));
+                                    setAllotConfirmStep((prev) => {
+                                      const next = { ...prev };
+                                      delete next[applicant.id];
+                                      return next;
+                                    });
+                                  }}
                                 >
                                   <option value="">Select committee</option>
                                   {selectedConference.committees.map((committee) => {
@@ -4032,9 +4099,14 @@ export default function OrganizerDashboardPage() {
                                   <select
                                     className="input-base text-sm app-select-modern"
                                     value={selectedPortfolioId}
-                                    onChange={(event) =>
-                                      setAssignmentPortfolio((prev) => ({ ...prev, [applicant.id]: event.target.value }))
-                                    }
+                                    onChange={(event) => {
+                                      setAssignmentPortfolio((prev) => ({ ...prev, [applicant.id]: event.target.value }));
+                                      setAllotConfirmStep((prev) => {
+                                        const next = { ...prev };
+                                        delete next[applicant.id];
+                                        return next;
+                                      });
+                                    }}
                                     disabled={!selectedCommittee || (selectedCommittee.portfolios ?? []).length === 0}
                                   >
                                     <option value="">Select portfolio (optional)</option>
@@ -4116,7 +4188,16 @@ export default function OrganizerDashboardPage() {
                                 ) : (
                                 <button
                                   onClick={() => {
+                                    if (!selectedCommitteeId) return;
                                     if (applicantActionRef.current === applicant.id) return;
+                                    const currentStep = allotConfirmStep[applicant.id] ?? 0;
+                                    if (currentStep < 2) {
+                                      setAllotConfirmStep((prev) => ({
+                                        ...prev,
+                                        [applicant.id]: (currentStep + 1) as 1 | 2,
+                                      }));
+                                      return;
+                                    }
                                     applicantActionRef.current = applicant.id;
                                     setApplicantActionId(applicant.id);
                                     const result = assignApplicant({
@@ -4129,11 +4210,22 @@ export default function OrganizerDashboardPage() {
                                     else toast.show("Draft allotment saved. Release when ready.", "success");
                                     applicantActionRef.current = null;
                                     setApplicantActionId(null);
+                                    setAllotConfirmStep((prev) => {
+                                      const next = { ...prev };
+                                      delete next[applicant.id];
+                                      return next;
+                                    });
                                   }}
                                   className="btn btn-primary text-xs"
                                   disabled={!selectedCommitteeId || applicantActionId === applicant.id}
                                 >
-                                  {applicantActionId === applicant.id ? "Saving…" : "Allot (draft)"}
+                                  {applicantActionId === applicant.id
+                                    ? "Saving…"
+                                    : allotStep === 2
+                                      ? "Are you sure? This is final."
+                                      : allotStep === 1
+                                        ? "Confirm allotment?"
+                                        : "Allot (draft)"}
                                 </button>
                                 )}
                                 <button
@@ -4425,6 +4517,7 @@ export default function OrganizerDashboardPage() {
                     )}
                   </div>
 
+                  {(filteredEventDelegations.length > 0 || delegationSearchQuery.trim().length > 0) && (
                   <div className="card p-6 rounded-2xl mt-6">
                     <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
                       <h3 className="text-lg font-bold" style={{ color: "var(--fg)" }}>Delegations</h3>
@@ -4492,7 +4585,11 @@ export default function OrganizerDashboardPage() {
                       </div>
                     )}
                   </div>
+                  )}
 
+                  {selectedConference.committees.some(
+                    (committee) => (committee.portfolios ?? []).length > 0 || committee.noPortfolio
+                  ) && (
                   <div className="card p-6 rounded-2xl mt-6">
                     <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
                       <h3 className="text-lg font-bold" style={{ color: "var(--fg)" }}>Country Matrix</h3>
@@ -4500,6 +4597,19 @@ export default function OrganizerDashboardPage() {
                         {countryMatrixTotals.total} entries · {countryMatrixTotals.available} available · {countryMatrixTotals.allotted} allotted
                       </p>
                     </div>
+
+                    <label className="flex items-center gap-2 text-xs mb-4" style={{ color: "var(--fg-muted)" }}>
+                      <input
+                        type="checkbox"
+                        checked={selectedConference.portfolioMatrixVisibility === "PUBLIC"}
+                        onChange={(event) => {
+                          void updateOrganizerConferenceConfigAsync(selectedConference.id, {
+                            portfolioMatrixVisibility: event.target.checked ? "PUBLIC" : "PRIVATE",
+                          });
+                        }}
+                      />
+                      Show allotment status on public portfolio matrix
+                    </label>
 
                     <div className="flex items-center gap-2 mb-4 flex-wrap text-xs">
                       <span className="badge badge-success">Green = Available</span>
@@ -4587,6 +4697,7 @@ export default function OrganizerDashboardPage() {
                       </div>
                     )}
                   </div>
+                  )}
                   </>
                   )}
 
@@ -4638,17 +4749,43 @@ export default function OrganizerDashboardPage() {
                           )}
                           <select
                             className="input-base text-xs app-select-modern"
-                            value={committeeDraft.committeeType}
-                            onChange={(event) =>
+                            value={
+                              committeeDraft.noPortfolio &&
+                              isPressCommitteeFormat(
+                                committeeDraft.committeeFormat || undefined,
+                                committeeDraft.customTypeLabel
+                              )
+                                ? "INTERNATIONAL_PRESS"
+                                : committeeDraft.committeeType
+                            }
+                            onChange={(event) => {
+                              const value = event.target.value;
+                              if (value === "INTERNATIONAL_PRESS") {
+                                setCommitteeDraft((prev) => ({
+                                  ...prev,
+                                  committeeType: "CUSTOM",
+                                  noPortfolio: true,
+                                  customTypeLabel: "International Press",
+                                  committeeFormat: "PRESS_CORPS",
+                                  members: [],
+                                  memberInput: "",
+                                }));
+                                return;
+                              }
                               setCommitteeDraft((prev) => ({
                                 ...prev,
-                                committeeType: event.target.value as "UN" | "NON_UN" | "CUSTOM",
+                                committeeType: value as "UN" | "NON_UN" | "CUSTOM",
+                                noPortfolio: value === "UN" ? false : prev.noPortfolio,
                                 members: [],
                                 memberInput: "",
-                              }))
-                            }
+                                ...(value === "UN"
+                                  ? { committeeFormat: "", customTypeLabel: "" }
+                                  : {}),
+                              }));
+                            }}
                           >
                             <option value="UN">UN Committee</option>
+                            <option value="INTERNATIONAL_PRESS">International Press / Press Corps</option>
                             <option value="CUSTOM">Custom Type</option>
                           </select>
                           <input
@@ -4934,29 +5071,41 @@ export default function OrganizerDashboardPage() {
                               Seats: {committee.seatCount} · Allotted: {committee.allottedCount ?? 0} · Available: {committee.seatCount - (committee.allottedCount ?? 0)}
                             </p>
                             <p className="text-xs mt-1" style={{ color: "var(--fg-muted)" }}>
-                              Type: {getCommitteeTypeLabel(committee)} · Chair: {committee.chairName || "TBA"} · Visibility: {committee.isPublic === false ? "Private" : "Public"}
+                              Type: {getCommitteeTypeLabel(committee)} · Visibility: {committee.isPublic === false ? "Private" : "Public"}
                             </p>
-                            {(committee.chairs || []).length > 0 && (
-                              <p className="text-xs mt-1" style={{ color: "var(--fg-muted)" }}>
-                                Chairs: {(committee.chairs || [])
-                                  .map((chair) => `${chair.name}${chair.role ? ` (${chair.role})` : ""}`)
-                                  .join(", ")}
+                            <div className="mt-2">
+                              <p className="text-[10px] font-black uppercase tracking-widest mb-2" style={{ color: "var(--fg-muted)" }}>
+                                Chairs
                               </p>
-                            )}
+                              <div className="grid sm:grid-cols-2 gap-2">
+                                {(
+                                  (committee.chairs || []).length > 0
+                                    ? committee.chairs
+                                    : committee.chairName
+                                      ? [{ id: `${committee.id}-chair`, name: committee.chairName, role: "Chair" }]
+                                      : [{ id: `${committee.id}-tba`, name: "Chairs to be announced" }]
+                                )?.map((chair) => (
+                                  <div
+                                    key={chair.id}
+                                    className="rounded-xl p-3"
+                                    style={{ background: "var(--bg)", border: "1px solid var(--border)" }}
+                                  >
+                                    <p className="text-sm font-semibold" style={{ color: "var(--fg)" }}>{chair.name}</p>
+                                    {chair.role && (
+                                      <p className="text-xs mt-0.5" style={{ color: "var(--fg-muted)" }}>{chair.role}</p>
+                                    )}
+                                    {chair.email && (
+                                      <p className="text-xs mt-0.5" style={{ color: "var(--fg-muted)" }}>{chair.email}</p>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
                             <p className="text-xs mt-1" style={{ color: "var(--fg-muted)" }}>
                               Mode: {committee.memberMode === "UN_COUNTRY" ? "UN Countries" : "Custom Members"}
                             </p>
                             {committee.basePrice !== undefined && (
                               <p className="text-xs mt-1" style={{ color: "var(--fg-muted)" }}>Base Price: {formatMoney(committee.basePrice, selectedConference?.currency || "INR")}</p>
-                            )}
-                            {(committee.customQuestions ?? []).length > 0 && (
-                              <div className="mt-1">
-                                {(committee.customQuestions ?? []).map((question) => (
-                                  <p key={question.id} className="text-xs" style={{ color: "var(--fg-muted)" }}>
-                                    ? {question.question}
-                                  </p>
-                                ))}
-                              </div>
                             )}
                             {(committee.portfolios ?? []).length > 0 && (
                               <div className="mt-2 space-y-1">
@@ -5129,13 +5278,17 @@ export default function OrganizerDashboardPage() {
                         </button>
                       </div>
                       <div className="space-y-2 mt-4">
-                        {selectedConference.announcements.slice(0, 3).map((announcement) => (
+                        {selectedConference.announcements.length === 0 ? (
+                          <p className="text-sm" style={{ color: "var(--fg-muted)" }}>No announcements yet.</p>
+                        ) : (
+                          selectedConference.announcements.slice(0, 3).map((announcement) => (
                           <div key={announcement.id} className="p-3 rounded-xl text-xs" style={{ background: "var(--bg-subtle)" }}>
                             <p className="font-semibold" style={{ color: "var(--fg)" }}>{announcement.title}</p>
                             <p className="mt-1" style={{ color: "var(--fg-muted)" }}>{announcement.message}</p>
                             <p className="mt-1" style={{ color: "var(--fg-muted)" }}>{announcement.createdAt}</p>
                           </div>
-                        ))}
+                          ))
+                        )}
                       </div>
                     </div>
                   )}
@@ -6065,7 +6218,10 @@ export default function OrganizerDashboardPage() {
                         Add Team Member
                       </button>
                       <div className="space-y-2">
-                        {(selectedConference.organizerTeam || []).map((member) => (
+                        {(selectedConference.organizerTeam || []).length === 0 ? (
+                          <p className="text-sm" style={{ color: "var(--fg-muted)" }}>No team members added yet.</p>
+                        ) : (
+                        (selectedConference.organizerTeam || []).map((member) => (
                           <div key={member.id} className="p-2 rounded-xl flex items-center justify-between gap-3" style={{ background: "var(--bg-subtle)" }}>
                             <div className="flex items-center gap-3 min-w-0">
                               {member.photoUrl ? (
@@ -6096,7 +6252,8 @@ export default function OrganizerDashboardPage() {
                               }}
                             />
                           </div>
-                        ))}
+                        ))
+                        )}
                       </div>
                     </div>
                   )}
@@ -7744,7 +7901,7 @@ export default function OrganizerDashboardPage() {
               <button
                 className="btn btn-primary flex-1"
                 disabled={savingCommitteeDetails}
-                onClick={() => saveCommitteeDetails(selectedConference.id)}
+                onClick={() => void saveCommitteeDetails(selectedConference.id)}
               >
                 {savingCommitteeDetails ? "Saving…" : "Save Details"}
               </button>
