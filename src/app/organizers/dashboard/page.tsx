@@ -37,14 +37,19 @@ import {
   OrganizerDocument,
   OrganizerDocumentCategory,
   OrganizerStatusEmailTemplateKey,
+  type DynamicFormField,
+  type DynamicFieldType,
+  type RegistrationCategory,
 } from "@/lib/types";
 import {
   buildDefaultCommitteePrices,
   findIncompletePricingPhases,
   formatIncompletePricingPhasesMessage,
   getActivePhase,
+  getPhaseStatus,
   isPricingPhaseComplete,
   mergeNewCommitteesIntoPhases,
+  resolveRegistrationPrice,
 } from "@/lib/pricing";
 import {
   getCategoryRegistrationLabel,
@@ -69,12 +74,165 @@ import {
   INDIA_COMMITTEE_PRESETS,
   getCommitteePreset,
   isPressCommitteeFormat,
+  preferenceLabelForCommittee,
   type CommitteeFormatKey,
 } from "@/lib/india-committee-presets";
 import ConfirmModal, { DestructiveConfirmButton } from "@/components/ConfirmModal";
 
 const nextScheduleDayName = (entries: ConferenceScheduleEntry[]) =>
   `Day ${new Set(entries.map((entry) => entry.day)).size + 1}`;
+
+type RegistrationPreviewStep = 1 | 2 | 3 | 4;
+
+type QuestionFieldDraft = {
+  label: string;
+  type: DynamicFieldType;
+  placeholder: string;
+  required: boolean;
+  options: string[];
+  maxFiles: number;
+  maxFileSizeMb: number;
+};
+
+type QuestionEditorEntry = {
+  isEditing: boolean;
+  draft: QuestionFieldDraft;
+};
+
+function questionDraftFromField(field: DynamicFormField): QuestionFieldDraft {
+  return {
+    label: field.label,
+    type: field.type,
+    placeholder: field.placeholder || "",
+    required: field.required,
+    options: [...(field.options || [])],
+    maxFiles: field.maxFiles ?? 1,
+    maxFileSizeMb: field.maxFileSizeMb ?? 5,
+  };
+}
+
+function questionTypeLabel(type: DynamicFieldType): string {
+  const labels: Record<DynamicFieldType, string> = {
+    text: "Text",
+    textarea: "Long Text",
+    number: "Number",
+    date: "Date",
+    checkbox: "Checkbox (Yes/No)",
+    select: "Dropdown",
+    file: "File Upload",
+  };
+  return labels[type] || type;
+}
+
+function registrationFlowPreviewMeta(category: RegistrationCategory, conference: OrganizerConference) {
+  const applicationType = category.applicationType || "delegate";
+  const isOc = applicationType === "organizer";
+  const isDelegation = applicationType === "delegation";
+  const isPress = applicationType === "press";
+  const needsPreferences = !isOc;
+  const needsQuestions = category.formFields.length > 0 || isDelegation;
+  const needsPortfolio =
+    needsPreferences && (applicationType === "delegate" || applicationType === "delegation");
+  const committees = conference.committees || [];
+  const pressCommittees = committees.filter(
+    (committee) =>
+      committee.committeeFormat === "PRESS_CORPS" ||
+      committee.committeeFormat === "IP" ||
+      committee.customTypeLabel?.toLowerCase().includes("press")
+  );
+  const checkoutCommittees = isPress && pressCommittees.length > 0 ? pressCommittees : committees;
+  const firstCommittee = checkoutCommittees[0];
+  const portfolioLabel = firstCommittee
+    ? preferenceLabelForCommittee(firstCommittee.committeeType, firstCommittee.committeeFormat)
+    : "Portfolio";
+  const allocationMode = conference.allocationMode || "PAY_FIRST";
+  const isAllotFirst = allocationMode === "ALLOT_FIRST";
+  const priceResult = resolveRegistrationPrice(category, firstCommittee?.id);
+  const activePhase = getActivePhase(category.pricingPhases);
+  const committeeQuestionCount = firstCommittee?.customQuestions?.length ?? 0;
+  return {
+    applicationType,
+    isOc,
+    isDelegation,
+    isPress,
+    needsPreferences,
+    needsQuestions,
+    needsPortfolio,
+    checkoutCommittees,
+    firstCommittee,
+    portfolioLabel,
+    allocationMode,
+    isAllotFirst,
+    priceResult,
+    activePhase,
+    committeeQuestionCount,
+  };
+}
+
+function renderPreviewFormField(field: DynamicFormField) {
+  const label = (
+    <label className="block text-xs font-semibold mb-1" style={{ color: "var(--fg)" }}>
+      {field.label || "Question"}
+      {field.required ? " *" : ""}
+    </label>
+  );
+  if (field.type === "select") {
+    return (
+      <div key={field.id}>
+        {label}
+        <select className="input-base text-xs w-full" disabled defaultValue="">
+          <option value="">Select option</option>
+          {(field.options || []).map((option) => (
+            <option key={option} value={option}>
+              {option}
+            </option>
+          ))}
+        </select>
+      </div>
+    );
+  }
+  if (field.type === "textarea") {
+    return (
+      <div key={field.id}>
+        {label}
+        <textarea className="input-base text-xs w-full" rows={3} disabled placeholder={field.placeholder} />
+      </div>
+    );
+  }
+  if (field.type === "checkbox") {
+    return (
+      <div key={field.id}>
+        {label}
+        <label className="flex items-center gap-2 text-xs" style={{ color: "var(--fg-muted)" }}>
+          <input type="checkbox" disabled />
+          Yes
+        </label>
+      </div>
+    );
+  }
+  if (field.type === "file") {
+    return (
+      <div key={field.id}>
+        {label}
+        <input className="input-base text-xs w-full" type="file" disabled />
+        <p className="text-[11px] mt-1" style={{ color: "var(--fg-muted)" }}>
+          Max files: {field.maxFiles || 1} · Max size: {field.maxFileSizeMb || 5}MB
+        </p>
+      </div>
+    );
+  }
+  return (
+    <div key={field.id}>
+      {label}
+      <input
+        className="input-base text-xs w-full"
+        type={field.type === "number" ? "number" : field.type === "date" ? "date" : "text"}
+        disabled
+        placeholder={field.placeholder}
+      />
+    </div>
+  );
+}
 
 const STATUS_STYLES: Record<OrganizerConference["status"], string> = {
   Draft: "badge-gray",
@@ -539,6 +697,7 @@ export default function OrganizerDashboardPage() {
   const [autoAssignProgress, setAutoAssignProgress] = useState("");
   const [pricingCategoryTypeTab, setPricingCategoryTypeTab] =
     useState<RegistrationCategoryUiType>("delegate");
+  const [registrationPreviewStep, setRegistrationPreviewStep] = useState<RegistrationPreviewStep>(1);
   const [applicantProfileDrawerOpen, setApplicantProfileDrawerOpen] = useState(false);
   const [chairAllotModalOpen, setChairAllotModalOpen] = useState(false);
   const [chairAllotApplicantId, setChairAllotApplicantId] = useState("");
@@ -573,7 +732,7 @@ export default function OrganizerDashboardPage() {
     role: "USG",
     photoUrl: "",
   });
-  const [questionEditorState, setQuestionEditorState] = useState<Record<string, { draft: string; isEditing: boolean }>>({});
+  const [questionEditorState, setQuestionEditorState] = useState<Record<string, QuestionEditorEntry>>({});
   const [editionDraft, setEditionDraft] = useState({
     year: "",
     title: "",
@@ -903,6 +1062,35 @@ export default function OrganizerDashboardPage() {
     }));
   };
 
+  const addCommitteeQuestionDraftRow = () => {
+    setDetailsEditorDraft((prev) => ({
+      ...prev,
+      customQuestions: [
+        ...prev.customQuestions,
+        { id: `cq-${Date.now()}`, question: "", required: false },
+      ],
+    }));
+  };
+
+  const updateCommitteeQuestionDraftRow = (
+    questionId: string,
+    patch: Partial<{ question: string; required: boolean }>
+  ) => {
+    setDetailsEditorDraft((prev) => ({
+      ...prev,
+      customQuestions: prev.customQuestions.map((entry) =>
+        entry.id === questionId ? { ...entry, ...patch } : entry
+      ),
+    }));
+  };
+
+  const removeCommitteeQuestionDraftRow = (questionId: string) => {
+    setDetailsEditorDraft((prev) => ({
+      ...prev,
+      customQuestions: prev.customQuestions.filter((entry) => entry.id !== questionId),
+    }));
+  };
+
   const readImageFileToDataUrl = (
     event: ChangeEvent<HTMLInputElement>,
     onDone: (dataUrl: string) => void,
@@ -977,6 +1165,13 @@ export default function OrganizerDashboardPage() {
           role: chair.role.trim() || undefined,
         }))
         .filter((chair) => chair.name);
+      const normalizedCustomQuestions = detailsEditorDraft.customQuestions
+        .map((entry, index) => ({
+          id: entry.id || `${detailsEditorCommitteeId}-cq-${index}`,
+          question: entry.question.trim(),
+          required: entry.required,
+        }))
+        .filter((entry) => entry.question);
       updateOrganizerCommitteeConfig(conferenceId, detailsEditorCommitteeId, {
         name: detailsEditorDraft.name.trim() || "Committee",
         description: detailsEditorDraft.description.trim() || undefined,
@@ -986,6 +1181,7 @@ export default function OrganizerDashboardPage() {
         chairs: normalizedChairs,
         chairName: normalizedChairs[0]?.name,
         chairEmail: normalizedChairs[0]?.email,
+        customQuestions: normalizedCustomQuestions,
         ...(selectedDetailsEditorCommittee?.noPortfolio
           ? {
               seatCount: Math.max(1, Number(detailsEditorDraft.seatCount) || 1),
@@ -1990,6 +2186,10 @@ export default function OrganizerDashboardPage() {
     pricingCategoriesJson !== pricingSavedCategoriesJson;
 
   useEffect(() => {
+    setRegistrationPreviewStep(1);
+  }, [pricingCategoryTypeTab]);
+
+  useEffect(() => {
     if (!selectedConference) {
       setPricingSavedCategoriesJson("");
       return;
@@ -2236,17 +2436,19 @@ export default function OrganizerDashboardPage() {
     updateRegistrationCategoryConfig(conferenceId, category.id, { pricingPhases: nextPhases });
   };
   const addCategoryQuestion = (conferenceId: string, category: OrganizerConference["registrationCategories"][number]) => {
-    const nextFields = [
-      ...(category.formFields || []),
-      {
-        id: `field-${Date.now()}`,
-        label: "",
-        type: "text" as const,
-        required: false,
-        placeholder: "",
-      },
-    ];
+    const newField: DynamicFormField = {
+      id: `field-${Date.now()}`,
+      label: "",
+      type: "text",
+      required: false,
+      placeholder: "",
+    };
+    const nextFields = [...(category.formFields || []), newField];
     updateRegistrationCategoryConfig(conferenceId, category.id, { formFields: nextFields });
+    setQuestionEditorState((prev) => ({
+      ...prev,
+      [newField.id]: { isEditing: true, draft: questionDraftFromField(newField) },
+    }));
   };
   const updateCategoryQuestion = (
     conferenceId: string,
@@ -2262,9 +2464,34 @@ export default function OrganizerDashboardPage() {
       } else if (!Array.isArray(nextField.options)) {
         nextField.options = [];
       }
+      if (nextField.type !== "file") {
+        delete nextField.maxFiles;
+        delete nextField.maxFileSizeMb;
+      }
       return nextField;
     });
     updateRegistrationCategoryConfig(conferenceId, category.id, { formFields: nextFields });
+  };
+  const saveCategoryQuestionDraft = (
+    conferenceId: string,
+    category: OrganizerConference["registrationCategories"][number],
+    fieldId: string,
+    draft: QuestionFieldDraft
+  ) => {
+    const patch: Partial<DynamicFormField> = {
+      label: draft.label.trim(),
+      type: draft.type,
+      placeholder: draft.placeholder.trim() || undefined,
+      required: draft.required,
+    };
+    if (draft.type === "select") {
+      patch.options = draft.options.map((option) => option.trim()).filter(Boolean);
+    }
+    if (draft.type === "file") {
+      patch.maxFiles = Math.max(1, Math.floor(draft.maxFiles) || 1);
+      patch.maxFileSizeMb = Math.max(1, Math.floor(draft.maxFileSizeMb) || 5);
+    }
+    updateCategoryQuestion(conferenceId, category, fieldId, patch);
   };
   const removeCategoryQuestion = (conferenceId: string, category: OrganizerConference["registrationCategories"][number], fieldId: string) => {
     const nextFields = (category.formFields || []).filter((field) => field.id !== fieldId);
@@ -6214,12 +6441,338 @@ export default function OrganizerDashboardPage() {
                             </div>
 
                             <div className="rounded-lg p-3 mt-3 space-y-2" style={{ background: "var(--bg)" }}>
-                              <div className="rounded-lg p-3" style={{ border: "1px solid var(--border)" }}>
-                                <p className="text-sm font-semibold" style={{ color: "var(--fg)" }}>Student Flow Preview</p>
-                                <p className="text-xs mt-1" style={{ color: "var(--fg-muted)" }}>
-                                  Step 1: Basic Info (name, contact, category) → Step 2: {categoryLabel} Questions
-                                </p>
-                              </div>
+                              {(() => {
+                                const preview = registrationFlowPreviewMeta(category, selectedConference);
+                                const previewCurrency = selectedConference.currency || "INR";
+                                const previewStepMeta: Array<{
+                                  step: RegistrationPreviewStep;
+                                  label: string;
+                                  skipped: boolean;
+                                }> = [
+                                  { step: 1, label: "Category & contact", skipped: false },
+                                  {
+                                    step: 2,
+                                    label: "Preferences",
+                                    skipped: !preview.needsPreferences,
+                                  },
+                                  {
+                                    step: 3,
+                                    label: "Questions",
+                                    skipped: !preview.needsQuestions,
+                                  },
+                                  { step: 4, label: preview.isAllotFirst ? "Confirm" : "Payment", skipped: false },
+                                ];
+                                const firstCommitteePortfolios = preview.firstCommittee?.portfolios ?? [];
+                                return (
+                                  <div className="rounded-lg p-3 space-y-3" style={{ border: "1px solid var(--border)" }}>
+                                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                                      <div>
+                                        <p className="text-sm font-semibold" style={{ color: "var(--fg)" }}>
+                                          Student registration preview
+                                        </p>
+                                        <p className="text-xs mt-1" style={{ color: "var(--fg-muted)" }}>
+                                          This is what a {categoryLabel.toLowerCase()} sees at checkout when they click Continue.
+                                        </p>
+                                      </div>
+                                      <span className="badge badge-gray text-[10px]">
+                                        {preview.isAllotFirst ? "Allot first" : "Pay first"}
+                                      </span>
+                                    </div>
+                                    <div className="flex flex-wrap gap-2">
+                                      {previewStepMeta.map((entry) => {
+                                        const isActive = registrationPreviewStep === entry.step;
+                                        return (
+                                          <button
+                                            key={entry.step}
+                                            type="button"
+                                            className="btn text-xs"
+                                            style={{
+                                              opacity: entry.skipped ? 0.65 : 1,
+                                              background: isActive ? "var(--blue)" : "var(--bg-subtle)",
+                                              color: isActive ? "#fff" : "var(--fg)",
+                                              border: isActive ? "none" : "1px solid var(--border)",
+                                            }}
+                                            onClick={() => setRegistrationPreviewStep(entry.step)}
+                                          >
+                                            Step {entry.step}: {entry.label}
+                                            {entry.skipped ? " (skipped)" : ""}
+                                          </button>
+                                        );
+                                      })}
+                                    </div>
+                                    <div
+                                      className="rounded-xl p-4 space-y-3"
+                                      style={{ background: "var(--bg-subtle)", border: "1px solid var(--border)" }}
+                                    >
+                                      {registrationPreviewStep === 1 && (
+                                        <>
+                                          <h4 className="text-sm font-bold" style={{ color: "var(--fg)" }}>
+                                            1. Category &amp; contact
+                                          </h4>
+                                          <div
+                                            className="rounded-xl p-3 space-y-2"
+                                            style={{ border: "1px solid var(--border)", background: "var(--bg)" }}
+                                          >
+                                            <div className="flex items-center justify-between gap-2">
+                                              <span className="font-semibold text-sm" style={{ color: "var(--fg)" }}>
+                                                {category.name}
+                                              </span>
+                                              <span className="badge badge-blue">
+                                                {formatMoney(category.basePrice, previewCurrency)}
+                                              </span>
+                                            </div>
+                                            <p className="text-xs" style={{ color: "var(--blue)" }}>
+                                              {getCategoryTypeLabel(category.applicationType)}
+                                            </p>
+                                            <p className="text-xs" style={{ color: "var(--fg-muted)" }}>
+                                              {category.description || "No description provided."}
+                                            </p>
+                                            {category.pricingPhases.length > 0 && (
+                                              <div className="flex flex-wrap gap-1.5">
+                                                {category.pricingPhases.map((phase) => {
+                                                  const status = getPhaseStatus(phase, new Date());
+                                                  const badgeClass =
+                                                    status === "Active"
+                                                      ? "badge-green"
+                                                      : status === "Upcoming"
+                                                        ? "badge-blue"
+                                                        : "badge-gray";
+                                                  return (
+                                                    <span key={phase.id} className={`badge ${badgeClass}`}>
+                                                      {phase.name} · {status === "Ended" ? "Ended" : status}
+                                                    </span>
+                                                  );
+                                                })}
+                                              </div>
+                                            )}
+                                            {preview.activePhase && (
+                                              <p className="text-[11px]" style={{ color: "var(--fg-muted)" }}>
+                                                Active phase: {preview.activePhase.name} (
+                                                {formatMoney(preview.activePhase.basePrice, previewCurrency)})
+                                              </p>
+                                            )}
+                                          </div>
+                                          <input className="input-base text-xs" disabled placeholder="Full name *" />
+                                          <input
+                                            className="input-base text-xs"
+                                            disabled
+                                            placeholder="School / University *"
+                                          />
+                                          <input className="input-base text-xs" disabled placeholder="Phone *" />
+                                          <button type="button" className="btn btn-primary text-xs w-full" disabled>
+                                            Continue →
+                                          </button>
+                                        </>
+                                      )}
+                                      {registrationPreviewStep === 2 && (
+                                        <>
+                                          <h4 className="text-sm font-bold" style={{ color: "var(--fg)" }}>
+                                            2. Preferences
+                                          </h4>
+                                          {preview.isOc ? (
+                                            <p className="text-xs" style={{ color: "var(--fg-muted)" }}>
+                                              This registration type skips committee selection. Students go straight to
+                                              additional questions (if any) or payment.
+                                            </p>
+                                          ) : preview.checkoutCommittees.length === 0 ? (
+                                            <p className="text-xs" style={{ color: "var(--fg-muted)" }}>
+                                              No committees are configured yet. Add committees in the Committees section
+                                              before students can register.
+                                            </p>
+                                          ) : (
+                                            <>
+                                              <p className="text-xs" style={{ color: "var(--fg-muted)" }}>
+                                                {preview.applicationType === "chair"
+                                                  ? "Students choose 3 committee preferences."
+                                                  : preview.needsPortfolio
+                                                    ? `Students choose 3 committee preferences and 3 ${preview.portfolioLabel.toLowerCase()} preferences for their 1st choice.`
+                                                    : "Students choose 3 committee preferences."}
+                                              </p>
+                                              {(["1st", "2nd", "3rd"] as const).map((rank) => (
+                                                <label key={rank} className="block text-xs" style={{ color: "var(--fg-muted)" }}>
+                                                  {rank} committee preference
+                                                  <select className="input-base text-xs mt-1 w-full" disabled defaultValue="">
+                                                    <option value="">Select committee</option>
+                                                    {preview.checkoutCommittees.map((committee) => (
+                                                      <option key={committee.id} value={committee.id}>
+                                                        {committee.name}
+                                                      </option>
+                                                    ))}
+                                                  </select>
+                                                </label>
+                                              ))}
+                                              {preview.needsPortfolio && firstCommitteePortfolios.length > 0 && (
+                                                <>
+                                                  <p className="text-xs font-semibold pt-1" style={{ color: "var(--fg)" }}>
+                                                    {preview.portfolioLabel} preferences (1st choice committee)
+                                                  </p>
+                                                  {(["1st", "2nd", "3rd"] as const).map((rank) => (
+                                                    <label
+                                                      key={`${rank}-portfolio`}
+                                                      className="block text-xs"
+                                                      style={{ color: "var(--fg-muted)" }}
+                                                    >
+                                                      {rank} {preview.portfolioLabel.toLowerCase()} preference
+                                                      <select
+                                                        className="input-base text-xs mt-1 w-full"
+                                                        disabled
+                                                        defaultValue=""
+                                                      >
+                                                        <option value="">Select {preview.portfolioLabel.toLowerCase()}</option>
+                                                        {firstCommitteePortfolios.map((portfolio) => (
+                                                          <option key={portfolio.id} value={portfolio.name}>
+                                                            {portfolio.name}
+                                                          </option>
+                                                        ))}
+                                                      </select>
+                                                    </label>
+                                                  ))}
+                                                </>
+                                              )}
+                                              {preview.firstCommittee && (
+                                                <p className="text-[11px]" style={{ color: "var(--fg-muted)" }}>
+                                                  Questions asked for {preview.firstCommittee.name}:{" "}
+                                                  {preview.committeeQuestionCount} question
+                                                  {preview.committeeQuestionCount === 1 ? "" : "s"} — edit in the
+                                                  Committees section (Edit Details → Committee Questions).
+                                                </p>
+                                              )}
+                                              {preview.firstCommittee &&
+                                                (preview.firstCommittee.customQuestions ?? []).length > 0 && (
+                                                  <div className="space-y-2 pt-1">
+                                                    {(preview.firstCommittee.customQuestions ?? []).map((question) => (
+                                                      <div key={question.id}>
+                                                        <label
+                                                          className="block text-xs font-semibold mb-1"
+                                                          style={{ color: "var(--fg)" }}
+                                                        >
+                                                          {question.question}
+                                                          {question.required ? " *" : ""}
+                                                        </label>
+                                                        <input className="input-base text-xs w-full" disabled />
+                                                      </div>
+                                                    ))}
+                                                  </div>
+                                                )}
+                                            </>
+                                          )}
+                                          <button type="button" className="btn btn-primary text-xs w-full" disabled>
+                                            Continue →
+                                          </button>
+                                        </>
+                                      )}
+                                      {registrationPreviewStep === 3 && (
+                                        <>
+                                          <h4 className="text-sm font-bold" style={{ color: "var(--fg)" }}>
+                                            3. Additional questions
+                                          </h4>
+                                          {!preview.needsQuestions ? (
+                                            <p className="text-xs" style={{ color: "var(--fg-muted)" }}>
+                                              No questions yet — use the Application Questions editor below to add some.
+                                              This step is skipped in checkout until questions exist.
+                                            </p>
+                                          ) : (
+                                            <>
+                                              {category.formFields.length === 0 ? (
+                                                <p className="text-xs" style={{ color: "var(--fg-muted)" }}>
+                                                  Only the delegation size question is shown for this category.
+                                                </p>
+                                              ) : (
+                                                <div className="space-y-3">
+                                                  {category.formFields.map((field) => renderPreviewFormField(field))}
+                                                </div>
+                                              )}
+                                              {preview.isDelegation && (
+                                                <div>
+                                                  <label
+                                                    className="block text-xs font-semibold mb-1"
+                                                    style={{ color: "var(--fg)" }}
+                                                  >
+                                                    Number of delegates in this delegation *
+                                                  </label>
+                                                  <input
+                                                    className="input-base text-xs w-full"
+                                                    type="number"
+                                                    disabled
+                                                    placeholder={
+                                                      category.maxDelegatesPerDelegation
+                                                        ? `Max ${category.maxDelegatesPerDelegation}`
+                                                        : "Enter delegation size"
+                                                    }
+                                                  />
+                                                </div>
+                                              )}
+                                            </>
+                                          )}
+                                          <button type="button" className="btn btn-primary text-xs w-full" disabled>
+                                            Continue →
+                                          </button>
+                                        </>
+                                      )}
+                                      {registrationPreviewStep === 4 && (
+                                        <>
+                                          <h4 className="text-sm font-bold" style={{ color: "var(--fg)" }}>
+                                            4. {preview.isAllotFirst || preview.priceResult.amount <= 0
+                                              ? "Confirm application"
+                                              : "Payment"}
+                                          </h4>
+                                          <p className="text-xs" style={{ color: "var(--fg-muted)" }}>
+                                            {preview.isAllotFirst
+                                              ? "Submit now, pay after allotment. Students confirm their application without paying upfront."
+                                              : preview.priceResult.amount <= 0
+                                                ? "Students review details and confirm a free registration."
+                                                : "Payment required — delegates pay when submitting."}
+                                          </p>
+                                          <div
+                                            className="rounded-xl p-3 space-y-1"
+                                            style={{ border: "1px solid var(--border)", background: "var(--bg)" }}
+                                          >
+                                            <p className="text-xs font-semibold" style={{ color: "var(--fg)" }}>
+                                              Review your submission
+                                            </p>
+                                            <p className="text-xs" style={{ color: "var(--fg-muted)" }}>
+                                              Name: Student name
+                                            </p>
+                                            <p className="text-xs" style={{ color: "var(--fg-muted)" }}>
+                                              Phone: +91 …
+                                            </p>
+                                            <p className="text-xs" style={{ color: "var(--fg-muted)" }}>
+                                              Category: {category.name}
+                                            </p>
+                                            {!preview.isOc && preview.firstCommittee && (
+                                              <p className="text-xs" style={{ color: "var(--fg-muted)" }}>
+                                                Committee: {preview.firstCommittee.name}
+                                              </p>
+                                            )}
+                                          </div>
+                                          <div
+                                            className="rounded-xl p-3 space-y-1"
+                                            style={{ border: "1px solid var(--border)", background: "var(--bg)" }}
+                                          >
+                                            <div className="flex justify-between text-xs">
+                                              <span style={{ color: "var(--fg-muted)" }}>Resolved fee</span>
+                                              <span style={{ color: "var(--fg)" }}>
+                                                {formatMoney(preview.priceResult.amount, previewCurrency)}
+                                              </span>
+                                            </div>
+                                            <div className="flex justify-between text-xs">
+                                              <span style={{ color: "var(--fg-muted)" }}>Pricing phase</span>
+                                              <span style={{ color: "var(--fg)" }}>
+                                                {preview.priceResult.phaseName || "Base price"}
+                                              </span>
+                                            </div>
+                                          </div>
+                                          <button type="button" className="btn btn-primary text-xs w-full" disabled>
+                                            {preview.isAllotFirst || preview.priceResult.amount <= 0
+                                              ? "Submit application"
+                                              : `Submit & pay (${formatMoney(preview.priceResult.amount, previewCurrency)})`}
+                                          </button>
+                                        </>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })()}
                               <div className="flex items-center justify-between">
                                 <p className="text-sm font-semibold" style={{ color: "var(--fg)" }}>Application Questions</p>
                                 <button
@@ -6235,30 +6788,111 @@ export default function OrganizerDashboardPage() {
                                 </p>
                               ) : (
                                 <div className="space-y-2">
-                                  {category.formFields.map((field, fieldIndex) => (
+                                  {category.formFields.map((field, fieldIndex) => {
+                                    const editorEntry = questionEditorState[field.id];
+                                    const isEditing = editorEntry?.isEditing ?? false;
+                                    const draft = editorEntry?.draft ?? questionDraftFromField(field);
+                                    const patchDraft = (patch: Partial<QuestionFieldDraft>) => {
+                                      setQuestionEditorState((prev) => ({
+                                        ...prev,
+                                        [field.id]: {
+                                          isEditing: true,
+                                          draft: { ...draft, ...patch },
+                                        },
+                                      }));
+                                    };
+                                    return (
                                     <div key={field.id} className="rounded-lg p-2 space-y-2" style={{ border: "1px solid var(--border)" }}>
                                       <p className="text-xs font-semibold" style={{ color: "var(--fg-muted)" }}>Question {fieldIndex + 1}</p>
+                                      {!isEditing ? (
+                                        <>
+                                          <p className="text-sm font-semibold" style={{ color: "var(--fg)" }}>
+                                            {field.label.trim() || "Untitled question"}
+                                          </p>
+                                          <div className="flex flex-wrap gap-1.5">
+                                            <span className="badge badge-gray text-[10px]">{questionTypeLabel(field.type)}</span>
+                                            {field.required && (
+                                              <span className="badge badge-gold text-[10px]">Required</span>
+                                            )}
+                                            {field.placeholder && (
+                                              <span className="badge badge-gray text-[10px]">
+                                                Placeholder: {field.placeholder}
+                                              </span>
+                                            )}
+                                            {field.type === "select" && (
+                                              <span className="badge badge-gray text-[10px]">
+                                                {(field.options || []).filter((option) => option.trim()).length} options
+                                              </span>
+                                            )}
+                                            {field.type === "file" && (
+                                              <span className="badge badge-gray text-[10px]">
+                                                Max {field.maxFiles ?? 1} file{(field.maxFiles ?? 1) === 1 ? "" : "s"} ·{" "}
+                                                {field.maxFileSizeMb ?? 5} MB each
+                                              </span>
+                                            )}
+                                          </div>
+                                          <div className="flex justify-end gap-2">
+                                            <button
+                                              type="button"
+                                              className="btn btn-ghost text-xs"
+                                              onClick={() =>
+                                                setQuestionEditorState((prev) => ({
+                                                  ...prev,
+                                                  [field.id]: {
+                                                    isEditing: true,
+                                                    draft: questionDraftFromField(field),
+                                                  },
+                                                }))
+                                              }
+                                            >
+                                              Edit Question
+                                            </button>
+                                            <button
+                                              type="button"
+                                              className="btn btn-danger-ghost text-xs"
+                                              onClick={() => {
+                                                setQuestionEditorState((prev) => {
+                                                  const next = { ...prev };
+                                                  delete next[field.id];
+                                                  return next;
+                                                });
+                                                removeCategoryQuestion(selectedConference.id, category, field.id);
+                                              }}
+                                            >
+                                              Remove Question
+                                            </button>
+                                          </div>
+                                        </>
+                                      ) : (
+                                        <>
                                       <input
                                         className="input-base text-xs"
                                         placeholder="Question label"
-                                        value={questionEditorState[field.id]?.isEditing ? questionEditorState[field.id]?.draft ?? field.label : field.label}
-                                        readOnly={!questionEditorState[field.id]?.isEditing}
-                                        onChange={(event) =>
-                                          setQuestionEditorState((prev) => ({
-                                            ...prev,
-                                            [field.id]: { draft: event.target.value, isEditing: true },
-                                          }))
-                                        }
+                                        value={draft.label}
+                                        onChange={(event) => patchDraft({ label: event.target.value })}
                                       />
                                       <div className="grid md:grid-cols-3 gap-2">
                                         <select
                                           className="input-base text-xs"
-                                          value={field.type}
-                                          onChange={(event) =>
-                                            updateCategoryQuestion(selectedConference.id, category, field.id, {
-                                              type: event.target.value as "text" | "textarea" | "select" | "number" | "date" | "checkbox",
-                                            })
-                                          }
+                                          value={draft.type}
+                                          onChange={(event) => {
+                                            const nextType = event.target.value as DynamicFieldType;
+                                            const nextDraft: QuestionFieldDraft = {
+                                              ...draft,
+                                              type: nextType,
+                                            };
+                                            if (nextType === "select" && draft.options.length === 0) {
+                                              nextDraft.options = ["Option 1"];
+                                            }
+                                            if (nextType === "file") {
+                                              nextDraft.maxFiles = draft.maxFiles || 1;
+                                              nextDraft.maxFileSizeMb = draft.maxFileSizeMb || 5;
+                                            }
+                                            setQuestionEditorState((prev) => ({
+                                              ...prev,
+                                              [field.id]: { isEditing: true, draft: nextDraft },
+                                            }));
+                                          }}
                                         >
                                           <option value="text">Text</option>
                                           <option value="textarea">Long Text</option>
@@ -6266,52 +6900,56 @@ export default function OrganizerDashboardPage() {
                                           <option value="date">Date</option>
                                           <option value="checkbox">Checkbox (Yes/No)</option>
                                           <option value="select">Dropdown</option>
+                                          <option value="file">File Upload</option>
                                         </select>
                                         <input
                                           className="input-base text-xs"
                                           placeholder="Placeholder (optional)"
-                                          value={field.placeholder || ""}
-                                          onChange={(event) =>
-                                            updateCategoryQuestion(selectedConference.id, category, field.id, {
-                                              placeholder: event.target.value,
-                                            })
-                                          }
+                                          value={draft.placeholder}
+                                          onChange={(event) => patchDraft({ placeholder: event.target.value })}
                                         />
                                         <label className="flex items-center gap-2 text-xs px-2" style={{ color: "var(--fg-muted)" }}>
                                           <input
                                             type="checkbox"
-                                            checked={field.required}
-                                            onChange={(event) =>
-                                              updateCategoryQuestion(selectedConference.id, category, field.id, {
-                                                required: event.target.checked,
-                                              })
-                                            }
+                                            checked={draft.required}
+                                            onChange={(event) => patchDraft({ required: event.target.checked })}
                                           />
                                           Required
                                         </label>
                                       </div>
-                                      {field.type === "select" && (
+                                      {draft.type === "select" && (
                                         <div className="space-y-2">
-                                          {(field.options || []).map((option, optionIndex) => (
-                                            <input
-                                              key={`${field.id}-option-${optionIndex}`}
-                                              className="input-base text-xs"
-                                              placeholder={`Option ${optionIndex + 1}`}
-                                              value={option}
-                                              onChange={(event) => {
-                                                const next = [...(field.options || [])];
-                                                next[optionIndex] = event.target.value;
-                                                updateCategoryQuestion(selectedConference.id, category, field.id, {
-                                                  options: next.filter((entry) => entry.trim()),
-                                                });
-                                              }}
-                                            />
+                                          {draft.options.map((option, optionIndex) => (
+                                            <div key={`${field.id}-option-${optionIndex}`} className="flex gap-2">
+                                              <input
+                                                className="input-base text-xs flex-1"
+                                                placeholder={`Option ${optionIndex + 1}`}
+                                                value={option}
+                                                onChange={(event) => {
+                                                  const next = [...draft.options];
+                                                  next[optionIndex] = event.target.value;
+                                                  patchDraft({ options: next });
+                                                }}
+                                              />
+                                              <button
+                                                type="button"
+                                                className="btn btn-danger-ghost text-xs shrink-0"
+                                                onClick={() =>
+                                                  patchDraft({
+                                                    options: draft.options.filter((_, index) => index !== optionIndex),
+                                                  })
+                                                }
+                                              >
+                                                Remove
+                                              </button>
+                                            </div>
                                           ))}
                                           <button
+                                            type="button"
                                             className="btn btn-ghost text-xs"
                                             onClick={() =>
-                                              updateCategoryQuestion(selectedConference.id, category, field.id, {
-                                                options: [...(field.options || []), `Option ${(field.options || []).length + 1}`],
+                                              patchDraft({
+                                                options: [...draft.options, `Option ${draft.options.length + 1}`],
                                               })
                                             }
                                           >
@@ -6319,37 +6957,94 @@ export default function OrganizerDashboardPage() {
                                           </button>
                                         </div>
                                       )}
+                                      {draft.type === "file" && (
+                                        <div className="grid md:grid-cols-2 gap-2">
+                                          <label className="text-xs" style={{ color: "var(--fg-muted)" }}>
+                                            Max files
+                                            <input
+                                              className="input-base text-xs mt-1"
+                                              type="number"
+                                              min={1}
+                                              value={draft.maxFiles}
+                                              onChange={(event) =>
+                                                patchDraft({
+                                                  maxFiles: Math.max(1, Number(event.target.value) || 1),
+                                                })
+                                              }
+                                            />
+                                          </label>
+                                          <label className="text-xs" style={{ color: "var(--fg-muted)" }}>
+                                            Max file size (MB)
+                                            <input
+                                              className="input-base text-xs mt-1"
+                                              type="number"
+                                              min={1}
+                                              value={draft.maxFileSizeMb}
+                                              onChange={(event) =>
+                                                patchDraft({
+                                                  maxFileSizeMb: Math.max(1, Number(event.target.value) || 5),
+                                                })
+                                              }
+                                            />
+                                          </label>
+                                          <p className="text-[11px] md:col-span-2" style={{ color: "var(--fg-muted)" }}>
+                                            Students will see these limits on the registration form.
+                                          </p>
+                                        </div>
+                                      )}
                                       <div className="flex justify-end gap-2">
                                         <button
+                                          type="button"
                                           className="btn btn-ghost text-xs"
                                           onClick={() => {
-                                            if (questionEditorState[field.id]?.isEditing) {
-                                              updateCategoryQuestion(selectedConference.id, category, field.id, {
-                                                label: questionEditorState[field.id]?.draft ?? field.label,
-                                              });
-                                              setQuestionEditorState((prev) => ({
-                                                ...prev,
-                                                [field.id]: { draft: "", isEditing: false },
-                                              }));
-                                            } else {
-                                              setQuestionEditorState((prev) => ({
-                                                ...prev,
-                                                [field.id]: { draft: field.label, isEditing: true },
-                                              }));
-                                            }
+                                            saveCategoryQuestionDraft(
+                                              selectedConference.id,
+                                              category,
+                                              field.id,
+                                              draft
+                                            );
+                                            setQuestionEditorState((prev) => {
+                                              const next = { ...prev };
+                                              delete next[field.id];
+                                              return next;
+                                            });
                                           }}
                                         >
-                                          {questionEditorState[field.id]?.isEditing ? "Save Question" : "Edit Question"}
+                                          Save Question
                                         </button>
                                         <button
+                                          type="button"
+                                          className="btn btn-ghost text-xs"
+                                          onClick={() =>
+                                            setQuestionEditorState((prev) => {
+                                              const next = { ...prev };
+                                              delete next[field.id];
+                                              return next;
+                                            })
+                                          }
+                                        >
+                                          Cancel
+                                        </button>
+                                        <button
+                                          type="button"
                                           className="btn btn-danger-ghost text-xs"
-                                          onClick={() => removeCategoryQuestion(selectedConference.id, category, field.id)}
+                                          onClick={() => {
+                                            setQuestionEditorState((prev) => {
+                                              const next = { ...prev };
+                                              delete next[field.id];
+                                              return next;
+                                            });
+                                            removeCategoryQuestion(selectedConference.id, category, field.id);
+                                          }}
                                         >
                                           Remove Question
                                         </button>
                                       </div>
+                                        </>
+                                      )}
                                     </div>
-                                  ))}
+                                    );
+                                  })}
                                 </div>
                               )}
                             </div>
@@ -6985,6 +7680,63 @@ export default function OrganizerDashboardPage() {
                   </div>
                 ))}
               </div>
+            </div>
+
+            <div className="rounded-xl p-3 mb-4 space-y-2" style={{ background: "var(--bg-subtle)" }}>
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-semibold" style={{ color: "var(--fg)" }}>Committee Questions</p>
+                  <p className="text-[11px] mt-1" style={{ color: "var(--fg-muted)" }}>
+                    Shown in checkout Step 2 when a student picks this committee as their 1st preference.
+                  </p>
+                </div>
+                <button className="btn btn-ghost text-xs" onClick={addCommitteeQuestionDraftRow}>
+                  + Add Question
+                </button>
+              </div>
+              {detailsEditorDraft.customQuestions.length === 0 ? (
+                <p className="text-xs" style={{ color: "var(--fg-muted)" }}>No committee questions yet.</p>
+              ) : (
+                <div className="space-y-2">
+                  {detailsEditorDraft.customQuestions.map((question, questionIndex) => (
+                    <div
+                      key={question.id}
+                      className="rounded-lg p-2 space-y-2"
+                      style={{ border: "1px solid var(--border)" }}
+                    >
+                      <p className="text-xs font-semibold" style={{ color: "var(--fg-muted)" }}>
+                        Question {questionIndex + 1}
+                      </p>
+                      <input
+                        className="input-base text-xs"
+                        placeholder="Question text"
+                        value={question.question}
+                        onChange={(event) =>
+                          updateCommitteeQuestionDraftRow(question.id, { question: event.target.value })
+                        }
+                      />
+                      <label className="flex items-center gap-2 text-xs" style={{ color: "var(--fg-muted)" }}>
+                        <input
+                          type="checkbox"
+                          checked={question.required}
+                          onChange={(event) =>
+                            updateCommitteeQuestionDraftRow(question.id, { required: event.target.checked })
+                          }
+                        />
+                        Required
+                      </label>
+                      <div className="flex justify-end">
+                        <button
+                          className="btn btn-danger-ghost text-xs"
+                          onClick={() => removeCommitteeQuestionDraftRow(question.id)}
+                        >
+                          Remove Question
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div className="flex gap-2 mt-4">

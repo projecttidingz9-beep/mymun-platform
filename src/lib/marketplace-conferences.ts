@@ -79,14 +79,14 @@ function getConferenceStatusBadge(conference: OrganizerConference): string {
   });
 
   if (hasUpcomingPhase && !hasEndedPhase) return "Coming Soon";
-  if (hasUpcomingPhase && hasEndedPhase) return "Currently Registrations Closed";
-  if (openCategories.length === 0) return "Currently Registrations Closed";
+  if (hasUpcomingPhase && hasEndedPhase) return "Registrations Closed";
+  if (openCategories.length === 0) return "Registrations Closed";
 
   const registrationDeadline = parseDayStart(conference.registrationDeadline);
   if (registrationDeadline !== null && registrationDeadline >= today) {
     return "Register Now";
   }
-  return "Currently Registrations Closed";
+  return "Registrations Closed";
 }
 
 export function mapOrganizerConferenceToMarketplaceConference(

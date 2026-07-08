@@ -95,7 +95,7 @@ function statusBadge(
   });
   if (upcoming) return "Coming Soon";
 
-  return "Currently Registrations Closed";
+  return "Registrations Closed";
 }
 
 export type EventWithListing = Event & {
@@ -337,6 +337,17 @@ export function mapPublishedEventToConference(event: EventWithListing): Conferen
         allottedCount: allotmentByName.get(cm.name) ?? 0,
         logoImageUrl: (cm as { logoImageUrl?: string | null }).logoImageUrl ?? undefined,
         chairs: chairs.length > 0 ? chairs : undefined,
+        documents: (() => {
+          const docs = (cm as CommitteeConfig & { documents?: Array<{ id: string; title: string; category: string; fileUrl: string }> }).documents;
+          return Array.isArray(docs)
+            ? docs.map((doc) => ({
+                id: doc.id,
+                title: doc.title,
+                category: doc.category,
+                url: doc.fileUrl,
+              }))
+            : [];
+        })(),
         noPortfolio,
         portfolioMatrixVisibility: matrixVisibility,
         portfolios,

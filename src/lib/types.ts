@@ -16,6 +16,7 @@ export interface Committee {
   /** Whether the public Portfolio Matrix shows allotment status color-coding for this conference. */
   portfolioMatrixVisibility?: "PUBLIC" | "PRIVATE";
   portfolios?: Array<{ id: string; name: string; seatCount: number; taken?: boolean }>;
+  documents?: Array<{ id: string; title: string; category: string; url: string }>;
 }
 
 export interface CommitteePricingInfo {

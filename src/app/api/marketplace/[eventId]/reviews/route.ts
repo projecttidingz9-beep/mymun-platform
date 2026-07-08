@@ -50,10 +50,18 @@ export async function POST(
       deletedAt: null,
       OR: [{ id: eventKey }, { slug: eventKey }],
     },
-    select: { id: true },
+    select: { id: true, endDate: true },
   });
   if (!event) {
     return NextResponse.json({ error: "Conference not found." }, { status: 404 });
+  }
+
+  const conferenceEnded = new Date(event.endDate).setHours(23, 59, 59, 999) < Date.now();
+  if (!conferenceEnded) {
+    return NextResponse.json(
+      { error: "Reviews can only be submitted after the conference has ended." },
+      { status: 403 }
+    );
   }
 
   const registration = await prisma.registration.findFirst({

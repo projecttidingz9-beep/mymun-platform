@@ -72,7 +72,7 @@ export async function fetchPublishedEventDetail(eventKey: string) {
     include: {
       organizerConfig: {
         include: {
-          committees: { include: { portfolios: true } },
+          committees: { include: { portfolios: true, documents: true } },
           pricingPhases: true,
         },
       },

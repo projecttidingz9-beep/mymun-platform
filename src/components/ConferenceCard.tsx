@@ -5,7 +5,6 @@ import Image from "next/image";
 import { Conference } from "@/lib/types";
 import { resolveConferenceBannerImage } from "@/lib/conference-media";
 import { conferenceMonogram, conferencePlaceholderGradient } from "@/lib/conference-placeholder";
-import { formatMoney } from "@/lib/format-money";
 
 interface ConferenceCardProps {
   conference: Conference;
@@ -19,25 +18,6 @@ const LEVEL_BADGE: Record<string, { class: string; emoji: string }> = {
   "Hybrid": { class: "badge-purple", emoji: "💻" },
 };
 
-function SeatsBar({ registered, capacity }: { registered: number; capacity: number }) {
-  const pct = Math.round((registered / capacity) * 100);
-  const color = pct > 85 ? "var(--danger)" : pct > 65 ? "var(--warning)" : "var(--success)";
-  return (
-    <div>
-      <div className="flex justify-between text-xs mb-1" style={{ color: "var(--fg-muted)" }}>
-        <span>{capacity - registered} seats left</span>
-        <span>{pct}% full</span>
-      </div>
-      <div className="progress-bar">
-        <div
-          className="progress-bar-fill"
-          style={{ width: `${pct}%`, background: `linear-gradient(90deg, ${color}99, ${color})` }}
-        />
-      </div>
-    </div>
-  );
-}
-
 export default function ConferenceCard({ conference: c }: ConferenceCardProps) {
   const badge = LEVEL_BADGE[c.level] || LEVEL_BADGE["Open"];
   const bannerImageUrl = resolveConferenceBannerImage({ conference: c });
@@ -50,7 +30,7 @@ export default function ConferenceCard({ conference: c }: ConferenceCardProps) {
       ? "badge-gray"
       : c.statusBadgeLabel === "Register Now"
         ? "badge-green"
-        : c.statusBadgeLabel === "Currently Registrations Closed"
+        : c.statusBadgeLabel === "Registrations Closed"
           ? "badge-gold"
           : "badge-blue";
 
@@ -58,7 +38,7 @@ export default function ConferenceCard({ conference: c }: ConferenceCardProps) {
     <Link href={`/conference/${c.id}`} className="block group card rounded-[1.5rem] overflow-hidden cursor-pointer min-w-0">
       {/* Card Header / Color Banner */}
       <div
-        className={`relative h-36 ${hasBanner ? "" : `bg-gradient-to-br ${c.color}`} flex items-end p-5 overflow-hidden`}
+        className={`relative h-36 ${hasBanner ? "" : `bg-gradient-to-br ${c.color}`} overflow-hidden`}
         style={
           !hasBanner
             ? {
@@ -105,41 +85,6 @@ export default function ConferenceCard({ conference: c }: ConferenceCardProps) {
             {logoFallback}
           </div>
         )}
-        {/* Center logo */}
-        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[2]">
-          <div
-            className="w-14 h-14 rounded-full overflow-hidden flex items-center justify-center text-xs font-black"
-            style={{
-              background: hasLogo ? "rgba(11,13,18,0.8)" : "rgba(255,255,255,0.14)",
-              border: "2px solid rgba(255,255,255,0.35)",
-              boxShadow: "0 8px 24px rgba(0,0,0,0.32)",
-              color: "rgba(255,255,255,0.95)",
-              backdropFilter: "blur(6px)",
-            }}
-            aria-label={`${c.title} logo`}
-          >
-            {hasLogo && c.logoImageUrl ? (
-              <Image
-                src={c.logoImageUrl}
-                alt={`${c.title} logo`}
-                className="w-full h-full object-cover rounded-full"
-                width={56}
-                height={56}
-              />
-            ) : (
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden>
-                <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.5" opacity="0.9" />
-                <path
-                  d="M4 12c2.5-4 5-6 8-6s5.5 2 8 6c-2.5 4-5 6-8 6s-5.5-2-8-6Z"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  opacity="0.75"
-                />
-                <path d="M4 12h16" stroke="currentColor" strokeWidth="1.5" opacity="0.5" />
-              </svg>
-            )}
-          </div>
-        </div>
         {/* Badges top row */}
         <div className="absolute top-4 left-4 right-4 flex items-center justify-between z-[3]">
           <span className={`badge ${badge.class}`} style={{ background: "rgba(10,12,18,0.52)", color: "rgba(255,255,255,0.96)" }}>
@@ -154,28 +99,56 @@ export default function ConferenceCard({ conference: c }: ConferenceCardProps) {
           </div>
         </div>
 
-        {/* Price bottom */}
-        <div className="relative z-[3]">
-          <p className="text-white/60 text-[10px] font-bold uppercase tracking-widest">From</p>
-          <p className="text-white text-2xl font-black">
-            {formatMoney(c.price, c.currency)}
-          </p>
-        </div>
-
         {/* region label */}
         <div className="absolute bottom-4 right-4 text-white/50 text-xs font-medium z-[3]">{c.region}</div>
       </div>
 
       {/* Card Body */}
       <div className="p-5 space-y-4">
-        <div>
-          <h3
-            className="font-bold text-base leading-snug break-words transition-colors group-hover:text-blue-600 mb-1.5"
-            style={{ color: "var(--fg)" }}
-            title={c.title}
+        {/* Conference logo in dark section */}
+        <div className="flex items-center gap-3">
+          <div
+            className="w-10 h-10 rounded-xl overflow-hidden flex-shrink-0 flex items-center justify-center text-xs font-black"
+            style={{
+              background: "var(--card-bg, rgba(11,13,18,0.9))",
+              border: "1.5px solid var(--border)",
+              color: "var(--fg-muted)",
+            }}
+            aria-label={`${c.title} logo`}
           >
-            {c.title}
-          </h3>
+            {hasLogo && c.logoImageUrl ? (
+              <Image
+                src={c.logoImageUrl}
+                alt={`${c.title} logo`}
+                className="w-full h-full object-cover"
+                width={40}
+                height={40}
+              />
+            ) : (
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
+                <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.5" opacity="0.9" />
+                <path
+                  d="M4 12c2.5-4 5-6 8-6s5.5 2 8 6c-2.5 4-5 6-8 6s-5.5-2-8-6Z"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  opacity="0.75"
+                />
+                <path d="M4 12h16" stroke="currentColor" strokeWidth="1.5" opacity="0.5" />
+              </svg>
+            )}
+          </div>
+          <div className="min-w-0">
+            <h3
+              className="font-bold text-base leading-snug break-words transition-colors group-hover:text-blue-600"
+              style={{ color: "var(--fg)" }}
+              title={c.title}
+            >
+              {c.title}
+            </h3>
+          </div>
+        </div>
+
+        <div>
           {(c.featured || c.statusBadgeLabel) && (
             <div className="flex flex-wrap items-center gap-1.5 mb-1.5">
               {c.featured && (
@@ -220,9 +193,6 @@ export default function ConferenceCard({ conference: c }: ConferenceCardProps) {
             </span>
           )}
         </div>
-
-        {/* Seats */}
-        <SeatsBar registered={c.registered} capacity={c.capacity} />
       </div>
     </Link>
   );

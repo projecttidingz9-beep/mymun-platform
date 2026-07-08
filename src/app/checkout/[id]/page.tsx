@@ -630,7 +630,9 @@ export default function CheckoutPage() {
                   No registration categories are currently open for this conference.
                 </p>
               )}
-              {categories.map((category) => (
+              {categories.map((category) => {
+                const categoryPrice = resolveRegistrationPrice(category, undefined);
+                return (
                 <button
                   key={category.id}
                   type="button"
@@ -640,7 +642,16 @@ export default function CheckoutPage() {
                 >
                   <div className="flex items-center justify-between gap-2">
                     <span className="font-bold text-base" style={{ color: "var(--fg)" }}>{category.name}</span>
-                    <span className="badge badge-blue">{formatMoney(category.basePrice, checkoutCurrency)}</span>
+                    <div className="text-right">
+                      <span className="badge badge-blue">
+                        {formatMoney(categoryPrice.amount, checkoutCurrency)}
+                      </span>
+                      {categoryPrice.phaseName && (
+                        <p className="text-[10px] mt-0.5" style={{ color: "var(--fg-muted)" }}>
+                          {categoryPrice.phaseName}
+                        </p>
+                      )}
+                    </div>
                   </div>
                   <p className="text-sm mt-1" style={{ color: "var(--blue)" }}>
                     {getCategoryTypeLabel(category.applicationType)}
@@ -661,7 +672,8 @@ export default function CheckoutPage() {
                     </div>
                   )}
                 </button>
-              ))}
+                );
+              })}
               <div className="space-y-3 pt-2">
                 <input
                   value={fullName}

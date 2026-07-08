@@ -766,7 +766,7 @@ export default function MarketplacePage() {
               >
                 {allConferences.length === 0
                   ? "Organizers will appear here once they publish an event."
-                  : "Try adjusting your filters or search term to broaden the horizon."}
+                  : "Try adjusting your filters or search term."}
               </p>
               {allConferences.length > 0 && (
                 <button
