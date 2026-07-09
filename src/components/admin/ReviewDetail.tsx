@@ -255,6 +255,12 @@ export default function ReviewDetail({ eventId, onModerated, onClose }: ReviewDe
               <dt className="text-[var(--fg-muted)]">Organizer</dt>
               <dd className="font-medium text-[var(--fg)]">{detail.organizer.name}</dd>
               <dd className="text-[var(--fg-muted)]">{detail.organizer.email ?? "—"}</dd>
+              {detail.organizer.contactDetail && (
+                <dd className="text-[var(--fg)] mt-1">
+                  <span className="text-[var(--fg-muted)]">Contact: </span>
+                  {detail.organizer.contactDetail}
+                </dd>
+              )}
             </div>
             <div>
               <dt className="text-[var(--fg-muted)]">Location</dt>

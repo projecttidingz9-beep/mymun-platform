@@ -7,6 +7,7 @@ const NAV: { id: AdminSection; label: string }[] = [
   { id: "review", label: "Review queue" },
   { id: "overview", label: "Overview" },
   { id: "events", label: "All conferences" },
+  { id: "daily-stats", label: "Daily stats" },
 ];
 
 type AdminShellProps = {

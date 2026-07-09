@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import ModerationModal from "./ModerationModal";
+import ReviewDetail from "./ReviewDetail";
 import type { AdminEventListRow } from "./types";
 
 function statusBadgeClass(status: string) {
@@ -30,6 +31,7 @@ export default function AdminEventsTable() {
   const [deleteTarget, setDeleteTarget] = useState<AdminEventListRow | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
 
   const loadEvents = useCallback(async () => {
     setLoading(true);
@@ -202,6 +204,17 @@ export default function AdminEventsTable() {
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex flex-wrap gap-1.5">
+                    <button
+                      type="button"
+                      className={`btn text-xs min-h-[36px] touch-manipulation ${
+                        selectedEventId === row.id ? "btn-primary" : "btn-ghost"
+                      }`}
+                      onClick={() =>
+                        setSelectedEventId((current) => (current === row.id ? null : row.id))
+                      }
+                    >
+                      Details
+                    </button>
                     {(row.status === "PUBLISHED" || row.status === "SUSPENDED") && (
                       <button
                         type="button"
@@ -221,9 +234,6 @@ export default function AdminEventsTable() {
                         Delete
                       </button>
                     )}
-                    {row.status !== "PUBLISHED" && row.status !== "SUSPENDED" && (
-                      <span className="text-xs text-[var(--fg-muted)]">—</span>
-                    )}
                   </div>
                 </td>
               </tr>
@@ -238,6 +248,14 @@ export default function AdminEventsTable() {
           </tbody>
         </table>
       </div>
+
+      {selectedEventId && (
+        <ReviewDetail
+          eventId={selectedEventId}
+          onModerated={() => void loadEvents()}
+          onClose={() => setSelectedEventId(null)}
+        />
+      )}
 
       <ModerationModal
         open={!!deleteTarget}

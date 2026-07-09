@@ -266,6 +266,7 @@ export interface DelegateMunParticipation {
   committee?: string;
   role?: string;
   year?: number;
+  month?: number;
   countryRepresented?: string;
   notes?: string;
   certificateUrl?: string;
@@ -278,6 +279,7 @@ export interface DelegateMunAward {
   title: string;
   conferenceName: string;
   year?: number;
+  month?: number;
   category?: string;
   committee?: string;
   logoUrl?: string;

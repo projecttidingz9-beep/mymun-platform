@@ -8,6 +8,7 @@ import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import AppRouteSkeleton from "@/components/AppRouteSkeleton";
 import SignInGate from "@/components/SignInGate";
+import { DestructiveConfirmButton } from "@/components/ConfirmModal";
 import { useToast } from "@/components/Toast";
 import { ensureServerSession } from "@/lib/client/session";
 import { useAuth } from "@/lib/auth-context";
@@ -23,13 +24,46 @@ import {
 
 type DelegateTabId = "conferences" | "profile" | "security" | "payments" | "notifications";
 
-const DELEGATE_TABS: Array<{ id: DelegateTabId; label: string; icon: string }> = [
-  { id: "conferences", label: "My Conferences", icon: "🌍" },
-  { id: "profile", label: "Profile", icon: "👤" },
-  { id: "security", label: "Security", icon: "🔒" },
-  { id: "payments", label: "Payments", icon: "💳" },
-  { id: "notifications", label: "Notifications", icon: "🔔" },
+const DELEGATE_TABS: Array<{ id: DelegateTabId; label: string }> = [
+  { id: "conferences", label: "My Conferences" },
+  { id: "profile", label: "Profile" },
+  { id: "security", label: "Security" },
+  { id: "payments", label: "Payments" },
+  { id: "notifications", label: "Notifications" },
 ];
+
+const MONTH_LABELS = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+] as const;
+
+const compareTimelineDesc = (
+  a: { year?: number; month?: number },
+  b: { year?: number; month?: number }
+) => {
+  const yearA = a.year ?? 0;
+  const yearB = b.year ?? 0;
+  if (yearB !== yearA) return yearB - yearA;
+  return (b.month ?? 0) - (a.month ?? 0);
+};
+
+const formatTimelineLabel = (year?: number, month?: number) => {
+  if (!year) return "";
+  if (month && month >= 1 && month <= 12) {
+    return `${MONTH_LABELS[month - 1]} ${year}`;
+  }
+  return String(year);
+};
 
 const isDelegateTabId = (value: string): value is DelegateTabId =>
   DELEGATE_TABS.some((tab) => tab.id === value);
@@ -166,6 +200,7 @@ function DashboardPageContent() {
   const [invoicePreviewRegistrationId, setInvoicePreviewRegistrationId] = useState<string | null>(null);
   const [verifyRedirectNotice, setVerifyRedirectNotice] = useState<{ tone: "success" | "error"; message: string } | null>(null);
   const [withdrawingRegistrationId, setWithdrawingRegistrationId] = useState<string | null>(null);
+  const [withdrawConfirmId, setWithdrawConfirmId] = useState<string | null>(null);
   const [payingRegistrationId, setPayingRegistrationId] = useState<string | null>(null);
   const [rejectingAllotmentId, setRejectingAllotmentId] = useState<string | null>(null);
   const [downloadingInvoiceId, setDownloadingInvoiceId] = useState<string | null>(null);
@@ -419,19 +454,6 @@ function DashboardPageContent() {
     setDraftParticipations((prev) => prev.map((entry) => (entry.id === id ? { ...entry, ...patch } : entry)));
   };
 
-  const moveParticipation = (id: string, direction: "up" | "down") => {
-    setDraftParticipations((prev) => {
-      const currentIndex = prev.findIndex((entry) => entry.id === id);
-      if (currentIndex < 0) return prev;
-      const targetIndex = direction === "up" ? currentIndex - 1 : currentIndex + 1;
-      if (targetIndex < 0 || targetIndex >= prev.length) return prev;
-      const next = [...prev];
-      const [item] = next.splice(currentIndex, 1);
-      next.splice(targetIndex, 0, item);
-      return next;
-    });
-  };
-
   const removeParticipation = (id: string) => {
     setDraftParticipations((prev) => prev.filter((entry) => entry.id !== id));
   };
@@ -452,9 +474,9 @@ function DashboardPageContent() {
       event.target.value = "";
       return;
     }
-    const maxBytes = 8 * 1024 * 1024;
+    const maxBytes = 5 * 1024 * 1024;
     if (selectedFile.size > maxBytes) {
-      alert("Certificate file must be under 8MB.");
+      alert("Certificate file must be under 5MB.");
       event.target.value = "";
       return;
     }
@@ -488,19 +510,6 @@ function DashboardPageContent() {
 
   const updateAward = (id: string, patch: Partial<DelegateMunAward>) => {
     setDraftAwards((prev) => prev.map((entry) => (entry.id === id ? { ...entry, ...patch } : entry)));
-  };
-
-  const moveAward = (id: string, direction: "up" | "down") => {
-    setDraftAwards((prev) => {
-      const currentIndex = prev.findIndex((entry) => entry.id === id);
-      if (currentIndex < 0) return prev;
-      const targetIndex = direction === "up" ? currentIndex - 1 : currentIndex + 1;
-      if (targetIndex < 0 || targetIndex >= prev.length) return prev;
-      const next = [...prev];
-      const [item] = next.splice(currentIndex, 1);
-      next.splice(targetIndex, 0, item);
-      return next;
-    });
   };
 
   const removeAward = (id: string) => {
@@ -564,10 +573,12 @@ function DashboardPageContent() {
           countryRepresented: entry.countryRepresented?.trim() || undefined,
           notes: entry.notes?.trim() || undefined,
           year: entry.year,
+          month: entry.month,
           certificateUrl: entry.certificateUrl,
           certificateFileName: entry.certificateFileName?.trim() || undefined,
           certificateMimeType: entry.certificateMimeType?.trim() || undefined,
-        })),
+        }))
+        .sort(compareTimelineDesc),
       munAwards: draftAwards
         .filter((entry) => entry.title.trim() && entry.conferenceName.trim())
         .map((entry) => ({
@@ -577,7 +588,9 @@ function DashboardPageContent() {
           category: entry.category?.trim() || undefined,
           committee: entry.committee?.trim() || undefined,
           year: entry.year,
-        })),
+          month: entry.month,
+        }))
+        .sort(compareTimelineDesc),
       });
       if (ok) {
         toast.show("Profile saved successfully.", "success");
@@ -765,7 +778,6 @@ function DashboardPageContent() {
   };
 
   const onWithdrawRegistration = async (registrationId: string) => {
-    if (!window.confirm("Withdraw this registration? This cannot be undone.")) return;
     setWithdrawNotice("");
     setWithdrawingRegistrationId(registrationId);
     try {
@@ -779,6 +791,7 @@ function DashboardPageContent() {
         return;
       }
       setWithdrawNotice("Registration withdrawn.");
+      setWithdrawConfirmId(null);
       addRegistration({ id: registrationId } as Registration);
     } finally {
       setWithdrawingRegistrationId(null);
@@ -859,7 +872,7 @@ function DashboardPageContent() {
             <div className="app-header-copy">
               <div className="section-label mb-3">My Dashboard</div>
               <h1 className="app-title">
-                Welcome back, {user.name.split(" ")[0]} 👋
+                Welcome back, {user.name.split(" ")[0]}
               </h1>
               <p className="app-subtitle mt-2">
                 {user.school} · {user.country}
@@ -936,15 +949,18 @@ function DashboardPageContent() {
 
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-7">
             {[
-              { label: "Conferences", value: registrations.length, icon: "🌍", tone: "info" as const },
-              { label: "Confirmed", value: confirmed, icon: "✅", tone: "success" as const },
-              { label: "Countries Represented", value: [...new Set(registrations.map(r => r.country))].length, icon: "🏳️", tone: "accent" as const },
+              { label: "Conferences", value: registrations.length, tone: "info" as const },
+              { label: "Confirmed", value: confirmed, tone: "success" as const },
+              {
+                label: "Portfolios Represented",
+                value: registrations.filter((registration) => registration.assignedPortfolioName?.trim()).length,
+                tone: "accent" as const,
+              },
             ].map((stat) => (
               <div key={stat.label} className="app-stat">
                 <div className="app-stat-head">
                   <span className="app-stat-dot" data-tone={stat.tone} />
                   <span className="app-stat-label">{stat.label}</span>
-                  <span className="ml-auto text-lg" aria-hidden>{stat.icon}</span>
                 </div>
                 <p className="app-stat-value">{stat.value}</p>
               </div>
@@ -969,7 +985,6 @@ function DashboardPageContent() {
                   data-active={activeTab === tab.id ? "true" : "false"}
                   onClick={() => changeActiveTab(tab.id)}
                 >
-                  <span aria-hidden>{tab.icon}</span>
                   <span>{tab.label}</span>
                   {count !== undefined && count > 0 && (
                     <span className="app-tab-count">{count}</span>
@@ -987,7 +1002,7 @@ function DashboardPageContent() {
                   className="app-card py-20 text-center"
                   style={{ border: "2px dashed var(--border)" }}
                 >
-                  <p className="text-5xl mb-4">🎓</p>
+                  <p className="text-4xl font-bold mb-4" style={{ color: "var(--fg-muted)" }}>—</p>
                   <h3 className="text-xl font-bold mb-2" style={{ color: "var(--fg)" }}>No conferences yet</h3>
                   <p className="app-subtitle mb-5">Start your MUN journey by finding your first conference.</p>
                   <Link href={CONFERENCES_PATH} className="btn btn-primary text-sm">Browse conferences →</Link>
@@ -997,32 +1012,51 @@ function DashboardPageContent() {
                   {registrations.map((reg) => {
                     const matchedPass = delegatePasses.find((pass) => pass.registrationId === reg.id);
                     return (
-                      <div key={reg.id} className="card p-5 rounded-2xl">
+                      <div key={reg.id} className="card p-6 rounded-2xl">
                         <div className="flex items-start gap-4">
                           <div
-                            className="w-14 h-14 rounded-2xl flex items-center justify-center flex-shrink-0"
+                            className="w-16 h-16 rounded-2xl flex items-center justify-center flex-shrink-0"
                             style={{ background: "linear-gradient(135deg, var(--blue), var(--accent-warm))" }}
                           >
-                            <span className="text-white font-black text-xl">M</span>
+                            <span className="text-white font-black text-2xl">M</span>
                           </div>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-start justify-between gap-3 flex-wrap">
-                              <h3 className="font-bold text-base" style={{ color: "var(--fg)" }}>
+                              <h3 className="font-bold text-lg" style={{ color: "var(--fg)" }}>
                                 {reg.conferenceTitle}
                               </h3>
-                              <span className={`badge ${STATUS_STYLE[reg.status]?.class ?? "badge-gray"}`}>
+                              <span className={`badge text-xs ${STATUS_STYLE[reg.status]?.class ?? "badge-gray"}`}>
                                 {reg.status}
                               </span>
                             </div>
-                            <div className="flex flex-wrap gap-3 mt-2 text-xs" style={{ color: "var(--fg-muted)" }}>
-                              <span>🏛️ Assigned: {reg.assignedCommitteeName || reg.committeeName || "Pending"}</span>
-                              <span>📌 Portfolio: {reg.assignedPortfolioName || "Not assigned"}</span>
-                              <span>🏳️ {reg.country}</span>
-                              <span>📂 {reg.categoryName}</span>
-                              <span>📅 Registered {reg.registeredAt}</span>
+                            <div className="grid sm:grid-cols-2 gap-3 mt-4">
+                              <div>
+                                <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--fg-muted)" }}>Committee</p>
+                                <p className="text-sm font-medium mt-0.5" style={{ color: "var(--fg)" }}>
+                                  {reg.assignedCommitteeName || reg.committeeName || "Pending"}
+                                </p>
+                              </div>
+                              <div>
+                                <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--fg-muted)" }}>Portfolio</p>
+                                <p className="text-sm font-medium mt-0.5" style={{ color: "var(--fg)" }}>
+                                  {reg.assignedPortfolioName || "Not assigned"}
+                                </p>
+                              </div>
+                              <div>
+                                <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--fg-muted)" }}>Country</p>
+                                <p className="text-sm font-medium mt-0.5" style={{ color: "var(--fg)" }}>{reg.country || "—"}</p>
+                              </div>
+                              <div>
+                                <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--fg-muted)" }}>Category</p>
+                                <p className="text-sm font-medium mt-0.5" style={{ color: "var(--fg)" }}>{reg.categoryName}</p>
+                              </div>
+                              <div>
+                                <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--fg-muted)" }}>Registered</p>
+                                <p className="text-sm font-medium mt-0.5" style={{ color: "var(--fg)" }}>{reg.registeredAt}</p>
+                              </div>
                             </div>
-                            <div className="mt-2">
-                              <span className={`badge ${
+                            <div className="mt-3">
+                              <span className={`badge text-xs ${
                                 reg.organizerStatus === "Allotted"
                                   ? "badge-green"
                                   : reg.organizerStatus === "Rejected"
@@ -1067,12 +1101,12 @@ function DashboardPageContent() {
                             )}
                           </div>
                         </div>
-                        <div className="flex items-center justify-between mt-4 pt-4" style={{ borderTop: "1px solid var(--border)" }}>
+                        <div className="flex items-center justify-between mt-5 pt-5" style={{ borderTop: "1px solid var(--border)" }}>
                           <div className="flex items-center gap-2">
-                            <span className={`badge text-[10px] ${reg.paid ? "badge-success" : "badge-danger"}`}>
-                              {reg.paid ? "✓ Paid" : "Pending Payment"}
+                            <span className={`badge text-xs ${reg.paid ? "badge-success" : "badge-danger"}`}>
+                              {reg.paid ? "Paid" : "Pending Payment"}
                             </span>
-                            <span className="text-sm font-bold" style={{ color: "var(--fg)" }}>
+                            <span className="text-base font-bold" style={{ color: "var(--fg)" }}>
                               {formatMoney(reg.amount, "INR")}
                             </span>
                           </div>
@@ -1105,15 +1139,26 @@ function DashboardPageContent() {
                               </span>
                             )}
                             {!reg.paid && reg.organizerStatus !== "Rejected" && !reg.allotmentReleased && (
-                              <button
-                                type="button"
-                                className="btn btn-ghost text-xs"
-                                style={{ padding: "6px 14px", borderRadius: "8px", color: "#b91c1c" }}
-                                disabled={withdrawingRegistrationId === reg.id}
-                                onClick={() => void onWithdrawRegistration(reg.id)}
-                              >
-                                {withdrawingRegistrationId === reg.id ? "Withdrawing…" : "Withdraw"}
-                              </button>
+                              withdrawConfirmId === reg.id ? (
+                                <button
+                                  type="button"
+                                  className="btn btn-danger-ghost text-xs"
+                                  style={{ padding: "6px 14px", borderRadius: "8px" }}
+                                  disabled={withdrawingRegistrationId === reg.id}
+                                  onClick={() => void onWithdrawRegistration(reg.id)}
+                                >
+                                  {withdrawingRegistrationId === reg.id ? "Withdrawing…" : "Confirm withdraw"}
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  className="btn btn-ghost text-xs"
+                                  style={{ padding: "6px 14px", borderRadius: "8px", color: "#b91c1c" }}
+                                  onClick={() => setWithdrawConfirmId(reg.id)}
+                                >
+                                  Withdraw
+                                </button>
+                              )
                             )}
                             <Link
                               href={`/conference/${reg.conferenceId}`}
@@ -1147,30 +1192,28 @@ function DashboardPageContent() {
                           className="mt-4 pt-4 space-y-3"
                           style={{ borderTop: "1px solid var(--border)" }}
                         >
-                          <p className="text-xs font-bold uppercase tracking-wide" style={{ color: "var(--fg-muted)" }}>
+                          <p className="text-sm font-semibold" style={{ color: "var(--fg-muted)" }}>
                             Invoice &amp; Pass
                           </p>
                           <button
                             type="button"
-                            className="btn btn-outline-blue text-xs w-full sm:w-auto"
+                            className="btn btn-outline-blue text-sm w-full sm:w-auto"
                             onClick={() => void onDownloadInvoicePdf(reg)}
                             disabled={!reg.paid || downloadingInvoiceId === reg.id}
                           >
                             {downloadingInvoiceId === reg.id ? "Downloading…" : "Download Invoice (PDF)"}
                           </button>
                           {!reg.paid && (
-                            <p className="text-xs" style={{ color: "var(--fg-muted)" }}>
-                              {reg.amount > 0
-                                ? "Complete payment to download your invoice."
-                                : "Invoice downloads after payment is confirmed."}
+                            <p className="text-sm font-medium" style={{ color: "var(--fg-muted)" }}>
+                              Invoice will be available after payment is confirmed.
                             </p>
                           )}
                           {matchedPass ? (
                             <div className="p-4 rounded-xl space-y-3" style={{ background: "var(--bg-subtle)" }}>
-                              <p className="text-sm font-semibold" style={{ color: "var(--fg)" }}>
+                              <p className="text-base font-semibold" style={{ color: "var(--fg)" }}>
                                 Digital pass
                               </p>
-                              <p className="text-xs" style={{ color: "var(--fg-muted)" }}>
+                              <p className="text-sm" style={{ color: "var(--fg-muted)" }}>
                                 {matchedPass.categoryName}
                                 {matchedPass.committeeName ? ` · ${matchedPass.committeeName}` : ""}
                                 {matchedPass.portfolioName ? ` · ${matchedPass.portfolioName}` : ""}
@@ -1327,9 +1370,9 @@ function DashboardPageContent() {
 
             {activeTab === "profile" && (
               <div className="space-y-4">
-              <div className="card p-5 rounded-2xl">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-bold" style={{ color: "var(--fg)" }}>My Profile</h3>
+              <div className="card p-6 rounded-2xl">
+                <div className="flex items-center justify-between mb-5">
+                  <h3 className="text-xl font-bold" style={{ color: "var(--fg)" }}>My Profile</h3>
                   {!isEditingProfile ? (
                     <button onClick={startEditingProfile} className="btn btn-ghost text-xs">Edit</button>
                   ) : (
@@ -1345,26 +1388,30 @@ function DashboardPageContent() {
                     </div>
                   )}
                 </div>
-                <div className="flex items-center gap-4 mb-5">
+                <div className="flex items-center gap-5 mb-6">
                   {user.profileImageUrl ? (
                     <Image
                       src={user.profileImageUrl}
                       alt={`${user.name} profile`}
-                      width={56}
-                      height={56}
-                      className="w-14 h-14 rounded-xl object-cover"
+                      width={80}
+                      height={80}
+                      className="w-20 h-20 rounded-xl object-cover"
                     />
                   ) : (
                     <div
-                      className="w-14 h-14 rounded-xl flex items-center justify-center text-white font-black text-2xl"
+                      className="w-20 h-20 rounded-xl flex items-center justify-center text-white font-black text-3xl"
                       style={{ background: "linear-gradient(135deg, var(--blue), var(--accent-warm))" }}
                     >
                       {user.avatar}
                     </div>
                   )}
                   <div>
-                    <p className="font-bold" style={{ color: "var(--fg)" }}>{user.name}</p>
-                    <p className="text-xs" style={{ color: "var(--fg-muted)" }}>{user.email}</p>
+                    <p className="text-xl font-bold" style={{ color: "var(--fg)" }}>{user.name}</p>
+                    {user.profileHeadline && (
+                      <p className="text-sm mt-1" style={{ color: "var(--blue)" }}>{user.profileHeadline}</p>
+                    )}
+                    <p className="text-sm mt-1" style={{ color: "var(--fg-muted)" }}>{user.email}</p>
+                    <p className="text-sm mt-0.5" style={{ color: "var(--fg-muted)" }}>{user.school} · {user.country}</p>
                   </div>
                 </div>
                 {isEditingProfile ? (
@@ -1374,9 +1421,12 @@ function DashboardPageContent() {
                       <input
                         type="file"
                         accept="image/*"
-                        className="input-base text-xs"
+                        className="input-base text-sm"
                         onChange={onProfileImageSelected}
                       />
+                      <p className="text-xs" style={{ color: "var(--fg-muted)" }}>
+                        Max file size: 5 MB. Accepted: images.
+                      </p>
                       {draftProfileImageUrl && (
                         <div className="flex items-center gap-3">
                           <Image
@@ -1500,7 +1550,7 @@ function DashboardPageContent() {
                       <select
                         value={draftProfileVisibility}
                         onChange={(event) => setDraftProfileVisibility(event.target.value === "private" ? "private" : "public")}
-                        className="input-base text-xs"
+                        className="input-base text-sm app-select-modern"
                       >
                         <option value="public">Public</option>
                         <option value="private">Private</option>
@@ -1526,77 +1576,78 @@ function DashboardPageContent() {
                         <p className="text-xs font-semibold" style={{ color: "var(--fg)" }}>Participations</p>
                         <button onClick={addParticipation} className="btn btn-ghost text-xs">+ Add</button>
                       </div>
-                      {draftParticipations.map((entry, index) => (
-                        <div key={entry.id} className="rounded-xl p-3 space-y-2" style={{ background: "var(--bg-subtle)" }}>
-                          <div className="flex justify-end gap-1">
-                            <button
-                              onClick={() => moveParticipation(entry.id, "up")}
-                              className="w-7 h-7 rounded-full flex items-center justify-center text-xs"
-                              style={{ background: "var(--bg)", color: "var(--fg-muted)", border: "1px solid var(--border)" }}
-                              disabled={index === 0}
-                              aria-label="Move participation up"
+                      {draftParticipations.map((entry) => (
+                        <div key={entry.id} className="rounded-xl p-4 space-y-3" style={{ background: "var(--bg-subtle)" }}>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <input value={entry.conferenceName} onChange={(event) => updateParticipation(entry.id, { conferenceName: event.target.value })} className="input-base text-sm" placeholder="Conference" />
+                            <input value={entry.committee || ""} onChange={(event) => updateParticipation(entry.id, { committee: event.target.value })} className="input-base text-sm" placeholder="Committee" />
+                          </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <input value={entry.role || ""} onChange={(event) => updateParticipation(entry.id, { role: event.target.value })} className="input-base text-sm" placeholder="Role" />
+                            <input value={entry.countryRepresented || ""} onChange={(event) => updateParticipation(entry.id, { countryRepresented: event.target.value })} className="input-base text-sm" placeholder="Portfolio represented" />
+                          </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            <select
+                              value={entry.month ?? ""}
+                              onChange={(event) =>
+                                updateParticipation(entry.id, {
+                                  month: event.target.value ? Number(event.target.value) : undefined,
+                                })
+                              }
+                              className="input-base text-sm app-select-modern"
                             >
-                              <span aria-hidden>↑</span>
-                            </button>
-                            <button
-                              onClick={() => moveParticipation(entry.id, "down")}
-                              className="w-7 h-7 rounded-full flex items-center justify-center text-xs"
-                              style={{ background: "var(--bg)", color: "var(--fg-muted)", border: "1px solid var(--border)" }}
-                              disabled={index === draftParticipations.length - 1}
-                              aria-label="Move participation down"
-                            >
-                              <span aria-hidden>↓</span>
-                            </button>
-                          </div>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            <input value={entry.conferenceName} onChange={(event) => updateParticipation(entry.id, { conferenceName: event.target.value })} className="input-base text-xs" placeholder="Conference" />
-                            <input value={entry.committee || ""} onChange={(event) => updateParticipation(entry.id, { committee: event.target.value })} className="input-base text-xs" placeholder="Committee" />
-                          </div>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            <input value={entry.role || ""} onChange={(event) => updateParticipation(entry.id, { role: event.target.value })} className="input-base text-xs" placeholder="Role" />
-                            <input value={entry.countryRepresented || ""} onChange={(event) => updateParticipation(entry.id, { countryRepresented: event.target.value })} className="input-base text-xs" placeholder="Country represented" />
-                          </div>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                              <option value="">Month</option>
+                              {MONTH_LABELS.map((label, monthIndex) => (
+                                <option key={label} value={monthIndex + 1}>
+                                  {label}
+                                </option>
+                              ))}
+                            </select>
                             <input
                               type="number"
                               value={entry.year ?? ""}
                               onChange={(event) => updateParticipation(entry.id, { year: event.target.value ? Number(event.target.value) : undefined })}
-                              className="input-base text-xs"
+                              className="input-base text-sm"
                               placeholder="Year"
                             />
-                            <button onClick={() => removeParticipation(entry.id)} className="btn btn-ghost text-xs">Remove</button>
+                            <DestructiveConfirmButton
+                              label="Remove"
+                              confirmTitle="Remove this participation?"
+                              confirmDescription="This participation entry and its certificate will be removed from your profile."
+                              onConfirm={() => removeParticipation(entry.id)}
+                            />
                           </div>
                           <div className="space-y-2">
                             <input
                               type="file"
                               accept=".pdf,.doc,.docx,image/*"
-                              className="input-base text-xs"
+                              className="input-base text-sm"
                               onChange={(event) => onParticipationCertificateSelected(entry.id, event)}
                             />
-                            <p className="text-[11px]" style={{ color: "var(--fg-muted)" }}>
-                              Certificate upload is mandatory for each participation entry.
+                            <p className="text-xs" style={{ color: "var(--fg-muted)" }}>
+                              Max file size: 5 MB. Accepted: PDF, images, Word docs. Certificate upload is mandatory for each participation entry.
                             </p>
                             {entry.certificateFileName && (
-                              <div className="flex items-center justify-between">
-                                <p className="text-[11px]" style={{ color: "var(--fg-muted)" }}>
+                              <div className="flex items-center justify-between gap-2">
+                                <p className="text-sm" style={{ color: "var(--fg-muted)" }}>
                                   Uploaded: {entry.certificateFileName}
                                 </p>
-                                <button
-                                  className="btn btn-ghost text-xs"
-                                  onClick={() =>
+                                <DestructiveConfirmButton
+                                  label="Remove Certificate"
+                                  confirmTitle="Remove this certificate?"
+                                  confirmDescription="The uploaded certificate will be removed from this participation entry."
+                                  onConfirm={() =>
                                     updateParticipation(entry.id, {
                                       certificateUrl: undefined,
                                       certificateFileName: undefined,
                                       certificateMimeType: undefined,
                                     })
                                   }
-                                >
-                                  Remove Certificate
-                                </button>
+                                />
                               </div>
                             )}
                           </div>
-                          <textarea value={entry.notes || ""} onChange={(event) => updateParticipation(entry.id, { notes: event.target.value })} className="input-base text-xs" rows={2} placeholder="Notes" />
+                          <textarea value={entry.notes || ""} onChange={(event) => updateParticipation(entry.id, { notes: event.target.value })} className="input-base text-sm" rows={2} placeholder="Notes" />
                         </div>
                       ))}
                     </div>
@@ -1606,105 +1657,106 @@ function DashboardPageContent() {
                         <p className="text-xs font-semibold" style={{ color: "var(--fg)" }}>Awards</p>
                         <button onClick={addAward} className="btn btn-ghost text-xs">+ Add</button>
                       </div>
-                      {draftAwards.map((entry, index) => (
-                        <div key={entry.id} className="rounded-xl p-3 space-y-2" style={{ background: "var(--bg-subtle)" }}>
-                          <div className="flex justify-end gap-1">
-                            <button
-                              onClick={() => moveAward(entry.id, "up")}
-                              className="w-7 h-7 rounded-full flex items-center justify-center text-xs"
-                              style={{ background: "var(--bg)", color: "var(--fg-muted)", border: "1px solid var(--border)" }}
-                              disabled={index === 0}
-                              aria-label="Move award up"
+                      {draftAwards.map((entry) => (
+                        <div key={entry.id} className="rounded-xl p-4 space-y-3" style={{ background: "var(--bg-subtle)" }}>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <input value={entry.title} onChange={(event) => updateAward(entry.id, { title: event.target.value })} className="input-base text-sm" placeholder="Award title" />
+                            <input value={entry.conferenceName} onChange={(event) => updateAward(entry.id, { conferenceName: event.target.value })} className="input-base text-sm" placeholder="Conference" />
+                          </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <input value={entry.category || ""} onChange={(event) => updateAward(entry.id, { category: event.target.value })} className="input-base text-sm" placeholder="Category" />
+                            <input value={entry.committee || ""} onChange={(event) => updateAward(entry.id, { committee: event.target.value })} className="input-base text-sm" placeholder="Committee" />
+                          </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            <select
+                              value={entry.month ?? ""}
+                              onChange={(event) =>
+                                updateAward(entry.id, {
+                                  month: event.target.value ? Number(event.target.value) : undefined,
+                                })
+                              }
+                              className="input-base text-sm app-select-modern"
                             >
-                              <span aria-hidden>↑</span>
-                            </button>
-                            <button
-                              onClick={() => moveAward(entry.id, "down")}
-                              className="w-7 h-7 rounded-full flex items-center justify-center text-xs"
-                              style={{ background: "var(--bg)", color: "var(--fg-muted)", border: "1px solid var(--border)" }}
-                              disabled={index === draftAwards.length - 1}
-                              aria-label="Move award down"
-                            >
-                              <span aria-hidden>↓</span>
-                            </button>
-                          </div>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            <input value={entry.title} onChange={(event) => updateAward(entry.id, { title: event.target.value })} className="input-base text-xs" placeholder="Award title" />
-                            <input value={entry.conferenceName} onChange={(event) => updateAward(entry.id, { conferenceName: event.target.value })} className="input-base text-xs" placeholder="Conference" />
-                          </div>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            <input value={entry.category || ""} onChange={(event) => updateAward(entry.id, { category: event.target.value })} className="input-base text-xs" placeholder="Category" />
-                            <input value={entry.committee || ""} onChange={(event) => updateAward(entry.id, { committee: event.target.value })} className="input-base text-xs" placeholder="Committee" />
-                          </div>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                              <option value="">Month</option>
+                              {MONTH_LABELS.map((label, monthIndex) => (
+                                <option key={label} value={monthIndex + 1}>
+                                  {label}
+                                </option>
+                              ))}
+                            </select>
                             <input
                               type="number"
                               value={entry.year ?? ""}
                               onChange={(event) => updateAward(entry.id, { year: event.target.value ? Number(event.target.value) : undefined })}
-                              className="input-base text-xs"
+                              className="input-base text-sm"
                               placeholder="Year"
                             />
-                            <button onClick={() => removeAward(entry.id)} className="btn btn-ghost text-xs">Remove</button>
+                            <DestructiveConfirmButton
+                              label="Remove"
+                              confirmTitle="Remove this award?"
+                              confirmDescription="This award entry will be removed from your profile."
+                              onConfirm={() => removeAward(entry.id)}
+                            />
                           </div>
                         </div>
                       ))}
                     </div>
                   </div>
                 ) : (
-                  <div className="space-y-3 text-sm">
-                    <div className="flex justify-between">
-                      <span style={{ color: "var(--fg-muted)" }}>First Name</span>
-                      <span className="font-medium" style={{ color: "var(--fg)" }}>{user.firstName || "-"}</span>
+                  <div className="space-y-5 text-base">
+                    <div className="flex justify-between gap-4">
+                      <span className="text-sm font-medium" style={{ color: "var(--fg-muted)" }}>First Name</span>
+                      <span className="font-semibold text-right" style={{ color: "var(--fg)" }}>{user.firstName || "-"}</span>
                     </div>
-                    <div className="flex justify-between">
-                      <span style={{ color: "var(--fg-muted)" }}>Last Name</span>
-                      <span className="font-medium" style={{ color: "var(--fg)" }}>{user.lastName || "-"}</span>
+                    <div className="flex justify-between gap-4">
+                      <span className="text-sm font-medium" style={{ color: "var(--fg-muted)" }}>Last Name</span>
+                      <span className="font-semibold text-right" style={{ color: "var(--fg)" }}>{user.lastName || "-"}</span>
                     </div>
-                    <div className="flex justify-between">
-                      <span style={{ color: "var(--fg-muted)" }}>School</span>
-                      <span className="font-medium text-right max-w-[180px] text-xs" style={{ color: "var(--fg)" }}>{user.school}</span>
+                    <div className="flex justify-between gap-4">
+                      <span className="text-sm font-medium" style={{ color: "var(--fg-muted)" }}>School</span>
+                      <span className="font-semibold text-right max-w-[220px]" style={{ color: "var(--fg)" }}>{user.school}</span>
                     </div>
-                    <div className="flex justify-between">
-                      <span style={{ color: "var(--fg-muted)" }}>College</span>
-                      <span className="font-medium text-right max-w-[180px] text-xs" style={{ color: "var(--fg)" }}>{user.college || "-"}</span>
+                    <div className="flex justify-between gap-4">
+                      <span className="text-sm font-medium" style={{ color: "var(--fg-muted)" }}>College</span>
+                      <span className="font-semibold text-right max-w-[220px]" style={{ color: "var(--fg)" }}>{user.college || "-"}</span>
                     </div>
-                    <div className="flex justify-between">
-                      <span style={{ color: "var(--fg-muted)" }}>Field of Study</span>
-                      <span className="font-medium text-right max-w-[180px] text-xs" style={{ color: "var(--fg)" }}>{user.fieldOfStudy || "-"}</span>
+                    <div className="flex justify-between gap-4">
+                      <span className="text-sm font-medium" style={{ color: "var(--fg-muted)" }}>Field of Study</span>
+                      <span className="font-semibold text-right max-w-[220px]" style={{ color: "var(--fg)" }}>{user.fieldOfStudy || "-"}</span>
                     </div>
-                    <div className="flex justify-between">
-                      <span style={{ color: "var(--fg-muted)" }}>Country</span>
-                      <span className="font-medium" style={{ color: "var(--fg)" }}>{user.country}</span>
+                    <div className="flex justify-between gap-4">
+                      <span className="text-sm font-medium" style={{ color: "var(--fg-muted)" }}>Country</span>
+                      <span className="font-semibold" style={{ color: "var(--fg)" }}>{user.country}</span>
                     </div>
-                    <div className="flex justify-between">
-                      <span style={{ color: "var(--fg-muted)" }}>Profile Visibility</span>
-                      <span className="font-medium" style={{ color: "var(--fg)" }}>
+                    <div className="flex justify-between gap-4">
+                      <span className="text-sm font-medium" style={{ color: "var(--fg-muted)" }}>Profile Visibility</span>
+                      <span className="font-semibold" style={{ color: "var(--fg)" }}>
                         {user.profileVisibility === "private" ? "Private" : "Public"}
                       </span>
                     </div>
                     <div>
-                      <p className="text-xs font-semibold mb-1" style={{ color: "var(--fg)" }}>Headline</p>
-                      <p className="text-xs" style={{ color: "var(--fg-muted)" }}>{user.profileHeadline || "No headline added."}</p>
+                      <p className="text-sm font-semibold mb-1" style={{ color: "var(--fg)" }}>Headline</p>
+                      <p className="text-base" style={{ color: "var(--fg-muted)" }}>{user.profileHeadline || "No headline added."}</p>
                     </div>
                     <div>
-                      <p className="text-xs font-semibold mb-1" style={{ color: "var(--fg)" }}>MUN Experience</p>
-                      <p className="text-xs" style={{ color: "var(--fg-muted)" }}>{user.munExperienceSummary || "No experience summary added."}</p>
+                      <p className="text-sm font-semibold mb-1" style={{ color: "var(--fg)" }}>MUN Experience</p>
+                      <p className="text-base" style={{ color: "var(--fg-muted)" }}>{user.munExperienceSummary || "No experience summary added."}</p>
                     </div>
                     <div>
-                      <p className="text-xs font-semibold mb-1" style={{ color: "var(--fg)" }}>Awards Summary</p>
-                      <p className="text-xs" style={{ color: "var(--fg-muted)" }}>{user.munAwardsSummary || "No awards summary added."}</p>
+                      <p className="text-sm font-semibold mb-1" style={{ color: "var(--fg)" }}>Awards Summary</p>
+                      <p className="text-base" style={{ color: "var(--fg-muted)" }}>{user.munAwardsSummary || "No awards summary added."}</p>
                     </div>
                     <div>
-                      <p className="text-xs font-semibold mb-1" style={{ color: "var(--fg)" }}>Social Media</p>
-                      <p className="text-[11px]" style={{ color: "var(--fg-muted)" }}>
+                      <p className="text-sm font-semibold mb-1" style={{ color: "var(--fg)" }}>Social Media</p>
+                      <p className="text-base" style={{ color: "var(--fg-muted)" }}>
                         {user.socialMedia?.instagram || user.socialMedia?.linkedin || user.socialMedia?.twitter || user.socialMedia?.github
                           ? [user.socialMedia?.instagram, user.socialMedia?.linkedin, user.socialMedia?.twitter, user.socialMedia?.github].filter(Boolean).join(" · ")
                           : "No social media links added."}
                       </p>
                     </div>
                     <div>
-                      <p className="text-xs font-semibold mb-1" style={{ color: "var(--fg)" }}>Invoice Address</p>
-                      <p className="text-[11px]" style={{ color: "var(--fg-muted)" }}>
+                      <p className="text-sm font-semibold mb-1" style={{ color: "var(--fg)" }}>Invoice Address</p>
+                      <p className="text-base" style={{ color: "var(--fg-muted)" }}>
                         {user.invoiceAddress?.line1 || user.invoiceAddress?.city || user.invoiceAddress?.country
                           ? [
                               user.invoiceAddress?.line1,
@@ -1720,42 +1772,84 @@ function DashboardPageContent() {
                       </p>
                     </div>
                     <div>
-                      <p className="text-xs font-semibold mb-1" style={{ color: "var(--fg)" }}>
-                        Participations ({user.munParticipations?.length || 0})
+                      <p className="text-sm font-semibold mb-2" style={{ color: "var(--fg)" }}>
+                        Participations
                       </p>
-                      <p className="text-[11px] mb-1" style={{ color: "var(--fg-muted)" }}>
+                      <p className="text-base font-medium mb-3" style={{ color: "var(--blue)" }}>
                         Total conferences attended: {user.munParticipations?.length || 0}
                       </p>
-                      <div className="space-y-1">
-                        {(user.munParticipations || []).slice(0, 3).map((entry, index) => (
-                          <p key={entry.id} className="text-[11px]" style={{ color: "var(--fg-muted)" }}>
-                            {index + 1}. {entry.conferenceName} {entry.year ? `(${entry.year})` : ""} {entry.committee ? `· ${entry.committee}` : ""}
-                          </p>
+                      <div className="space-y-3">
+                        {[...(user.munParticipations || [])]
+                          .sort(compareTimelineDesc)
+                          .map((entry, index) => (
+                          <div
+                            key={entry.id}
+                            className="rounded-xl p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
+                            style={{ background: "var(--bg-subtle)", border: "1px solid var(--border)" }}
+                          >
+                            <div className="flex items-start gap-3 min-w-0">
+                              <span className="badge badge-blue text-xs shrink-0">#{index + 1}</span>
+                              <div className="min-w-0">
+                                <p className="text-base font-semibold" style={{ color: "var(--fg)" }}>{entry.conferenceName}</p>
+                                <p className="text-sm mt-1" style={{ color: "var(--fg-muted)" }}>
+                                  {formatTimelineLabel(entry.year, entry.month)}
+                                  {entry.committee ? ` · ${entry.committee}` : ""}
+                                  {entry.role ? ` · ${entry.role}` : ""}
+                                </p>
+                              </div>
+                            </div>
+                            {entry.certificateUrl ? (
+                              <a
+                                href={entry.certificateUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="btn btn-outline-blue text-sm shrink-0"
+                              >
+                                View Certificate
+                              </a>
+                            ) : (
+                              <span className="text-sm" style={{ color: "var(--fg-muted)" }}>No certificate uploaded</span>
+                            )}
+                          </div>
                         ))}
                         {(user.munParticipations || []).length === 0 && (
-                          <p className="text-[11px]" style={{ color: "var(--fg-muted)" }}>No participations added yet.</p>
+                          <p className="text-base" style={{ color: "var(--fg-muted)" }}>No participations added yet.</p>
                         )}
                       </div>
                     </div>
                     <div>
-                      <p className="text-xs font-semibold mb-1" style={{ color: "var(--fg)" }}>
-                        Awards ({user.munAwards?.length || 0})
+                      <p className="text-sm font-semibold mb-2" style={{ color: "var(--fg)" }}>
+                        Awards
                       </p>
-                      <p className="text-[11px] mb-1" style={{ color: "var(--fg-muted)" }}>
+                      <p className="text-base font-medium mb-3" style={{ color: "var(--blue)" }}>
                         Total awards won: {user.munAwards?.length || 0}
                       </p>
-                      <div className="space-y-1">
-                        {(user.munAwards || []).slice(0, 2).map((entry) => (
-                          <p key={entry.id} className="text-[11px]" style={{ color: "var(--fg-muted)" }}>
-                            {entry.title} · {entry.conferenceName} {entry.year ? `(${entry.year})` : ""}
-                          </p>
+                      <div className="space-y-3">
+                        {[...(user.munAwards || [])]
+                          .sort(compareTimelineDesc)
+                          .map((entry, index) => (
+                          <div
+                            key={entry.id}
+                            className="rounded-xl p-4 flex items-start gap-3"
+                            style={{ background: "var(--bg-subtle)", border: "1px solid var(--border)" }}
+                          >
+                            <span className="badge badge-gold text-xs shrink-0">#{index + 1}</span>
+                            <div>
+                              <p className="text-base font-semibold" style={{ color: "var(--fg)" }}>{entry.title}</p>
+                              <p className="text-sm mt-1" style={{ color: "var(--fg-muted)" }}>
+                                {entry.conferenceName}
+                                {formatTimelineLabel(entry.year, entry.month) ? ` · ${formatTimelineLabel(entry.year, entry.month)}` : ""}
+                                {entry.category ? ` · ${entry.category}` : ""}
+                              </p>
+                            </div>
+                          </div>
                         ))}
                         {(user.munAwards || []).length === 0 && (
-                          <p className="text-[11px]" style={{ color: "var(--fg-muted)" }}>No awards added yet.</p>
+                          <p className="text-base" style={{ color: "var(--fg-muted)" }}>No awards added yet.</p>
                         )}
                       </div>
                     </div>
-                    <Link href={`/delegates/${user.id}`} className="btn btn-ghost text-xs w-full">
+                    <Link href={`/delegates/${user.id}`} className="btn btn-ghost text-sm w-full">
                       View Public Profile
                     </Link>
                   </div>
@@ -2024,33 +2118,48 @@ function DashboardPageContent() {
                           </button>
                         )}
                         {registration.paid && invoicePreviewRegistrationId === registration.id && (
-                          <div className="rounded-xl p-4 mt-3" style={{ background: "var(--bg)", border: "1px solid var(--border)" }}>
+                          <div className="rounded-xl p-5 mt-3 space-y-4" style={{ background: "var(--bg)", border: "1px solid var(--border)" }}>
                             <div className="flex items-start justify-between gap-3 flex-wrap">
                               <div>
-                                <p className="text-sm font-bold" style={{ color: "var(--fg)" }}>Tax Invoice</p>
-                                <p className="text-xs" style={{ color: "var(--fg-muted)" }}>Invoice ID: INV-{registration.id}</p>
+                                <p className="text-lg font-bold" style={{ color: "var(--fg)" }}>Tax Invoice</p>
+                                <p className="text-sm mt-1" style={{ color: "var(--fg-muted)" }}>
+                                  Invoice No: INV-{registration.id.slice(-8).toUpperCase()}
+                                </p>
+                                <p className="text-sm" style={{ color: "var(--fg-muted)" }}>
+                                  Date issued: {registration.registeredAt}
+                                </p>
                               </div>
-                              <span className="badge badge-success">Paid</span>
+                              <span className="badge badge-success text-sm">Paid</span>
                             </div>
-                            <div className="grid sm:grid-cols-2 gap-3 mt-3 text-xs">
+                            <div className="grid sm:grid-cols-2 gap-4 text-sm">
                               <div>
-                                <p style={{ color: "var(--fg-muted)" }}>Bill To</p>
-                                <p className="font-semibold mt-1" style={{ color: "var(--fg)" }}>{user.name}</p>
-                                <p style={{ color: "var(--fg-muted)" }}>{user.email}</p>
-                                <p style={{ color: "var(--fg-muted)" }}>
+                                <p className="font-semibold" style={{ color: "var(--fg-muted)" }}>Bill To</p>
+                                <p className="font-semibold mt-2" style={{ color: "var(--fg)" }}>{user.name}</p>
+                                <p className="mt-1" style={{ color: "var(--fg-muted)" }}>{user.email}</p>
+                                <p className="mt-1" style={{ color: "var(--fg-muted)" }}>
                                   {formatInvoiceAddress(registration, user.invoiceAddress)}
                                 </p>
                               </div>
                               <div>
-                                <p style={{ color: "var(--fg-muted)" }}>Conference</p>
-                                <p className="font-semibold mt-1" style={{ color: "var(--fg)" }}>{registration.conferenceTitle}</p>
-                                <p style={{ color: "var(--fg-muted)" }}>{registration.categoryName}</p>
-                                <p style={{ color: "var(--fg-muted)" }}>Registered {registration.registeredAt}</p>
+                                <p className="font-semibold" style={{ color: "var(--fg-muted)" }}>Conference</p>
+                                <p className="font-semibold mt-2" style={{ color: "var(--fg)" }}>{registration.conferenceTitle}</p>
+                                <p className="mt-1" style={{ color: "var(--fg-muted)" }}>{registration.categoryName}</p>
+                                <p className="mt-1" style={{ color: "var(--fg-muted)" }}>Registered {registration.registeredAt}</p>
                               </div>
                             </div>
-                            <div className="mt-3 pt-3 flex items-center justify-between text-sm" style={{ borderTop: "1px solid var(--border)" }}>
+                            <div className="rounded-xl overflow-hidden" style={{ border: "1px solid var(--border)" }}>
+                              <div className="grid grid-cols-[1fr_auto] gap-3 px-4 py-3 text-sm font-semibold" style={{ background: "var(--bg-subtle)", color: "var(--fg-muted)" }}>
+                                <span>Description</span>
+                                <span>Amount</span>
+                              </div>
+                              <div className="grid grid-cols-[1fr_auto] gap-3 px-4 py-3 text-sm" style={{ color: "var(--fg)" }}>
+                                <span>{registration.categoryName} registration</span>
+                                <span>{formatMoney(registration.amount)}</span>
+                              </div>
+                            </div>
+                            <div className="pt-3 flex items-center justify-between text-base font-bold" style={{ borderTop: "1px solid var(--border)" }}>
                               <span style={{ color: "var(--fg-muted)" }}>Total Paid</span>
-                              <span className="font-bold" style={{ color: "var(--fg)" }}>{formatMoney(registration.amount)}</span>
+                              <span style={{ color: "var(--fg)" }}>{formatMoney(registration.amount)}</span>
                             </div>
                           </div>
                         )}

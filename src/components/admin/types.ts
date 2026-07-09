@@ -1,4 +1,27 @@
-export type AdminSection = "review" | "overview" | "events";
+export type AdminSection = "review" | "overview" | "events" | "daily-stats";
+
+export type AdminDailyStatsRow = {
+  eventId: string;
+  eventTitle: string;
+  organizerEmail: string | null;
+  registrationCount: number;
+  paidCount: number;
+  amountCollected: number;
+  platformCut: number;
+  organizerNet: number;
+};
+
+export type AdminDailyStatsPayload = {
+  date: string;
+  rows: AdminDailyStatsRow[];
+  totals: {
+    registrationCount: number;
+    paidCount: number;
+    amountCollected: number;
+    platformCut: number;
+    organizerNet: number;
+  };
+};
 
 export type AdminStatsPayload = {
   totals: {

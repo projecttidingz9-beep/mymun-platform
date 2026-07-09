@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import AdminShell from "@/components/admin/AdminShell";
 import AdminEventsTable from "@/components/admin/AdminEventsTable";
 import AdminOverview from "@/components/admin/AdminOverview";
+import DailyStats from "@/components/admin/DailyStats";
 import ReviewQueue from "@/components/admin/ReviewQueue";
 import type { AdminSection, AdminStatsPayload } from "@/components/admin/types";
 
@@ -57,6 +58,7 @@ export default function AdminDashboardPage() {
         <AdminOverview stats={stats} loading={statsLoading} error={statsError} />
       )}
       {section === "events" && <AdminEventsTable />}
+      {section === "daily-stats" && <DailyStats />}
     </AdminShell>
   );
 }

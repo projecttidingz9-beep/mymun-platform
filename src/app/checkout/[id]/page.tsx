@@ -169,10 +169,13 @@ export default function CheckoutPage() {
   const allocationMode =
     organizerConference?.allocationMode || checkoutConfig?.allocationMode || "PAY_FIRST";
   const isAllotFirst = allocationMode === "ALLOT_FIRST";
-  // Country is optional for registration (can be filled later for invoices).
-  const profileIncomplete =
-    Boolean(user) &&
-    (!(user?.name || "").trim() || !(user?.school || "").trim() || !(user?.phone || "").trim());
+  const profileComplete = Boolean(
+    user?.firstName?.trim() &&
+      user?.lastName?.trim() &&
+      user?.school?.trim() &&
+      user?.country?.trim()
+  );
+  const profileIncomplete = Boolean(user) && !profileComplete;
   const checkoutCurrency =
     (typeof organizerConference?.currency === "string" && organizerConference.currency.trim()
       ? organizerConference.currency.trim()
@@ -576,23 +579,20 @@ export default function CheckoutPage() {
           )}
 
           {profileIncomplete && !existingRegistration && (
-            <div
-              className="rounded-xl px-4 py-4 mb-6"
-              style={{ background: "rgba(234,179,8,0.15)", border: "1px solid rgba(234,179,8,0.35)" }}
-            >
-              <p className="text-sm font-semibold" style={{ color: "var(--fg)" }}>
-                Complete your profile before registering
+            <div className="card p-6 rounded-2xl mb-6">
+              <h2 className="text-xl font-bold" style={{ color: "var(--fg)" }}>
+                Complete your profile first
+              </h2>
+              <p className="text-sm mt-2" style={{ color: "var(--fg-muted)" }}>
+                First name, last name, school, and country are required before you can register for any conference.
               </p>
-              <p className="text-xs mt-1" style={{ color: "var(--fg-muted)" }}>
-                Add your name, school, and phone on your dashboard, then return to register.
-              </p>
-              <Link href="/dashboard?tab=profile" className="btn btn-primary text-xs mt-3 inline-flex">
-                Complete profile
+              <Link href="/dashboard?tab=profile" className="btn btn-primary mt-4 inline-flex">
+                Go to Profile
               </Link>
             </div>
           )}
 
-          {step <= 4 && !existingRegistration && (
+          {step <= 4 && !existingRegistration && !profileIncomplete && (
             <div className="app-card mb-6 flex items-center gap-4">
               {displayLogoUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
@@ -622,7 +622,7 @@ export default function CheckoutPage() {
             </div>
           )}
 
-          {step === 1 && !existingRegistration && (
+          {step === 1 && !existingRegistration && !profileIncomplete && (
             <div className="card p-6 sm:p-8 rounded-2xl space-y-4">
               <h2 className="text-xl font-bold" style={{ color: "var(--fg)" }}>1. Category &amp; contact</h2>
               {categories.length === 0 && (
@@ -724,7 +724,7 @@ export default function CheckoutPage() {
             </div>
           )}
 
-          {step === 2 && !existingRegistration && selectedCategory && needsPreferencesStep && (
+          {step === 2 && !existingRegistration && !profileIncomplete && selectedCategory && needsPreferencesStep && (
             <div className="card p-6 sm:p-8 rounded-2xl space-y-4">
               <h2 className="text-xl font-bold" style={{ color: "var(--fg)" }}>2. Preferences</h2>
               <div className="rounded-xl p-3" style={{ background: "var(--bg-subtle)", border: "1px solid var(--border)" }}>
@@ -902,7 +902,7 @@ export default function CheckoutPage() {
             </div>
           )}
 
-          {step === 3 && !existingRegistration && selectedCategory && needsQuestionsStep && (
+          {step === 3 && !existingRegistration && !profileIncomplete && selectedCategory && needsQuestionsStep && (
             <div className="card p-6 sm:p-8 rounded-2xl space-y-4">
               <h2 className="text-xl font-bold" style={{ color: "var(--fg)" }}>3. Additional questions</h2>
               {selectedCategory.formFields.map((field) => (
@@ -1053,7 +1053,7 @@ export default function CheckoutPage() {
             </div>
           )}
 
-          {step === 4 && !existingRegistration && (
+          {step === 4 && !existingRegistration && !profileIncomplete && (
             <div className="card p-6 sm:p-8 rounded-2xl space-y-4">
               <h2 className="text-xl font-bold" style={{ color: "var(--fg)" }}>
                 {isAllotFirst || priceResult.amount <= 0 ? "4. Confirm application" : "4. Payment"}
