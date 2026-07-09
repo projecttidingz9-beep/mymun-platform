@@ -382,6 +382,20 @@ export default function HomePage() {
                   Browse conferences
                 </Link>
               )}
+              {!isLoggedIn && (
+                <Link
+                  href="/demo"
+                  className="lux-button-ghost text-base w-full sm:w-auto inline-flex justify-center items-center min-h-[48px] touch-manipulation"
+                  style={{
+                    padding: "16px 30px",
+                    color: "var(--fg-immersive)",
+                    borderColor: "rgba(243,237,224,0.28)",
+                    background: "rgba(243,237,224,0.03)",
+                  }}
+                >
+                  Try demo
+                </Link>
+              )}
               <Link
                 href={
                   isLoggedIn

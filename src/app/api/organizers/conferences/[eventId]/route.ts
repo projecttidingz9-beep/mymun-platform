@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getRequestActor, requireEventOrganizerAccess, requireOrganizer } from "@/lib/server/auth";
+import { demoDenied, isDemoAccount } from "@/lib/server/demo-guard";
 import { prisma } from "@/lib/server/prisma";
 
 export async function DELETE(
@@ -10,6 +11,7 @@ export async function DELETE(
   if (!requireOrganizer(actor)) {
     return NextResponse.json({ error: "Organizer role required." }, { status: 403 });
   }
+  if (isDemoAccount(actor?.email)) return demoDenied();
 
   const params = await context.params;
   const eventId = String(params.eventId || "");

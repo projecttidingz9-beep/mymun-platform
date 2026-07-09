@@ -6,11 +6,13 @@ import Link from "next/link";
 import Image from "next/image";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
+import DemoAccountBanner from "@/components/DemoAccountBanner";
 import AppRouteSkeleton from "@/components/AppRouteSkeleton";
 import SignInGate from "@/components/SignInGate";
 import { DestructiveConfirmButton } from "@/components/ConfirmModal";
 import { useToast } from "@/components/Toast";
 import { ensureServerSession } from "@/lib/client/session";
+import { isDemoAccount } from "@/lib/demo-account";
 import { useAuth } from "@/lib/auth-context";
 import { formatMoney } from "@/lib/format-money";
 import { startPaymentForRegistration } from "@/lib/client/cashfree-checkout";
@@ -884,6 +886,8 @@ function DashboardPageContent() {
               </Link>
             </div>
           </header>
+
+          {isDemoAccount(user.email) && <DemoAccountBanner />}
 
           {verifyRedirectNotice && (
             <div

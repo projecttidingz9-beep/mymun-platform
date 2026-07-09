@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/server/prisma";
 import { getRequestActor } from "@/lib/server/auth";
+import { demoDenied, isDemoAccount } from "@/lib/server/demo-guard";
 import { hashPassword, validateNewPassword, verifyPassword } from "@/lib/server/password";
 
 export async function POST(request: NextRequest) {
@@ -8,6 +9,7 @@ export async function POST(request: NextRequest) {
   if (!actor?.email) {
     return NextResponse.json({ error: "Authentication required." }, { status: 401 });
   }
+  if (isDemoAccount(actor.email)) return demoDenied();
   try {
     const body = await request.json();
     const currentPassword = String(body.currentPassword || "");

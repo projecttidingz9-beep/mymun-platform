@@ -7,6 +7,7 @@ import {
   requireEventOrganizerAccess,
   requireOrganizer,
 } from "@/lib/server/auth";
+import { demoDenied, isDemoAccount } from "@/lib/server/demo-guard";
 import {
   formatOrganizerSyncError,
   persistOrganizerConferenceSync,
@@ -22,6 +23,7 @@ export async function PUT(
   if (!requireOrganizer(actor)) {
     return NextResponse.json({ error: "Organizer role required." }, { status: 403 });
   }
+  if (isDemoAccount(actor?.email)) return demoDenied();
 
   const params = await context.params;
   const eventId = String(params.eventId || "");

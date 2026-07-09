@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { Prisma } from "@/generated/prisma/client";
 import { getRequestActor } from "@/lib/server/auth";
+import { demoDenied, isDemoAccount } from "@/lib/server/demo-guard";
 import { loadClientUserByEmail } from "@/lib/server/load-client-user";
 import { logger } from "@/lib/server/logger";
 import { prismaUserToClientUser } from "@/lib/server/map-db-user";
@@ -39,6 +40,7 @@ export async function PATCH(request: NextRequest) {
   if (!actor) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
+  if (isDemoAccount(actor.email)) return demoDenied();
 
   const user = await prisma.user.findUnique({
     where: { email: actor.email },

@@ -2,6 +2,7 @@ import { randomUUID } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import type { RegistrationCategory } from "@/lib/types";
 import { getRequestActor, requireOrganizer, resolveActorUserId } from "@/lib/server/auth";
+import { demoDenied, isDemoAccount } from "@/lib/server/demo-guard";
 import { requireVerifiedEmail } from "@/lib/server/require-verified-email";
 import { logger } from "@/lib/server/logger";
 import { prisma } from "@/lib/server/prisma";
@@ -31,6 +32,7 @@ export async function POST(request: NextRequest) {
   if (!requireOrganizer(actor)) {
     return NextResponse.json({ error: "Organizer role required." }, { status: 403 });
   }
+  if (isDemoAccount(actor?.email)) return demoDenied();
 
   const verifyBlock = await requireVerifiedEmail(actor);
   if (verifyBlock) return verifyBlock;

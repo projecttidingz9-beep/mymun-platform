@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
+import DemoAccountBanner from "@/components/DemoAccountBanner";
 import AppRouteSkeleton from "@/components/AppRouteSkeleton";
 import { useToast } from "@/components/Toast";
 
@@ -19,6 +20,7 @@ const QrScannerPanel = dynamic(() => import("@/components/QrScannerPanel"), {
   ),
 });
 import { ensureServerSession } from "@/lib/client/session";
+import { isDemoAccount } from "@/lib/demo-account";
 import { allotApplicantOnConference } from "@/lib/allot-applicant";
 import { netAfterPlatformFee } from "@/lib/platform-finance";
 import { formatMoney } from "@/lib/format-money";
@@ -2712,6 +2714,8 @@ export default function OrganizerDashboardPage() {
               )}
             </div>
           </header>
+
+          {isDemoAccount(user.email) && <DemoAccountBanner />}
 
           {lastOrganizerSyncError && (
             <div
