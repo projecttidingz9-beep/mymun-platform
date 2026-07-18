@@ -21,6 +21,7 @@ const CATEGORY_TYPES: RegistrationCategoryType[] = [
   "chair",
   "delegation",
   "organizer",
+  "secretariat",
   "other",
 ];
 
@@ -35,6 +36,7 @@ function inferFromCategoryName(categoryName: string): RegistrationCategoryType {
   }
 
   if (normalized.includes("chair")) return "chair";
+  if (normalized.includes("secretariat")) return "secretariat";
   if (normalized.includes("organiz")) return "organizer";
   if (normalized.includes("delegation")) return "delegation";
   if (normalized.includes("delegate")) return "delegate";

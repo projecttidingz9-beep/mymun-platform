@@ -128,7 +128,7 @@ function questionTypeLabel(type: DynamicFieldType): string {
 
 function registrationFlowPreviewMeta(category: RegistrationCategory, conference: OrganizerConference) {
   const applicationType = category.applicationType || "delegate";
-  const isOc = applicationType === "organizer";
+  const isOc = applicationType === "organizer" || applicationType === "secretariat";
   const isDelegation = applicationType === "delegation";
   const isPress = applicationType === "press";
   const needsPreferences = !isOc;
@@ -679,11 +679,15 @@ export default function OrganizerDashboardPage() {
   const [assignmentCommittee, setAssignmentCommittee] = useState<Record<string, string>>({});
   const [releasingAllotments, setReleasingAllotments] = useState(false);
   const [releaseAllotmentsOpen, setReleaseAllotmentsOpen] = useState(false);
+  const [completingConferenceId, setCompletingConferenceId] = useState("");
+  const [completedConferenceIds, setCompletedConferenceIds] = useState<Set<string>>(
+    () => new Set()
+  );
   const [assignmentPortfolio, setAssignmentPortfolio] = useState<Record<string, string>>({});
   const [allotConfirmStep, setAllotConfirmStep] = useState<Record<string, 0 | 1 | 2>>({});
   const [selectedApplicantId, setSelectedApplicantId] = useState<string>("");
   const [applicationTypeTab, setApplicationTypeTab] = useState<
-    "delegate" | "chair" | "organizer" | "delegation"
+    "delegate" | "chair" | "organizer" | "secretariat" | "delegation"
   >("organizer");
   const [autoAssigning, setAutoAssigning] = useState(false);
   const [autoAssignProgress, setAutoAssignProgress] = useState("");
@@ -718,6 +722,7 @@ export default function OrganizerDashboardPage() {
     "all" | "Pending" | "Allotted" | "Rejected"
   >("all");
   const [bankingSaveStatus, setBankingSaveStatus] = useState("");
+  const [teamTypeTab, setTeamTypeTab] = useState<"organizer" | "secretariat">("organizer");
   const [teamDraft, setTeamDraft] = useState({
     name: "",
     email: "",
@@ -1546,6 +1551,7 @@ export default function OrganizerDashboardPage() {
           ownerUserId: selectedConference.ownerUserId || user?.id,
           ownerEmail: selectedConference.ownerEmail || user?.email,
           organizerTeamEmails: (selectedConference.organizerTeam || [])
+            .filter((member) => member.teamType !== "secretariat")
             .map((member) => member.email.trim().toLowerCase())
             .filter(Boolean),
         }),
@@ -2127,6 +2133,7 @@ export default function OrganizerDashboardPage() {
             ownerUserId: selectedConference.ownerUserId || user?.id,
             ownerEmail: selectedConference.ownerEmail || user?.email,
             organizerTeamEmails: (selectedConference.organizerTeam || [])
+              .filter((member) => member.teamType !== "secretariat")
               .map((member) => member.email.trim().toLowerCase())
               .filter(Boolean),
           }),
@@ -2956,6 +2963,78 @@ export default function OrganizerDashboardPage() {
                     ))}
                   </div>
                 </div>
+              </div>
+              <div
+                className="mt-6 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
+                style={{ background: "var(--bg-subtle)", border: "1px solid var(--border)" }}
+              >
+                <div>
+                  <p className="text-sm font-semibold" style={{ color: "var(--fg)" }}>
+                    Complete conference
+                  </p>
+                  <p className="text-xs mt-1" style={{ color: "var(--fg-muted)" }}>
+                    After the end date, archive this MUN and add it to every released, allotted participant&apos;s profile.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-primary text-xs shrink-0"
+                  disabled={
+                    completingConferenceId === selectedConference.id ||
+                    completedConferenceIds.has(selectedConference.id) ||
+                    new Date(selectedConference.endDate).getTime() > Date.now()
+                  }
+                  onClick={() => {
+                    if (
+                      !window.confirm(
+                        "Complete this conference? It will be archived and added to allotted participants' profiles."
+                      )
+                    ) {
+                      return;
+                    }
+                    setCompletingConferenceId(selectedConference.id);
+                    void fetch(
+                      `/api/organizers/conferences/${encodeURIComponent(selectedConference.id)}/complete`,
+                      { method: "POST", credentials: "include" }
+                    )
+                      .then(async (response) => {
+                        const payload = (await response.json().catch(() => ({}))) as {
+                          error?: string;
+                          syncedParticipationCount?: number;
+                        };
+                        if (!response.ok) {
+                          throw new Error(payload.error || "Could not complete the conference.");
+                        }
+                        setCompletedConferenceIds((current) => {
+                          const next = new Set(current);
+                          next.add(selectedConference.id);
+                          return next;
+                        });
+                        toast.show(
+                          `Conference completed. ${payload.syncedParticipationCount ?? 0} profile${
+                            payload.syncedParticipationCount === 1 ? "" : "s"
+                          } updated.`,
+                          "success"
+                        );
+                        void refetchMyEvents();
+                      })
+                      .catch((error) => {
+                        toast.show(
+                          error instanceof Error ? error.message : "Could not complete the conference.",
+                          "error"
+                        );
+                      })
+                      .finally(() => setCompletingConferenceId(""));
+                  }}
+                >
+                  {completedConferenceIds.has(selectedConference.id)
+                    ? "Conference completed"
+                    : completingConferenceId === selectedConference.id
+                      ? "Completing…"
+                      : new Date(selectedConference.endDate).getTime() > Date.now()
+                        ? "Available after end date"
+                        : "Complete conference"}
+                </button>
               </div>
             </div>
           )}
@@ -3788,6 +3867,7 @@ export default function OrganizerDashboardPage() {
                     <div className="flex flex-wrap gap-2 mb-4">
                       {([
                         { id: "organizer", label: "Organiser Committee Applications" },
+                        { id: "secretariat", label: "Secretariat Applications" },
                         { id: "chair", label: "EB Applications" },
                         { id: "delegation", label: "Delegation Applications" },
                         { id: "delegate", label: "Delegate Applications" },
@@ -3815,7 +3895,7 @@ export default function OrganizerDashboardPage() {
                       })}
                     </div>
                     <div className="mb-4 flex flex-wrap items-center gap-3">
-                      {applicationTypeTab !== "organizer" && (
+                      {applicationTypeTab !== "organizer" && applicationTypeTab !== "secretariat" && (
                         <button
                           type="button"
                           className="btn btn-outline-blue text-xs"
@@ -3885,7 +3965,9 @@ export default function OrganizerDashboardPage() {
                     ) : (
                       <div className="space-y-3">
                         {filteredApplications.map((applicant) => {
-                          const isOcTab = applicationTypeTab === "organizer";
+                          const isOcTab =
+                            applicationTypeTab === "organizer" ||
+                            applicationTypeTab === "secretariat";
                           const isChairTab = applicationTypeTab === "chair";
                           const allotStep = allotConfirmStep[applicant.id] ?? 0;
                           const selectedCommitteeId = assignmentCommittee[applicant.id] || applicant.assignedCommitteeId || "";
@@ -5859,13 +5941,44 @@ export default function OrganizerDashboardPage() {
 
                   {activeSection === "team" && (
                     <div className="card p-6 rounded-2xl">
-                      <h3 className="text-lg font-bold mb-4" style={{ color: "var(--fg)" }}>Organizer Team</h3>
+                      <h3 className="text-lg font-bold mb-4" style={{ color: "var(--fg)" }}>Teams</h3>
+                      <div className="grid grid-cols-2 gap-2 mb-4">
+                        {([
+                          { id: "organizer", label: "Organizing Team" },
+                          { id: "secretariat", label: "Secretariat" },
+                        ] as const).map((tab) => (
+                          <button
+                            key={tab.id}
+                            type="button"
+                            className="btn btn-ghost text-xs"
+                            data-active={teamTypeTab === tab.id ? "true" : "false"}
+                            onClick={() => {
+                              setTeamTypeTab(tab.id);
+                              setTeamDraft((current) => ({
+                                ...current,
+                                role: tab.id === "secretariat" ? "Secretary-General" : "USG",
+                              }));
+                            }}
+                          >
+                            {tab.label}
+                          </button>
+                        ))}
+                      </div>
+                      <p className="text-xs mb-4" style={{ color: "var(--fg-muted)" }}>
+                        {teamTypeTab === "secretariat"
+                          ? "Add the Secretary-General, Deputy Secretary-General, Directors, and other secretariat members shown on the public conference page."
+                          : "Add organizers who help manage conference operations and applications."}
+                      </p>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-2">
                         <input className="input-base text-xs" placeholder="Name" value={teamDraft.name} onChange={(event) => setTeamDraft((prev) => ({ ...prev, name: event.target.value }))} />
                         <input className="input-base text-xs" placeholder="Email" value={teamDraft.email} onChange={(event) => setTeamDraft((prev) => ({ ...prev, email: event.target.value }))} />
                         <input
                           className="input-base text-xs col-span-2"
-                          placeholder="Role (e.g. USG Finance)"
+                          placeholder={
+                            teamTypeTab === "secretariat"
+                              ? "Role (e.g. Secretary-General)"
+                              : "Role (e.g. USG Finance)"
+                          }
                           value={teamDraft.role}
                           onChange={(event) => setTeamDraft((prev) => ({ ...prev, role: event.target.value }))}
                         />
@@ -5917,9 +6030,12 @@ export default function OrganizerDashboardPage() {
                                 name: teamDraft.name.trim(),
                                 email: teamDraft.email.trim(),
                                 role: teamDraft.role,
+                                teamType: teamTypeTab,
                                 photoUrl: teamDraft.photoUrl || undefined,
                                 permissions:
-                                  teamDraft.role === "Lead Organizer"
+                                  teamTypeTab === "secretariat"
+                                    ? []
+                                    : teamDraft.role === "Lead Organizer"
                                     ? ["view", "applications", "finance", "settings", "publishing"]
                                     : teamDraft.role === "USG"
                                       ? ["view", "applications", "publishing"]
@@ -5929,18 +6045,34 @@ export default function OrganizerDashboardPage() {
                               },
                             ],
                           });
-                          setTeamDraft({ name: "", email: "", role: "USG", photoUrl: "" });
-                          toast.show("Team member added.", "success");
+                          setTeamDraft({
+                            name: "",
+                            email: "",
+                            role: teamTypeTab === "secretariat" ? "Secretary-General" : "USG",
+                            photoUrl: "",
+                          });
+                          toast.show(
+                            teamTypeTab === "secretariat"
+                              ? "Secretariat member added."
+                              : "Organizing team member added.",
+                            "success"
+                          );
                           void syncOrganizerConferenceById(selectedConference.id);
                         }}
                       >
-                        Add Team Member
+                        Add {teamTypeTab === "secretariat" ? "Secretariat Member" : "Team Member"}
                       </button>
                       <div className="space-y-2">
-                        {(selectedConference.organizerTeam || []).length === 0 ? (
-                          <p className="text-sm" style={{ color: "var(--fg-muted)" }}>No team members added yet.</p>
+                        {(selectedConference.organizerTeam || []).filter(
+                          (member) => (member.teamType || "organizer") === teamTypeTab
+                        ).length === 0 ? (
+                          <p className="text-sm" style={{ color: "var(--fg-muted)" }}>
+                            No {teamTypeTab === "secretariat" ? "secretariat" : "organizing team"} members added yet.
+                          </p>
                         ) : (
-                        (selectedConference.organizerTeam || []).map((member) => (
+                        (selectedConference.organizerTeam || [])
+                          .filter((member) => (member.teamType || "organizer") === teamTypeTab)
+                          .map((member) => (
                           <div key={member.id} className="p-3 rounded-xl flex items-start justify-between gap-3" style={{ background: "var(--bg-subtle)" }}>
                             <div className="flex items-start gap-3 min-w-0">
                               {member.photoUrl ? (
@@ -5970,7 +6102,11 @@ export default function OrganizerDashboardPage() {
                             <DestructiveConfirmButton
                               label="Remove"
                               confirmTitle={`Remove team member ${member.name}?`}
-                              confirmDescription="They will immediately lose access to this conference's dashboard."
+                              confirmDescription={
+                                member.teamType === "secretariat"
+                                  ? "Their secretariat information will be removed from the conference page."
+                                  : "They will immediately lose access to this conference's dashboard."
+                              }
                               onConfirm={() => {
                                 updateOrganizerConferenceConfig(selectedConference.id, {
                                   organizerTeam: (selectedConference.organizerTeam || []).filter((entry) => entry.id !== member.id),
@@ -6099,22 +6235,22 @@ export default function OrganizerDashboardPage() {
                       </p>
                     ) : null}
                     <div className="mb-4 space-y-2">
-                      <label className="text-sm font-semibold" style={{ color: "var(--fg-muted)" }}>
+                      <p className="text-sm font-semibold" style={{ color: "var(--fg-muted)" }}>
                         Category type
-                        <select
-                          className="input-base text-sm mt-1 block w-full max-w-xs"
-                          value={pricingCategoryTypeTab}
-                          onChange={(event) =>
-                            setPricingCategoryTypeTab(event.target.value as RegistrationCategoryUiType)
-                          }
-                        >
-                          {REGISTRATION_CATEGORY_UI_TYPES.map((type) => (
-                            <option key={type} value={type}>
-                              {getCategoryTypeLabel(type)}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
+                      </p>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+                        {REGISTRATION_CATEGORY_UI_TYPES.map((type) => (
+                          <button
+                            key={type}
+                            type="button"
+                            className="btn btn-ghost text-xs"
+                            data-active={pricingCategoryTypeTab === type ? "true" : "false"}
+                            onClick={() => setPricingCategoryTypeTab(type)}
+                          >
+                            {getCategoryTypeLabel(type)}
+                          </button>
+                        ))}
+                      </div>
                       <p className="text-xs" style={{ color: "var(--fg-muted)" }}>
                         Configure pricing and questions for this registration type.
                       </p>
@@ -6141,7 +6277,10 @@ export default function OrganizerDashboardPage() {
                         const category = selectedPricingCategory;
                         const activePhase = getActivePhase(category.pricingPhases);
                         const categoryType = category.applicationType || "delegate";
-                        const isNoPhasesCategory = categoryType === "chair" || categoryType === "organizer";
+                        const isNoPhasesCategory =
+                          categoryType === "chair" ||
+                          categoryType === "organizer" ||
+                          categoryType === "secretariat";
                         const categoryLabel = getCategoryRegistrationLabel(categoryType);
                         return (
                           <div key={category.id} className="p-4 rounded-xl" style={{ background: "var(--bg-subtle)" }}>
@@ -6175,7 +6314,7 @@ export default function OrganizerDashboardPage() {
                               </div>
                             </div>
                             <p className="text-sm mt-2" style={{ color: "var(--fg-muted)" }}>
-                              Default {formatMoney(category.basePrice, selectedConference.currency || "INR")} · {category.requiresCommitteeSelection ? "Committee required" : "No committee selection"}
+                              Default {formatMoney(categoryType === "chair" ? 0 : category.basePrice, selectedConference.currency || "INR")} · {category.requiresCommitteeSelection ? "Committee required" : "No committee selection"}
                             </p>
                             <p className="text-sm mt-1" style={{ color: "var(--fg-muted)" }}>
                               {category.formFields.length} custom form fields · {category.pricingPhases.length} pricing phases
@@ -6242,12 +6381,13 @@ export default function OrganizerDashboardPage() {
                               </div>
                               <div className="grid md:grid-cols-2 gap-2">
                                 <label className="text-xs" style={{ color: "var(--fg-muted)" }}>
-                                  Base Price
+                                  {categoryType === "chair" ? "Base Price (Chair applications are free)" : "Base Price"}
                                   <input
                                     className="input-base text-xs mt-1"
                                     type="number"
                                     min={0}
-                                    value={category.basePrice}
+                                    value={categoryType === "chair" ? 0 : category.basePrice}
+                                    disabled={categoryType === "chair"}
                                     onChange={(event) =>
                                       updateCategoryBasePrice(selectedConference.id, category.id, event.target.value)
                                     }

@@ -149,6 +149,16 @@ export function resolveRegistrationPrice(
   selectedCommitteeId?: string,
   referenceDate = new Date()
 ) {
+  if (category.applicationType === "chair") {
+    return {
+      amount: 0,
+      phaseId: undefined,
+      phaseName: undefined,
+      source: "category-base" as const,
+      status: "base" as const,
+    };
+  }
+
   const activePhase = getActivePhase(category.pricingPhases, referenceDate);
   const sortedByEnd = [...category.pricingPhases].sort(
     (a, b) => dateToDayNumber(b.endDate) - dateToDayNumber(a.endDate)
@@ -197,6 +207,8 @@ export function getCategoryStartingPrice(
   committees: OrganizerCommittee[],
   referenceDate = new Date()
 ) {
+  if (category.applicationType === "chair") return 0;
+
   const phase = getActivePhase(category.pricingPhases, referenceDate);
   if (!phase) return category.basePrice;
 

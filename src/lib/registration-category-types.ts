@@ -8,6 +8,7 @@ export const REGISTRATION_CATEGORY_UI_TYPES = [
   "chair",
   "delegation",
   "organizer",
+  "secretariat",
   "other",
 ] as const satisfies readonly RegistrationCategoryType[];
 
@@ -32,6 +33,7 @@ export const getCategoryTypeLabel = (applicationType?: RegistrationCategory["app
   if (applicationType === "press") return "International Press";
   if (applicationType === "chair") return "Chair";
   if (applicationType === "organizer") return "Organizer Team";
+  if (applicationType === "secretariat") return "Secretariat";
   if (applicationType === "other") return "Custom";
   return "Delegate";
 };
@@ -41,6 +43,7 @@ export const getCategoryRegistrationLabel = (applicationType?: RegistrationCateg
   if (applicationType === "press") return "Press Registration";
   if (applicationType === "chair") return "Chair Registration";
   if (applicationType === "organizer") return "Organising Committee Registration";
+  if (applicationType === "secretariat") return "Secretariat Registration";
   if (applicationType === "other") return "Custom Registration";
   return "Delegate Registration";
 };
@@ -50,6 +53,7 @@ export const getCategoryTypeHint = (applicationType?: RegistrationCategory["appl
   if (applicationType === "press") return "This category is intended for International Press / Press Corps.";
   if (applicationType === "chair") return "This category is intended for executive board and chair applications.";
   if (applicationType === "organizer") return "This category is intended for organizer team applications.";
+  if (applicationType === "secretariat") return "This category is intended for secretariat applications.";
   if (applicationType === "other") return "This category uses organizer-defined custom criteria.";
   return "This category is intended for delegate applications.";
 };
@@ -72,6 +76,7 @@ export const getDefaultCategoryForType = (
     chair: "Executive board and chair applications.",
     delegation: "Register an entire delegation.",
     organizer: "Internal organising team onboarding category.",
+    secretariat: "Secretariat applications.",
     press: "International Press / Press Corps registration.",
     other: "Custom registration category with organizer-defined criteria.",
   };
@@ -83,8 +88,8 @@ export const getDefaultCategoryForType = (
     applicationType: type,
     isOpen: true,
     deadlineOverride: conference.registrationDeadline,
-    basePrice: type === "organizer" ? 0 : 0,
-    requiresCommitteeSelection: type !== "organizer",
+    basePrice: type === "organizer" || type === "secretariat" ? 0 : 0,
+    requiresCommitteeSelection: type !== "organizer" && type !== "secretariat",
     formFields: [],
     pricingPhases: [],
   };

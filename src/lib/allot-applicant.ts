@@ -5,6 +5,7 @@ export type AssignApplicantParams = {
   applicantId: string;
   committeeId: string;
   portfolioId?: string;
+  allowNoPortfolio?: boolean;
 };
 
 export type AssignApplicantResult = {
@@ -20,7 +21,7 @@ export function allotApplicantOnConference(
   conferences: OrganizerConference[],
   params: AssignApplicantParams
 ): { next: OrganizerConference[]; result: AssignApplicantResult } {
-  const { conferenceId, applicantId, committeeId, portfolioId } = params;
+  const { conferenceId, applicantId, committeeId, portfolioId, allowNoPortfolio = false } = params;
   const conference = conferences.find((entry) => entry.id === conferenceId);
   if (!conference) {
     return { next: conferences, result: { ok: false, message: "Conference not found." } };
@@ -56,7 +57,7 @@ export function allotApplicantOnConference(
       return { next: conferences, result: { ok: false, message: "Portfolio is full." } };
     }
     portfolioName = portfolio.name;
-  } else if ((committee.portfolios?.length ?? 0) > 0) {
+  } else if ((committee.portfolios?.length ?? 0) > 0 && !allowNoPortfolio) {
     return {
       next: conferences,
       result: { ok: false, message: "Select a portfolio/country for this committee." },

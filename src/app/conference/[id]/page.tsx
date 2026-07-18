@@ -1350,35 +1350,45 @@ function ConferenceDetailPageContent() {
                 )}
               </div>
               {publicTeamMembers.length > 0 && (
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.2em] mb-3" style={{ color: "var(--fg-muted)" }}>
-                    Organizing Team
-                  </p>
-                  <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {publicTeamMembers.map((member) => (
-                      <div key={member.id} className="rounded-2xl p-4 conference-surface flex flex-col items-center text-center gap-3">
-                        {member.photoUrl ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            src={member.photoUrl}
-                            alt={member.name}
-                            className="w-20 h-20 rounded-2xl object-cover flex-shrink-0"
-                          />
-                        ) : (
-                          <div
-                            className="w-20 h-20 rounded-2xl flex items-center justify-center text-white font-bold text-2xl flex-shrink-0"
-                            style={{ background: "linear-gradient(135deg, #2563eb, #60a5fa)" }}
-                          >
-                            {member.name[0]?.toUpperCase() || "T"}
-                          </div>
-                        )}
-                        <div className="min-w-0">
-                          <p className="text-base font-bold" style={{ color: "var(--fg)" }}>{member.name}</p>
-                          <p className="text-sm mt-1" style={{ color: "var(--fg-muted)" }}>{member.role}</p>
+                <div className="space-y-7">
+                  {(["organizer", "secretariat"] as const).map((teamType) => {
+                    const members = publicTeamMembers.filter(
+                      (member) => (member.teamType || "organizer") === teamType
+                    );
+                    if (members.length === 0) return null;
+                    return (
+                      <div key={teamType}>
+                        <p className="text-xs font-semibold uppercase tracking-[0.2em] mb-3" style={{ color: "var(--fg-muted)" }}>
+                          {teamType === "secretariat" ? "Secretariat" : "Organizing Team"}
+                        </p>
+                        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                          {members.map((member) => (
+                            <div key={member.id} className="rounded-2xl p-4 conference-surface flex flex-col items-center text-center gap-3">
+                              {member.photoUrl ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img
+                                  src={member.photoUrl}
+                                  alt={member.name}
+                                  className="w-20 h-20 rounded-2xl object-cover flex-shrink-0"
+                                />
+                              ) : (
+                                <div
+                                  className="w-20 h-20 rounded-2xl flex items-center justify-center text-white font-bold text-2xl flex-shrink-0"
+                                  style={{ background: "linear-gradient(135deg, #2563eb, #60a5fa)" }}
+                                >
+                                  {member.name[0]?.toUpperCase() || "T"}
+                                </div>
+                              )}
+                              <div className="min-w-0">
+                                <p className="text-base font-bold" style={{ color: "var(--fg)" }}>{member.name}</p>
+                                <p className="text-sm mt-1" style={{ color: "var(--fg-muted)" }}>{member.role}</p>
+                              </div>
+                            </div>
+                          ))}
                         </div>
                       </div>
-                    ))}
-                  </div>
+                    );
+                  })}
                 </div>
               )}
               {displayOrganizerEmail && (

@@ -24,6 +24,8 @@ function passTypeLabel(applicationType?: string): string {
       return "DELEGATION PASS";
     case "organizer":
       return "ORGANIZER PASS";
+    case "secretariat":
+      return "SECRETARIAT PASS";
     case "other":
       return "EVENT PASS";
     default:
@@ -41,6 +43,8 @@ function holderLabel(applicationType?: string): string {
       return "DELEGATION HEAD";
     case "organizer":
       return "ORGANIZER";
+    case "secretariat":
+      return "SECRETARIAT";
     default:
       return "DELEGATE";
   }

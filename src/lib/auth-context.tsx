@@ -316,8 +316,10 @@ const normalizeOrganizerConference = (raw: unknown): OrganizerConference | null 
           rawApplicationType === "chair" ||
           rawApplicationType === "delegation" ||
           rawApplicationType === "organizer" ||
+          rawApplicationType === "secretariat" ||
+          rawApplicationType === "press" ||
           rawApplicationType === "other"
-            ? (rawApplicationType as "delegate" | "chair" | "delegation" | "organizer" | "other")
+            ? (rawApplicationType as NonNullable<RegistrationCategory["applicationType"]>)
             : "delegate";
         const normalizedDeadlineOverride =
           typeof category.deadlineOverride === "string" && category.deadlineOverride.trim()
@@ -616,12 +618,9 @@ const normalizeOrganizerConference = (raw: unknown): OrganizerConference | null 
             userId: member.userId ? String(member.userId) : undefined,
             name: String(member.name ?? ""),
             email: String(member.email ?? ""),
-            role:
-              member.role === "USG" ||
-              member.role === "Logistics Head" ||
-              member.role === "Committee Head"
-                ? member.role
-                : "Lead Organizer",
+            role: member.role ? String(member.role) : "Team Member",
+            teamType: member.teamType === "secretariat" ? "secretariat" as const : "organizer" as const,
+            photoUrl: member.photoUrl ? String(member.photoUrl) : undefined,
             permissions: Array.isArray(member.permissions)
               ? member.permissions.map((permission) => String(permission)) as (
                   | "view"
@@ -1634,6 +1633,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       };
       if (safePatch.organizerTeam) {
         merged.organizerTeamEmails = safePatch.organizerTeam
+          .filter((member) => member.teamType !== "secretariat")
           .map((member) => member.email.trim().toLowerCase())
           .filter(Boolean);
       }
@@ -1869,14 +1869,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ organizerStatus: status }),
         });
-        if (status === "Allotted") {
-          await fetch(`/api/organizers/registrations/${registrationId}/sync-participation`, {
-            method: "POST",
-            credentials: "include",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({}),
-          });
-        }
       }
       await refetchMyEvents({ id: user?.id, email: user?.email });
     })();
@@ -1989,12 +1981,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             allottedAt: new Date().toISOString(),
           }),
         });
-        await fetch(`/api/organizers/registrations/${priorApplicant.registrationId}/sync-participation`, {
-          method: "POST",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({}),
-        });
       }
 
       // Draft allotment only — do not notify the delegate or update their visible registration
@@ -2027,6 +2013,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       applicantId,
       committeeId,
       portfolioId: undefined,
+      allowNoPortfolio: true,
     });
     if (!result.ok) return { ok: false, message: result.message ?? "Allotment failed." };
 
@@ -2071,12 +2058,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             portfolioId: null,
             allottedAt: new Date().toISOString(),
           }),
-        });
-        await fetch(`/api/organizers/registrations/${applicant.registrationId}/sync-participation`, {
-          method: "POST",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ role: trimmedRole }),
         });
       }
 

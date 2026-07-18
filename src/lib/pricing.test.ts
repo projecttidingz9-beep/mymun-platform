@@ -170,4 +170,15 @@ describe("resolveRegistrationPrice", () => {
     const result = resolveRegistrationPrice(sparse, "c1", new Date("2026-06-01"));
     expect(result.amount).toBe(0);
   });
+
+  it("always makes chair applications free", () => {
+    const chairCategory: RegistrationCategory = {
+      ...category,
+      id: "cat-chair",
+      applicationType: "chair",
+      basePrice: 2500,
+    };
+    const result = resolveRegistrationPrice(chairCategory, "c1", new Date("2026-06-01"));
+    expect(result.amount).toBe(0);
+  });
 });

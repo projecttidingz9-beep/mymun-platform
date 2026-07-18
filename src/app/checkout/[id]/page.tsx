@@ -37,9 +37,6 @@ export default function CheckoutPage() {
   const payingOnlineRef = useRef(false);
 
   const [step, setStep] = useState<Step>(1);
-  const [fullName, setFullName] = useState(user?.name || "");
-  const [school, setSchool] = useState(user?.school || "");
-  const [phone, setPhone] = useState("");
   const [selectedCategoryId, setSelectedCategoryId] = useState("");
   const [selectedCommitteeId, setSelectedCommitteeId] = useState("");
   const [secondPreferenceCommitteeId, setSecondPreferenceCommitteeId] = useState("");
@@ -169,11 +166,19 @@ export default function CheckoutPage() {
   const allocationMode =
     organizerConference?.allocationMode || checkoutConfig?.allocationMode || "PAY_FIRST";
   const isAllotFirst = allocationMode === "ALLOT_FIRST";
+  const fullName =
+    [user?.firstName, user?.lastName].filter((value) => value?.trim()).join(" ").trim() ||
+    user?.name?.trim() ||
+    "";
+  const school = user?.school?.trim() || "";
+  const phone = user?.phone?.trim() || "";
+  const normalizedPhone = phone.replace(/\D/g, "").replace(/^91(?=\d{10}$)/, "").replace(/^0(?=\d{10}$)/, "");
   const profileComplete = Boolean(
     user?.firstName?.trim() &&
       user?.lastName?.trim() &&
       user?.school?.trim() &&
-      user?.country?.trim()
+      user?.country?.trim() &&
+      /^[6-9]\d{9}$/.test(normalizedPhone)
   );
   const profileIncomplete = Boolean(user) && !profileComplete;
   const checkoutCurrency =
@@ -208,11 +213,11 @@ export default function CheckoutPage() {
     committees.find((committee) => committee.id === selectedCommitteeId)?.portfolios ?? [];
   const delegationSizeRaw = Number(answers.delegation_size ?? 0);
   const applicationType = selectedCategory?.applicationType || "delegate";
-  const isOcCategory = applicationType === "organizer";
+  const isOcCategory = applicationType === "organizer" || applicationType === "secretariat";
   const isChairCategory = applicationType === "chair";
   const isDelegationCategory = applicationType === "delegation";
   const isPressCategory = applicationType === "press";
-  /** Step 2: preferences — skipped for OC registration. */
+  /** Step 2: preferences — skipped for OC / secretariat registration. */
   const needsPreferencesStep = Boolean(selectedCategory) && !isOcCategory;
   /** Step 3: custom questions — only when the category has form fields (or delegation size). */
   const needsQuestionsStep =
@@ -294,6 +299,7 @@ export default function CheckoutPage() {
         fullName: fullName.trim(),
         school: school.trim(),
         phone: phone.trim(),
+        country: user?.country?.trim() || "",
         ...answers,
       };
       const res = await fetch("/api/registrations", {
@@ -397,11 +403,7 @@ export default function CheckoutPage() {
     }
   };
 
-  const isStep1Valid =
-    !!selectedCategoryId &&
-    fullName.trim().length > 0 &&
-    school.trim().length > 0 &&
-    phone.trim().length > 0;
+  const isStep1Valid = !!selectedCategoryId && profileComplete;
   const committeePrefValues = [
     selectedCommitteeId,
     secondPreferenceCommitteeId,
@@ -584,7 +586,7 @@ export default function CheckoutPage() {
                 Complete your profile first
               </h2>
               <p className="text-sm mt-2" style={{ color: "var(--fg-muted)" }}>
-                First name, last name, school, and country are required before you can register for any conference.
+                First name, last name, school, country, and a valid mobile number are required before you can register.
               </p>
               <Link href="/dashboard?tab=profile" className="btn btn-primary mt-4 inline-flex">
                 Go to Profile
@@ -624,7 +626,7 @@ export default function CheckoutPage() {
 
           {step === 1 && !existingRegistration && !profileIncomplete && (
             <div className="card p-6 sm:p-8 rounded-2xl space-y-4">
-              <h2 className="text-xl font-bold" style={{ color: "var(--fg)" }}>1. Category &amp; contact</h2>
+              <h2 className="text-xl font-bold" style={{ color: "var(--fg)" }}>1. Select a category</h2>
               {categories.length === 0 && (
                 <p className="text-sm" style={{ color: "var(--fg-muted)" }}>
                   No registration categories are currently open for this conference.
@@ -679,42 +681,20 @@ export default function CheckoutPage() {
                 </button>
                 );
               })}
-              <div className="space-y-3 pt-2">
-                <input
-                  value={fullName}
-                  onChange={(event) => {
-                    setFullName(event.target.value);
-                    setAnswers((prev) => ({ ...prev, fullName: event.target.value }));
-                  }}
-                  className="input-base text-base min-h-[44px]"
-                  placeholder="Full name *"
-                />
-                <input
-                  value={school}
-                  onChange={(event) => {
-                    setSchool(event.target.value);
-                    setAnswers((prev) => ({ ...prev, school: event.target.value }));
-                  }}
-                  className="input-base text-base min-h-[44px]"
-                  placeholder="School / University *"
-                />
-                <input
-                  value={phone}
-                  onChange={(event) => {
-                    setPhone(event.target.value);
-                    setAnswers((prev) => ({ ...prev, phone: event.target.value }));
-                  }}
-                  className="input-base text-base min-h-[44px]"
-                  placeholder="Phone *"
-                  required
-                />
+              <div
+                className="rounded-xl p-4"
+                style={{ background: "var(--bg-subtle)", border: "1px solid var(--border)" }}
+              >
+                <p className="text-sm font-semibold" style={{ color: "var(--fg)" }}>
+                  Applying as {fullName}
+                </p>
+                <p className="text-xs mt-1" style={{ color: "var(--fg-muted)" }}>
+                  Your contact and institution details will be taken from your profile.
+                </p>
               </div>
               <button
                 type="button"
-                onClick={() => {
-                  setAnswers((prev) => ({ ...prev, fullName, school, phone }));
-                  goForwardFrom(1);
-                }}
+                onClick={() => goForwardFrom(1)}
                 disabled={!isStep1Valid || profileIncomplete}
                 className="btn btn-primary w-full min-h-[44px]"
                 style={{ opacity: isStep1Valid && !profileIncomplete ? 1 : 0.5 }}

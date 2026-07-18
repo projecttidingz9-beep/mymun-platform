@@ -28,7 +28,51 @@ export async function POST(request: NextRequest) {
   if (verifyBlock) return verifyBlock;
 
   try {
-    const body = (await request.json()) as Record<string, unknown>;
+    const submittedBody = (await request.json()) as Record<string, unknown>;
+    const user = await prisma.user.findUnique({
+      where: { email: actor.email },
+      select: { id: true, name: true, delegateProfile: true },
+    });
+    if (!user) {
+      return NextResponse.json({ error: "User profile not found. Sign in again." }, { status: 400 });
+    }
+    const profile =
+      user.delegateProfile && typeof user.delegateProfile === "object"
+        ? (user.delegateProfile as Record<string, unknown>)
+        : {};
+    const profileName =
+      [profile.firstName, profile.lastName]
+        .filter((value): value is string => typeof value === "string" && Boolean(value.trim()))
+        .map((value) => value.trim())
+        .join(" ") || user.name.trim();
+    const profileSchool = typeof profile.school === "string" ? profile.school.trim() : "";
+    const profilePhone = typeof profile.phone === "string" ? profile.phone.trim() : "";
+    const profileCountry = typeof profile.country === "string" ? profile.country.trim() : "";
+    if (!profileName || !profileSchool || !profilePhone || !profileCountry) {
+      return NextResponse.json(
+        { error: "Complete your name, school, phone, and country in your profile before registering." },
+        { status: 400 }
+      );
+    }
+    const submittedAnswers =
+      submittedBody.formAnswers &&
+      typeof submittedBody.formAnswers === "object" &&
+      !Array.isArray(submittedBody.formAnswers)
+        ? (submittedBody.formAnswers as Record<string, unknown>)
+        : {};
+    const body: Record<string, unknown> = {
+      ...submittedBody,
+      fullName: profileName,
+      school: profileSchool,
+      phone: profilePhone,
+      formAnswers: {
+        ...submittedAnswers,
+        fullName: profileName,
+        school: profileSchool,
+        phone: profilePhone,
+        country: profileCountry,
+      },
+    };
     const registrationId = String(body.registrationId || "").trim() || `reg-${randomUUID()}`;
 
     const validated = await validateRegistrationRequest(body);
@@ -55,14 +99,6 @@ export async function POST(request: NextRequest) {
         },
         { status: 400 }
       );
-    }
-
-    const user = await prisma.user.findUnique({
-      where: { email: actor.email },
-      select: { id: true },
-    });
-    if (!user) {
-      return NextResponse.json({ error: "User profile not found. Sign in again." }, { status: 400 });
     }
 
     const committeeName =

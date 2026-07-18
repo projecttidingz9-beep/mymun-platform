@@ -250,12 +250,14 @@ export function mapPublishedEventToConference(event: EventWithListing): Conferen
     ? (blob!.registrationCategories as RegistrationCategory[])
     : [];
   const phasePrices = blobCategories.flatMap((category) =>
-    (category.pricingPhases || [])
-      .map((phase) => Number(phase.basePrice))
-      .filter((n) => Number.isFinite(n))
+    category.applicationType === "chair"
+      ? [0]
+      : (category.pricingPhases || [])
+          .map((phase) => Number(phase.basePrice))
+          .filter((n) => Number.isFinite(n))
   );
   const categoryBasePrices = blobCategories
-    .map((category) => Number(category.basePrice))
+    .map((category) => category.applicationType === "chair" ? 0 : Number(category.basePrice))
     .filter((n) => Number.isFinite(n));
   const priceCandidates = [...committeePrices, ...phasePrices, ...categoryBasePrices];
   const price = priceCandidates.length > 0 ? Math.min(...priceCandidates) : 0;
@@ -553,8 +555,9 @@ function normalizePublicTeam(blob: Record<string, unknown> | null): PublicConfer
       return {
         id: typeof row.id === "string" ? row.id : `team-${name}`,
         name,
-        email: typeof row.email === "string" ? row.email : "",
+        email: "",
         role: typeof row.role === "string" ? row.role : "Team",
+        teamType: row.teamType === "secretariat" ? "secretariat" as const : "organizer" as const,
         permissions: Array.isArray(row.permissions)
           ? (row.permissions as OrganizerTeamMember["permissions"])
           : (["view"] as OrganizerTeamMember["permissions"]),

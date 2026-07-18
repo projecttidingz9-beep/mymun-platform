@@ -121,7 +121,7 @@ export interface RegistrationCategory {
   id: string;
   name: string;
   description: string;
-  applicationType?: "delegate" | "chair" | "delegation" | "organizer" | "press" | "other";
+  applicationType?: "delegate" | "chair" | "delegation" | "organizer" | "secretariat" | "press" | "other";
   maxDelegatesPerDelegation?: number;
   isOpen?: boolean;
   deadlineOverride?: string;
@@ -433,6 +433,7 @@ export interface OrganizerTeamMember {
   name: string;
   email: string;
   role: string;
+  teamType?: "organizer" | "secretariat";
   permissions: OrganizerPermission[];
   photoUrl?: string;
 }

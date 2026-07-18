@@ -8,6 +8,7 @@ import {
 describe("sync-delegate-profile-from-organizer", () => {
   it("maps application types to profile role labels", () => {
     expect(roleLabelForApplicationType("organizer")).toBe("Organising Committee");
+    expect(roleLabelForApplicationType("secretariat")).toBe("Secretariat");
     expect(roleLabelForApplicationType("chair", "Vice Chair")).toBe("Vice Chair");
     expect(roleLabelForApplicationType("delegation")).toBe("Delegation Head");
     expect(roleLabelForApplicationType("press")).toBe("Press Corps");
