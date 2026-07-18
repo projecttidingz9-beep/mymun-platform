@@ -48,7 +48,6 @@ import {
   findIncompletePricingPhases,
   formatIncompletePricingPhasesMessage,
   getActivePhase,
-  getPhaseStatus,
   isPricingPhaseComplete,
   mergeNewCommitteesIntoPhases,
   resolveRegistrationPrice,
@@ -58,7 +57,6 @@ import {
   getCategoryTypeLabel,
   getDefaultCategoryForType,
   REGISTRATION_CATEGORY_UI_TYPES,
-  type RegistrationCategoryType,
   type RegistrationCategoryUiType,
 } from "@/lib/registration-category-types";
 import { canAccessSuperDashboard, SUPER_ADMIN_HREF, SUPER_ADMIN_LABEL } from "@/lib/admin-nav";
@@ -84,7 +82,7 @@ import ConfirmModal, { DestructiveConfirmButton } from "@/components/ConfirmModa
 const nextScheduleDayName = (entries: ConferenceScheduleEntry[]) =>
   `Day ${new Set(entries.map((entry) => entry.day)).size + 1}`;
 
-type RegistrationPreviewStep = 1 | 2 | 3 | 4;
+type RegistrationPreviewStep = 2 | 3 | 4;
 
 type QuestionFieldDraft = {
   label: string;
@@ -693,7 +691,7 @@ export default function OrganizerDashboardPage() {
   const [autoAssignProgress, setAutoAssignProgress] = useState("");
   const [pricingCategoryTypeTab, setPricingCategoryTypeTab] =
     useState<RegistrationCategoryUiType>("delegate");
-  const [registrationPreviewStep, setRegistrationPreviewStep] = useState<RegistrationPreviewStep>(1);
+  const [registrationPreviewStep, setRegistrationPreviewStep] = useState<RegistrationPreviewStep>(2);
   const [applicantProfileDrawerOpen, setApplicantProfileDrawerOpen] = useState(false);
   const [chairAllotModalOpen, setChairAllotModalOpen] = useState(false);
   const [chairAllotApplicantId, setChairAllotApplicantId] = useState("");
@@ -2098,7 +2096,7 @@ export default function OrganizerDashboardPage() {
     pricingCategoriesJson !== pricingSavedCategoriesJson;
 
   useEffect(() => {
-    setRegistrationPreviewStep(1);
+    setRegistrationPreviewStep(2);
   }, [pricingCategoryTypeTab]);
 
   useEffect(() => {
@@ -6483,7 +6481,6 @@ export default function OrganizerDashboardPage() {
                                   label: string;
                                   skipped: boolean;
                                 }> = [
-                                  { step: 1, label: "Category & contact", skipped: false },
                                   {
                                     step: 2,
                                     label: "Preferences",
@@ -6528,7 +6525,7 @@ export default function OrganizerDashboardPage() {
                                             }}
                                             onClick={() => setRegistrationPreviewStep(entry.step)}
                                           >
-                                            Step {entry.step}: {entry.label}
+                                            Step {entry.step - 1}: {entry.label}
                                             {entry.skipped ? " (skipped)" : ""}
                                           </button>
                                         );
@@ -6538,70 +6535,10 @@ export default function OrganizerDashboardPage() {
                                       className="rounded-xl p-4 space-y-3"
                                       style={{ background: "var(--bg-subtle)", border: "1px solid var(--border)" }}
                                     >
-                                      {registrationPreviewStep === 1 && (
-                                        <>
-                                          <h4 className="text-sm font-bold" style={{ color: "var(--fg)" }}>
-                                            1. Category &amp; contact
-                                          </h4>
-                                          <div
-                                            className="rounded-xl p-3 space-y-2"
-                                            style={{ border: "1px solid var(--border)", background: "var(--bg)" }}
-                                          >
-                                            <div className="flex items-center justify-between gap-2">
-                                              <span className="font-semibold text-sm" style={{ color: "var(--fg)" }}>
-                                                {category.name}
-                                              </span>
-                                              <span className="badge badge-blue">
-                                                {formatMoney(category.basePrice, previewCurrency)}
-                                              </span>
-                                            </div>
-                                            <p className="text-xs" style={{ color: "var(--blue)" }}>
-                                              {getCategoryTypeLabel(category.applicationType)}
-                                            </p>
-                                            <p className="text-xs" style={{ color: "var(--fg-muted)" }}>
-                                              {category.description || "No description provided."}
-                                            </p>
-                                            {category.pricingPhases.length > 0 && (
-                                              <div className="flex flex-wrap gap-1.5">
-                                                {category.pricingPhases.map((phase) => {
-                                                  const status = getPhaseStatus(phase, new Date());
-                                                  const badgeClass =
-                                                    status === "Active"
-                                                      ? "badge-green"
-                                                      : status === "Upcoming"
-                                                        ? "badge-blue"
-                                                        : "badge-gray";
-                                                  return (
-                                                    <span key={phase.id} className={`badge ${badgeClass}`}>
-                                                      {phase.name} · {status === "Ended" ? "Ended" : status}
-                                                    </span>
-                                                  );
-                                                })}
-                                              </div>
-                                            )}
-                                            {preview.activePhase && (
-                                              <p className="text-[11px]" style={{ color: "var(--fg-muted)" }}>
-                                                Active phase: {preview.activePhase.name} (
-                                                {formatMoney(preview.activePhase.basePrice, previewCurrency)})
-                                              </p>
-                                            )}
-                                          </div>
-                                          <input className="input-base text-xs" disabled placeholder="Full name *" />
-                                          <input
-                                            className="input-base text-xs"
-                                            disabled
-                                            placeholder="School / University *"
-                                          />
-                                          <input className="input-base text-xs" disabled placeholder="Phone *" />
-                                          <button type="button" className="btn btn-primary text-xs w-full" disabled>
-                                            Continue →
-                                          </button>
-                                        </>
-                                      )}
                                       {registrationPreviewStep === 2 && (
                                         <>
                                           <h4 className="text-sm font-bold" style={{ color: "var(--fg)" }}>
-                                            2. Preferences
+                                            1. Preferences
                                           </h4>
                                           {preview.isOc ? (
                                             <p className="text-xs" style={{ color: "var(--fg-muted)" }}>
@@ -6698,7 +6635,7 @@ export default function OrganizerDashboardPage() {
                                       {registrationPreviewStep === 3 && (
                                         <>
                                           <h4 className="text-sm font-bold" style={{ color: "var(--fg)" }}>
-                                            3. Additional questions
+                                            2. Additional questions
                                           </h4>
                                           {!preview.needsQuestions ? (
                                             <p className="text-xs" style={{ color: "var(--fg-muted)" }}>
@@ -6746,7 +6683,7 @@ export default function OrganizerDashboardPage() {
                                       {registrationPreviewStep === 4 && (
                                         <>
                                           <h4 className="text-sm font-bold" style={{ color: "var(--fg)" }}>
-                                            4. {preview.isAllotFirst || preview.priceResult.amount <= 0
+                                            3. {preview.isAllotFirst || preview.priceResult.amount <= 0
                                               ? "Confirm application"
                                               : "Payment"}
                                           </h4>
