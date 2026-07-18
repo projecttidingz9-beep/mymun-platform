@@ -327,6 +327,11 @@ function ConferenceDetailPageContent() {
         (category) => category.isOpen !== false && Boolean(getActivePhase(category.pricingPhases))
       )
     : publicDetail?.registrationOpen ?? true;
+  const hasDelegationRegistration = showOperationalOverlay
+    ? mergedRegistrationCategories.some(
+        (category) => category.applicationType === "delegation" && category.isOpen !== false
+      )
+    : publicDetail?.hasDelegationRegistration === true;
   const conferenceEnded = new Date(c.endDate).setHours(23, 59, 59, 999) < Date.now();
   const policySections = publicView.policySections;
   const commonDocuments = publicView.commonDocuments;
@@ -762,6 +767,22 @@ function ConferenceDetailPageContent() {
                       ? "Register now →"
                       : "Sign in to register →"}
               </button>
+              {registrationIsOpen && hasDelegationRegistration && !isOrganizerUser && (
+                <Link
+                  href="/join/delegation"
+                  className="lux-button-ghost"
+                  style={{
+                    width: "100%",
+                    marginTop: "10px",
+                    padding: "12px 18px",
+                    fontSize: "13px",
+                    textAlign: "center",
+                    display: "block",
+                  }}
+                >
+                  Join delegation with code
+                </Link>
+              )}
               {!registrationIsOpen && !isOrganizerUser && (
                 <p className="mt-2 text-[11px] text-center" style={{ color: "var(--fg-muted)" }}>
                   {conferenceEnded

@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/server/prisma";
 import { toIsoString } from "@/lib/server/coerce-date";
+import { normalizeDelegationCode } from "@/lib/delegation-code";
 
 export type DelegationInvitePayload = {
   delegation: {
@@ -23,7 +24,7 @@ export type DelegationInvitePayload = {
 export async function getDelegationInviteByToken(
   token: string
 ): Promise<{ info: DelegationInvitePayload | null; error: string | null }> {
-  const trimmed = token.trim();
+  const trimmed = normalizeDelegationCode(token);
   if (!trimmed) {
     return { info: null, error: "Invite token is required." };
   }

@@ -84,6 +84,7 @@ export async function validateRegistrationRequest(body: Record<string, unknown>)
       : []
   );
 
+  let applicationType = "delegate";
   if (categoryId) {
     const category = await loadRegistrationCategoryForValidation(eventId, categoryId);
     if (!category) {
@@ -95,6 +96,7 @@ export async function validateRegistrationRequest(body: Record<string, unknown>)
     if (category.registrationDeadline && new Date() > category.registrationDeadline) {
       throw new RegistrationValidationError("Registration deadline has passed for this category.");
     }
+    applicationType = category.applicationType || "delegate";
     if (category.requiresCommitteeSelection && committeePreferences.length === 0 && !committeeConfigId) {
       throw new RegistrationValidationError("Committee preference is required for this category.");
     }
@@ -161,6 +163,7 @@ export async function validateRegistrationRequest(body: Record<string, unknown>)
     committeePreferences,
     countryPreferences,
     pricing,
+    applicationType,
     fullName,
     school,
     phone,

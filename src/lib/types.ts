@@ -206,6 +206,7 @@ export interface PublicConferenceDetail extends Conference {
   partnerConferences?: Array<{ id: string; title: string; status: string }>;
   organizerTeam?: OrganizerTeamMember[];
   registrationOpen?: boolean;
+  hasDelegationRegistration?: boolean;
   /** Live pricing-phase chips for the public registration card. */
   pricingPhaseChips?: Array<{ id: string; name: string; status: "Active" | "Upcoming" | "Ended" }>;
   activePricingPhaseName?: string;

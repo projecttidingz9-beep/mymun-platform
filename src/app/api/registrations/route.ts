@@ -4,6 +4,7 @@ import { randomUUID } from "crypto";
 import { prisma } from "@/lib/server/prisma";
 import { getRequestActor } from "@/lib/server/auth";
 import { logger } from "@/lib/server/logger";
+import { normalizeDelegationCode } from "@/lib/delegation-code";
 import { requireVerifiedEmail } from "@/lib/server/require-verified-email";
 import {
   createRegistrationAndPayment,
@@ -108,6 +109,70 @@ export async function POST(request: NextRequest) {
 
     const prefs = serializeRegistrationPreferences(body);
     const allotFirst = event.organizerConfig?.allocationMode === "ALLOT_FIRST";
+    let delegationLink:
+      | { id: string; inviteToken: string; schoolName: string | null; isHead: boolean }
+      | undefined;
+    const delegationCode = normalizeDelegationCode(String(body.delegationCode || ""));
+    if (validated.applicationType === "delegation") {
+      if (!delegationCode) {
+        return NextResponse.json(
+          { error: "Create a delegation or join one with a team code before registering." },
+          { status: 400 }
+        );
+      }
+      const delegation = await prisma.delegation.findUnique({
+        where: { inviteToken: delegationCode },
+        select: {
+          id: true,
+          eventId: true,
+          inviteToken: true,
+          schoolName: true,
+          status: true,
+          ownerUserId: true,
+          members: { where: { userId: user.id }, select: { id: true }, take: 1 },
+        },
+      });
+      if (
+        !delegation ||
+        delegation.eventId !== validated.eventId ||
+        delegation.status !== "OPEN" ||
+        (delegation.ownerUserId !== user.id && delegation.members.length === 0)
+      ) {
+        return NextResponse.json(
+          { error: "This delegation code is invalid or you have not joined this team." },
+          { status: 400 }
+        );
+      }
+      delegationLink = {
+        id: delegation.id,
+        inviteToken: delegation.inviteToken,
+        schoolName: delegation.schoolName,
+        isHead: delegation.ownerUserId === user.id,
+      };
+    } else {
+      if (delegationCode) {
+        return NextResponse.json(
+          { error: "A delegation code can only be used with Delegation Registration." },
+          { status: 400 }
+        );
+      }
+      const teamAffiliation = await prisma.delegation.findFirst({
+        where: {
+          eventId: validated.eventId,
+          OR: [{ ownerUserId: user.id }, { members: { some: { userId: user.id } } }],
+        },
+        select: { id: true },
+      });
+      if (teamAffiliation) {
+        return NextResponse.json(
+          {
+            error:
+              "You belong to a delegation for this conference. Select Delegation Registration to continue.",
+          },
+          { status: 400 }
+        );
+      }
+    }
 
     const result = await createRegistrationAndPayment({
       registrationId,
@@ -120,6 +185,8 @@ export async function POST(request: NextRequest) {
       portfolioPreferencesJson: prefs.portfolioPreferencesJson,
       countryPreferencesJson: prefs.countryPreferencesJson,
       formAnswersJson: prefs.formAnswersJson,
+      delegationId: delegationLink?.id,
+      isDelegationHead: delegationLink?.isHead,
       amount: validated.pricing.amount,
       currency: validated.pricing.currency,
       deferPayment: allotFirst && validated.pricing.amount > 0,
@@ -182,6 +249,10 @@ export async function POST(request: NextRequest) {
       amount: result.amount,
       userEmail: actor.email,
       organizerStatus: "Pending" as const,
+      delegationId: delegationLink?.id,
+      delegationSchoolName: delegationLink?.schoolName ?? undefined,
+      delegationInviteToken: delegationLink?.isHead ? delegationLink.inviteToken : undefined,
+      isDelegationHead: delegationLink?.isHead,
     };
 
     return NextResponse.json({

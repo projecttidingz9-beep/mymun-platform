@@ -47,6 +47,8 @@ export async function createRegistrationAndPayment(params: {
   portfolioPreferencesJson?: string | null;
   countryPreferencesJson?: string | null;
   formAnswersJson?: string | null;
+  delegationId?: string | null;
+  isDelegationHead?: boolean;
   amount: number;
   currency: string;
   /** Allot-first: submit application without creating a payment intent yet. */
@@ -88,6 +90,8 @@ export async function createRegistrationAndPayment(params: {
     portfolioPreferencesJson: params.portfolioPreferencesJson ?? undefined,
     countryPreferencesJson: params.countryPreferencesJson ?? undefined,
     formAnswersJson: params.formAnswersJson ?? undefined,
+    delegationId: params.delegationId ?? undefined,
+    isDelegationHead: params.isDelegationHead ?? false,
     amount,
     status: RegistrationStatus.PENDING,
     allottedAt: null as Date | null,

@@ -502,6 +502,11 @@ export function mapPublishedEventToPublicDetail(
     partnerConferences: normalizePartnerConferences(blob),
     reviews: options?.approvedReviews?.length ? options.approvedReviews : undefined,
     registrationOpen: computeRegistrationOpen(blob),
+    hasDelegationRegistration: Array.isArray(blob?.registrationCategories)
+      ? (blob!.registrationCategories as RegistrationCategory[]).some(
+          (category) => category.applicationType === "delegation" && category.isOpen !== false
+        )
+      : false,
     ...computePublicPricingPhaseSummary(blob),
     allocationMode:
       event.organizerConfig?.allocationMode === "PAY_FIRST" ||

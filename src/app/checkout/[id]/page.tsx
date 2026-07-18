@@ -24,8 +24,20 @@ import { createCashfreeOrder, openCashfreeCheckout } from "@/lib/client/cashfree
 import { CONFERENCES_PATH } from "@/lib/paths";
 import { useToast } from "@/components/Toast";
 import AppSelect from "@/components/AppSelect";
+import { normalizeDelegationCode } from "@/lib/delegation-code";
 
 type Step = 1 | 2 | 3 | 4 | 5;
+
+type DelegationAffiliation = {
+  id: string;
+  code: string;
+  name?: string | null;
+  schoolName?: string | null;
+  maxMembers?: number | null;
+  memberCount?: number;
+  status: string;
+  isHead: boolean;
+};
 
 const createConfirmationId = () => `TZ-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
 
@@ -65,7 +77,12 @@ export default function CheckoutPage() {
   const [payingOnline, setPayingOnline] = useState(false);
   const [delegationSchoolName, setDelegationSchoolName] = useState("");
   const [delegationMaxMembers, setDelegationMaxMembers] = useState("");
-  const [delegationInviteLink, setDelegationInviteLink] = useState("");
+  const [delegationJoinCode, setDelegationJoinCode] = useState("");
+  const [delegationMode, setDelegationMode] = useState<"create" | "join" | null>(null);
+  const [delegationAffiliation, setDelegationAffiliation] =
+    useState<DelegationAffiliation | null>(null);
+  const [delegationLoading, setDelegationLoading] = useState(false);
+  const [delegationError, setDelegationError] = useState("");
   const [creatingDelegation, setCreatingDelegation] = useState(false);
   const [emailVerifyBlocked, setEmailVerifyBlocked] = useState(false);
   const [serverDuplicateRegistration, setServerDuplicateRegistration] = useState<Registration | null>(null);
@@ -155,6 +172,30 @@ export default function CheckoutPage() {
     }
   }, [authReady, isLoggedIn, openAuthModal, user?.role, router, params.id]);
 
+  useEffect(() => {
+    if (!authReady || !isLoggedIn || !resolvedEventId || user?.role === "organizer") return;
+    let cancelled = false;
+    setDelegationLoading(true);
+    void fetch(`/api/delegations?eventId=${encodeURIComponent(resolvedEventId)}`, {
+      credentials: "include",
+    })
+      .then(async (response) => {
+        const payload = (await response.json().catch(() => ({}))) as {
+          delegation?: DelegationAffiliation | null;
+        };
+        if (!cancelled && response.ok) {
+          setDelegationAffiliation(payload.delegation ?? null);
+          if (payload.delegation?.code) setDelegationJoinCode(payload.delegation.code);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setDelegationLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [authReady, isLoggedIn, resolvedEventId, user?.role]);
+
   const displayTitle = organizerConference?.title || marketplaceConference?.title || "Conference";
   const displayCity = organizerConference?.city || marketplaceConference?.city || "";
   const displayStartDate = organizerConference?.startDate || marketplaceConference?.startDate || "";
@@ -193,6 +234,14 @@ export default function CheckoutPage() {
     ? organizerConference.registrationCategories
     : checkoutConfig?.registrationCategories ?? [];
   const categories = rawCategories.filter((category) => category.isOpen !== false);
+  const delegationCategoryId =
+    categories.find((category) => category.applicationType === "delegation")?.id || "";
+
+  useEffect(() => {
+    if (delegationAffiliation && delegationCategoryId && !selectedCategoryId) {
+      setSelectedCategoryId(delegationCategoryId);
+    }
+  }, [delegationAffiliation, delegationCategoryId, selectedCategoryId]);
 
   const committees: OrganizerCommittee[] = organizerConference
     ? organizerConference.committees
@@ -211,7 +260,6 @@ export default function CheckoutPage() {
   const selectedCommittee = committees.find((committee) => committee.id === selectedCommitteeId);
   const selectedCommitteePortfolios =
     committees.find((committee) => committee.id === selectedCommitteeId)?.portfolios ?? [];
-  const delegationSizeRaw = Number(answers.delegation_size ?? 0);
   const applicationType = selectedCategory?.applicationType || "delegate";
   const isOcCategory = applicationType === "organizer" || applicationType === "secretariat";
   const isChairCategory = applicationType === "chair";
@@ -219,10 +267,9 @@ export default function CheckoutPage() {
   const isPressCategory = applicationType === "press";
   /** Step 2: preferences — skipped for OC / secretariat registration. */
   const needsPreferencesStep = Boolean(selectedCategory) && !isOcCategory;
-  /** Step 3: custom questions — only when the category has form fields (or delegation size). */
+  /** Step 3: custom questions — only when the category has organizer-defined form fields. */
   const needsQuestionsStep =
-    Boolean(selectedCategory) &&
-    ((selectedCategory?.formFields?.length ?? 0) > 0 || isDelegationCategory);
+    Boolean(selectedCategory) && (selectedCategory?.formFields?.length ?? 0) > 0;
   const needsPortfolioPrefs =
     needsPreferencesStep && (applicationType === "delegate" || applicationType === "delegation");
   const pressCommittees = committees.filter(
@@ -237,12 +284,6 @@ export default function CheckoutPage() {
   const preferenceLabel = selectedCommittee
     ? preferenceLabelForCommittee(selectedCommittee.committeeType, selectedCommittee.committeeFormat)
     : "Country";
-  const delegationSizeValid =
-    !isDelegationCategory ||
-    (Number.isFinite(delegationSizeRaw) &&
-      delegationSizeRaw >= 1 &&
-      (selectedCategory?.maxDelegatesPerDelegation === undefined ||
-        delegationSizeRaw <= selectedCategory.maxDelegatesPerDelegation));
   const priceResult = selectedCategory
     ? resolveRegistrationPrice(selectedCategory, selectedCommitteeId || undefined)
     : {
@@ -311,6 +352,7 @@ export default function CheckoutPage() {
           eventId: organizerConference?.id ?? checkoutConfig?.eventId ?? String(params.id),
           categoryId: selectedCategory.id,
           categoryName: selectedCategory.name,
+          delegationCode: isDelegationCategory ? delegationAffiliation?.code : undefined,
           fullName: fullName.trim(),
           school: school.trim(),
           phone: phone.trim(),
@@ -403,7 +445,10 @@ export default function CheckoutPage() {
     }
   };
 
-  const isStep1Valid = !!selectedCategoryId && profileComplete;
+  const isStep1Valid =
+    !!selectedCategoryId &&
+    profileComplete &&
+    (!isDelegationCategory || delegationAffiliation?.status === "OPEN");
   const committeePrefValues = [
     selectedCommitteeId,
     secondPreferenceCommitteeId,
@@ -429,8 +474,7 @@ export default function CheckoutPage() {
         (field) =>
           !field.required ||
           (answers[field.id] !== undefined && String(answers[field.id]).trim() !== "")
-      ) &&
-      delegationSizeValid);
+      ));
   const isStep4Valid = isStep1Valid && isPreferencesValid && isQuestionsValid;
 
   const goForwardFrom = (from: Step) => {
@@ -461,6 +505,93 @@ export default function CheckoutPage() {
       return;
     }
     if (from === 2) setStep(1);
+  };
+
+  const refreshDelegationAffiliation = async () => {
+    const response = await fetch(
+      `/api/delegations?eventId=${encodeURIComponent(resolvedEventId)}`,
+      { credentials: "include" }
+    );
+    const payload = (await response.json().catch(() => ({}))) as {
+      delegation?: DelegationAffiliation | null;
+      error?: string;
+    };
+    if (!response.ok) throw new Error(payload.error || "Could not load delegation.");
+    setDelegationAffiliation(payload.delegation ?? null);
+    if (payload.delegation?.code) setDelegationJoinCode(payload.delegation.code);
+    return payload.delegation ?? null;
+  };
+
+  const handleCreateDelegation = async () => {
+    const schoolName = delegationSchoolName.trim() || school;
+    if (!schoolName) {
+      setDelegationError("Enter your school or institution name.");
+      return;
+    }
+    const maxMembers = delegationMaxMembers ? Number(delegationMaxMembers) : undefined;
+    if (
+      maxMembers !== undefined &&
+      selectedCategory?.maxDelegatesPerDelegation &&
+      maxMembers > selectedCategory.maxDelegatesPerDelegation
+    ) {
+      setDelegationError(
+        `This conference allows at most ${selectedCategory.maxDelegatesPerDelegation} students per delegation.`
+      );
+      return;
+    }
+    setDelegationError("");
+    setCreatingDelegation(true);
+    try {
+      const response = await fetch("/api/delegations", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          eventId: resolvedEventId,
+          schoolName,
+          maxMembers,
+        }),
+      });
+      const payload = (await response.json().catch(() => ({}))) as {
+        delegation?: DelegationAffiliation & { inviteToken?: string };
+        error?: string;
+      };
+      if (!response.ok || !payload.delegation) {
+        throw new Error(payload.error || "Could not create delegation.");
+      }
+      const code = payload.delegation.code || payload.delegation.inviteToken || "";
+      setDelegationAffiliation({ ...payload.delegation, code });
+      setDelegationJoinCode(code);
+      toast.show("Delegation created. Share the team code with your teammates.", "success");
+    } catch (error) {
+      setDelegationError(error instanceof Error ? error.message : "Could not create delegation.");
+    } finally {
+      setCreatingDelegation(false);
+    }
+  };
+
+  const handleJoinDelegation = async () => {
+    const code = normalizeDelegationCode(delegationJoinCode);
+    if (!code) {
+      setDelegationError("Enter the team code shared by your delegation head.");
+      return;
+    }
+    setDelegationError("");
+    setDelegationLoading(true);
+    try {
+      const response = await fetch(`/api/delegations/join/${encodeURIComponent(code)}`, {
+        method: "POST",
+        credentials: "include",
+      });
+      const payload = (await response.json().catch(() => ({}))) as { error?: string };
+      if (!response.ok) throw new Error(payload.error || "Could not join delegation.");
+      await refreshDelegationAffiliation();
+      toast.show("You joined the delegation. Continue with your own preferences and payment.", "success");
+    } catch (error) {
+      setDelegationError(error instanceof Error ? error.message : "Could not join delegation.");
+    } finally {
+      setDelegationLoading(false);
+    }
   };
 
   if (!authReady || (!organizerConference && !checkoutConfigLoaded)) {
@@ -681,6 +812,159 @@ export default function CheckoutPage() {
                 </button>
                 );
               })}
+              {isDelegationCategory && (
+                <div
+                  className="rounded-xl p-4 space-y-4"
+                  style={{ background: "var(--bg-subtle)", border: "1px solid var(--border)" }}
+                >
+                  <div>
+                    <p className="text-sm font-semibold" style={{ color: "var(--fg)" }}>
+                      Delegation team
+                    </p>
+                    <p className="text-xs mt-1" style={{ color: "var(--fg-muted)" }}>
+                      Every teammate registers, selects preferences, and pays separately under one shared team.
+                    </p>
+                  </div>
+                  {delegationLoading && !delegationAffiliation ? (
+                    <p className="text-sm" style={{ color: "var(--fg-muted)" }}>
+                      Checking your delegation…
+                    </p>
+                  ) : delegationAffiliation ? (
+                    <div
+                      className="rounded-xl p-4 space-y-2"
+                      style={{ background: "var(--bg)", border: "1px solid var(--border)" }}
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                          <p className="text-sm font-bold" style={{ color: "var(--fg)" }}>
+                            {delegationAffiliation.schoolName || delegationAffiliation.name || "Your delegation"}
+                          </p>
+                          <p className="text-xs mt-1" style={{ color: "var(--fg-muted)" }}>
+                            {delegationAffiliation.isHead ? "Delegation head" : "Team member"}
+                            {delegationAffiliation.memberCount
+                              ? ` · ${delegationAffiliation.memberCount} member${
+                                  delegationAffiliation.memberCount === 1 ? "" : "s"
+                                }`
+                              : ""}
+                          </p>
+                        </div>
+                        <span
+                          className={`badge ${
+                            delegationAffiliation.status === "OPEN" ? "badge-green" : "badge-gray"
+                          }`}
+                        >
+                          {delegationAffiliation.status === "OPEN" ? "Joined" : "Team closed"}
+                        </span>
+                      </div>
+                      <div className="flex flex-col sm:flex-row gap-2">
+                        <input
+                          className="input-base text-sm font-mono tracking-wider flex-1"
+                          readOnly
+                          value={delegationAffiliation.code}
+                          aria-label="Delegation team code"
+                        />
+                        <button
+                          type="button"
+                          className="btn btn-ghost text-xs"
+                          onClick={() => {
+                            void navigator.clipboard.writeText(delegationAffiliation.code);
+                            toast.show("Team code copied.", "success");
+                          }}
+                        >
+                          Copy code
+                        </button>
+                      </div>
+                      {delegationAffiliation.isHead && (
+                        <p className="text-xs" style={{ color: "var(--fg-muted)" }}>
+                          Share this code with teammates. They can choose “Join with code” and complete their own registration.
+                        </p>
+                      )}
+                    </div>
+                  ) : (
+                    <>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          className="btn btn-ghost text-xs"
+                          data-active={delegationMode === "create" ? "true" : "false"}
+                          onClick={() => {
+                            setDelegationMode("create");
+                            setDelegationError("");
+                            if (!delegationSchoolName) setDelegationSchoolName(school);
+                          }}
+                        >
+                          Create team
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-ghost text-xs"
+                          data-active={delegationMode === "join" ? "true" : "false"}
+                          onClick={() => {
+                            setDelegationMode("join");
+                            setDelegationError("");
+                          }}
+                        >
+                          Join with code
+                        </button>
+                      </div>
+                      {delegationMode === "create" && (
+                        <div className="space-y-3">
+                          <input
+                            className="input-base text-sm"
+                            placeholder="School / institution name"
+                            value={delegationSchoolName}
+                            onChange={(event) => setDelegationSchoolName(event.target.value)}
+                          />
+                          <input
+                            className="input-base text-sm"
+                            type="number"
+                            min={1}
+                            max={selectedCategory?.maxDelegatesPerDelegation}
+                            placeholder={
+                              selectedCategory?.maxDelegatesPerDelegation
+                                ? `Team size (max ${selectedCategory.maxDelegatesPerDelegation})`
+                                : "Maximum team members (optional)"
+                            }
+                            value={delegationMaxMembers}
+                            onChange={(event) => setDelegationMaxMembers(event.target.value)}
+                          />
+                          <button
+                            type="button"
+                            className="btn btn-primary w-full text-sm"
+                            disabled={creatingDelegation}
+                            onClick={() => void handleCreateDelegation()}
+                          >
+                            {creatingDelegation ? "Creating team…" : "Create team & generate code"}
+                          </button>
+                        </div>
+                      )}
+                      {delegationMode === "join" && (
+                        <div className="space-y-3">
+                          <input
+                            className="input-base text-sm font-mono uppercase tracking-wider"
+                            placeholder="Enter team code"
+                            value={delegationJoinCode}
+                            onChange={(event) => setDelegationJoinCode(event.target.value)}
+                          />
+                          <button
+                            type="button"
+                            className="btn btn-primary w-full text-sm"
+                            disabled={delegationLoading || !delegationJoinCode.trim()}
+                            onClick={() => void handleJoinDelegation()}
+                          >
+                            {delegationLoading ? "Joining team…" : "Join team"}
+                          </button>
+                        </div>
+                      )}
+                    </>
+                  )}
+                  {delegationError && (
+                    <div className="alert alert-danger">
+                      <span>{delegationError}</span>
+                    </div>
+                  )}
+                </div>
+              )}
               <div
                 className="rounded-xl p-4"
                 style={{ background: "var(--bg-subtle)", border: "1px solid var(--border)" }}
@@ -982,42 +1266,6 @@ export default function CheckoutPage() {
                   )}
                 </div>
               ))}
-              {isDelegationCategory && (
-                <div>
-                  <label className="block text-sm font-semibold mb-1.5" style={{ color: "var(--fg)" }}>
-                    Number of delegates in this delegation *
-                  </label>
-                  <input
-                    className="input-base text-base min-h-[44px]"
-                    type="number"
-                    min={1}
-                    max={selectedCategory?.maxDelegatesPerDelegation}
-                    value={answers.delegation_size === undefined ? "" : String(answers.delegation_size)}
-                    onChange={(event) => {
-                      const raw = event.target.value;
-                      setAnswers((prev) => ({
-                        ...prev,
-                        delegation_size: raw === "" ? "" : Number(raw),
-                      }));
-                    }}
-                    placeholder={
-                      selectedCategory?.maxDelegatesPerDelegation
-                        ? `Max ${selectedCategory.maxDelegatesPerDelegation}`
-                        : "Enter delegation size"
-                    }
-                  />
-                  {!delegationSizeValid && (
-                    <div className="alert alert-danger mt-2">
-                      <p>
-                        Delegation size must be at least 1
-                        {selectedCategory?.maxDelegatesPerDelegation
-                          ? ` and at most ${selectedCategory.maxDelegatesPerDelegation}.`
-                          : "."}
-                      </p>
-                    </div>
-                  )}
-                </div>
-              )}
               <div className="flex flex-col-reverse sm:flex-row gap-3">
                 <button type="button" onClick={() => goBackFrom(3)} className="btn btn-ghost flex-1 min-h-[44px]">← Back</button>
                 <button
@@ -1151,74 +1399,30 @@ export default function CheckoutPage() {
               >
                 {submittedRegistration?.paid ? "Download Invoice (PDF)" : "Invoice available after payment"}
               </button>
-              {submittedRegistration.categoryName?.toLowerCase().includes("delegation") ||
-              selectedCategory?.applicationType === "delegation" ? (
+              {(submittedRegistration.categoryName?.toLowerCase().includes("delegation") ||
+                selectedCategory?.applicationType === "delegation") &&
+              delegationAffiliation ? (
                 <div className="rounded-xl p-4 space-y-3" style={{ background: "var(--bg-subtle)", border: "1px solid var(--border)" }}>
                   <p className="text-sm font-semibold" style={{ color: "var(--fg)" }}>
-                    Create your delegation
+                    {delegationAffiliation.schoolName || "Your delegation"}
                   </p>
-                  {delegationInviteLink ? (
-                    <div className="space-y-2">
-                      <p className="text-xs" style={{ color: "var(--fg-muted)" }}>
-                        Share this link with your delegation members:
-                      </p>
-                      <input className="input-base text-xs" readOnly value={delegationInviteLink} />
-                    </div>
-                  ) : (
-                    <>
-                      <input
-                        className="input-base text-xs"
-                        placeholder="School / institution name"
-                        value={delegationSchoolName}
-                        onChange={(event) => setDelegationSchoolName(event.target.value)}
-                      />
-                      <input
-                        className="input-base text-xs"
-                        type="number"
-                        min={1}
-                        placeholder="Max members (optional)"
-                        value={delegationMaxMembers}
-                        onChange={(event) => setDelegationMaxMembers(event.target.value)}
-                      />
-                      <button
-                        type="button"
-                        className="btn btn-primary text-xs w-full"
-                        disabled={!delegationSchoolName.trim() || creatingDelegation}
-                        onClick={() => {
-                          setCreatingDelegation(true);
-                          void fetch("/api/delegations", {
-                            method: "POST",
-                            credentials: "include",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({
-                              eventId: String(params.id),
-                              schoolName: delegationSchoolName.trim(),
-                              maxMembers: delegationMaxMembers ? Number(delegationMaxMembers) : undefined,
-                              registrationId: submittedRegistration.id,
-                            }),
-                          })
-                            .then(async (res) => {
-                              const data = (await res.json()) as {
-                                delegation?: { inviteToken?: string };
-                                error?: string;
-                              };
-                              const token = data.delegation?.inviteToken;
-                              if (!res.ok || !token) {
-                                toast.show(data.error || "Could not create delegation.", "error");
-                                return;
-                              }
-                              setDelegationInviteLink(
-                                `${window.location.origin}/join/delegation/${token}`
-                              );
-                              toast.show("Delegation created. Share the invite link with your team.", "success");
-                            })
-                            .finally(() => setCreatingDelegation(false));
-                        }}
-                      >
-                        {creatingDelegation ? "Creating…" : "Create delegation & get invite link"}
-                      </button>
-                    </>
-                  )}
+                  <p className="text-xs" style={{ color: "var(--fg-muted)" }}>
+                    Your individual registration, preferences, and payment are linked to this team.
+                  </p>
+                  <div className="flex gap-2">
+                    <input
+                      className="input-base text-xs font-mono tracking-wider flex-1"
+                      readOnly
+                      value={delegationAffiliation.code}
+                    />
+                    <button
+                      type="button"
+                      className="btn btn-ghost text-xs"
+                      onClick={() => void navigator.clipboard.writeText(delegationAffiliation.code)}
+                    >
+                      Copy code
+                    </button>
+                  </div>
                 </div>
               ) : null}
               <p className="text-xs text-center" style={{ color: "var(--fg-muted)" }}>

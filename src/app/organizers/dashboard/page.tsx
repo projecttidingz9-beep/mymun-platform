@@ -672,6 +672,23 @@ export default function OrganizerDashboardPage() {
       paidCount: number;
       allottedCount: number;
       inviteToken: string;
+      owner: { id: string; name: string; email: string };
+      ownerRegistration?: {
+        id: string;
+        paid: boolean;
+        status: string;
+        committeeName?: string | null;
+      } | null;
+      members: Array<{
+        id: string;
+        user: { id: string; name: string; email: string };
+        registration?: {
+          id: string;
+          paid: boolean;
+          status: string;
+          committeeName?: string | null;
+        } | null;
+      }>;
     }>
   >([]);
   const [assignmentCommittee, setAssignmentCommittee] = useState<Record<string, string>>({});
@@ -1382,8 +1399,23 @@ export default function OrganizerDashboardPage() {
               status: string;
               memberCount: number;
               inviteToken: string;
-              members?: Array<{ registration?: { paid?: boolean; status?: string } | null }>;
-              ownerRegistration?: { paid?: boolean; status?: string } | null;
+              owner: { id: string; name: string; email: string };
+              members?: Array<{
+                id: string;
+                user: { id: string; name: string; email: string };
+                registration?: {
+                  id: string;
+                  paid: boolean;
+                  status: string;
+                  committeeName?: string | null;
+                } | null;
+              }>;
+              ownerRegistration?: {
+                id: string;
+                paid: boolean;
+                status: string;
+                committeeName?: string | null;
+              } | null;
             }) => {
               const regs = [
                 delegation.ownerRegistration,
@@ -1397,6 +1429,9 @@ export default function OrganizerDashboardPage() {
                 paidCount: regs.filter((entry) => entry.paid).length,
                 allottedCount: regs.filter((entry) => entry.status === "ALLOTTED").length,
                 inviteToken: delegation.inviteToken,
+                owner: delegation.owner,
+                ownerRegistration: delegation.ownerRegistration,
+                members: delegation.members || [],
               };
             }
           )
@@ -4494,16 +4529,14 @@ export default function OrganizerDashboardPage() {
                           onClick={() => {
                             downloadCsv(
                               `${selectedConference.title.replace(/[^\w.-]+/g, "_")}-delegations.csv`,
-                              ["School", "Members", "Paid", "Allotted", "Status", "Invite URL"],
+                              ["School", "Members", "Paid", "Allotted", "Status", "Team Code"],
                               filteredEventDelegations.map((delegation) => [
                                 delegation.schoolName,
                                 String(delegation.memberCount),
                                 String(delegation.paidCount),
                                 String(delegation.allottedCount),
                                 delegation.status,
-                                typeof window !== "undefined"
-                                  ? `${window.location.origin}/join/delegation/${delegation.inviteToken}`
-                                  : `/join/delegation/${delegation.inviteToken}`,
+                                delegation.inviteToken,
                               ])
                             );
                             toast.show("Delegations exported.", "success");
@@ -4515,7 +4548,7 @@ export default function OrganizerDashboardPage() {
                     </div>
                     {eventDelegations.length === 0 ? (
                       <p className="text-sm" style={{ color: "var(--fg-muted)" }}>
-                        No delegations created yet. Delegation heads can create one after registering.
+                        No delegations created yet. A delegation head creates a team code before completing registration.
                       </p>
                     ) : filteredEventDelegations.length === 0 ? (
                       <p className="text-sm" style={{ color: "var(--fg-muted)" }}>
@@ -4537,8 +4570,48 @@ export default function OrganizerDashboardPage() {
                               {delegation.allottedCount} allotted · {delegation.status}
                             </p>
                             <p className="text-xs mt-1 break-all" style={{ color: "var(--fg-muted)" }}>
-                              Invite: {typeof window !== "undefined" ? `${window.location.origin}/join/delegation/${delegation.inviteToken}` : `/join/delegation/${delegation.inviteToken}`}
+                              Team code: <span className="font-mono font-semibold">{delegation.inviteToken}</span>
                             </p>
+                            <div className="mt-3 space-y-1.5">
+                              {[
+                                {
+                                  id: `owner-${delegation.owner.id}`,
+                                  name: delegation.owner.name,
+                                  email: delegation.owner.email,
+                                  role: "Head",
+                                  registration: delegation.ownerRegistration,
+                                },
+                                ...delegation.members.map((member) => ({
+                                  id: member.id,
+                                  name: member.user.name,
+                                  email: member.user.email,
+                                  role: "Member",
+                                  registration: member.registration,
+                                })),
+                              ].map((member) => (
+                                <div
+                                  key={member.id}
+                                  className="grid sm:grid-cols-[1fr_auto_auto] gap-2 rounded-lg px-3 py-2 text-xs"
+                                  style={{ background: "var(--bg)" }}
+                                >
+                                  <div className="min-w-0">
+                                    <p className="font-semibold truncate" style={{ color: "var(--fg)" }}>
+                                      {member.name} · {member.role}
+                                    </p>
+                                    <p className="truncate" style={{ color: "var(--fg-muted)" }}>
+                                      {member.email}
+                                    </p>
+                                  </div>
+                                  <span className={`badge ${member.registration?.paid ? "badge-green" : "badge-gray"}`}>
+                                    {member.registration?.paid ? "Paid" : "Payment pending"}
+                                  </span>
+                                  <span className="badge badge-blue">
+                                    {member.registration?.committeeName ||
+                                      (member.registration ? "Preferences submitted" : "Not registered")}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
                           </div>
                         ))}
                       </div>
