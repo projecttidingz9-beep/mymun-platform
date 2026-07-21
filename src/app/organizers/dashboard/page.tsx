@@ -38,6 +38,7 @@ import {
   OrganizerConference,
   OrganizerDocument,
   OrganizerDocumentCategory,
+  OrganizerPermission,
   OrganizerStatusEmailTemplateKey,
   type DynamicFormField,
   type DynamicFieldType,
@@ -252,6 +253,7 @@ const CHAIR_ROLE_PRESETS = [
   "Deputy Chair",
   "Other",
 ] as const;
+const DEFAULT_ORGANIZER_PERMISSIONS: OrganizerPermission[] = ["view", "applications"];
 
 const isErrorStatusMessage = (message: string) =>
   /unable|fail|error|could not|incomplete|missing|invalid/i.test(message);
@@ -4226,7 +4228,7 @@ export default function OrganizerDashboardPage() {
                                                 permissions:
                                                   applicationTypeTab === "secretariat"
                                                     ? []
-                                                    : (["view", "applications"] as const),
+                                                    : [...DEFAULT_ORGANIZER_PERMISSIONS],
                                               },
                                             ],
                                           });
@@ -4279,7 +4281,9 @@ export default function OrganizerDashboardPage() {
                                       setChairAllotApplicantId(applicant.id);
                                       setChairAllotCommitteeId(existingChairAssignment?.committeeId || selectedCommitteeId);
                                       const existingRole = existingChairAssignment?.chair?.role?.trim();
-                                      const normalizedRole = existingRole && CHAIR_ROLE_PRESETS.includes(existingRole)
+                                      const normalizedRole =
+                                        existingRole &&
+                                        (CHAIR_ROLE_PRESETS as readonly string[]).includes(existingRole)
                                         ? existingRole
                                         : existingRole
                                           ? "Other"
@@ -6214,7 +6218,7 @@ export default function OrganizerDashboardPage() {
                               permissions:
                                 teamTypeTab === "secretariat"
                                   ? []
-                                  : (["view", "applications"] as const),
+                                  : [...DEFAULT_ORGANIZER_PERMISSIONS],
                             }));
 
                           if (imported.length === 0) {
