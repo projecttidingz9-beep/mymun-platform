@@ -8,7 +8,7 @@ import AuthModal from "@/components/AuthModal";
 import type { Conference } from "@/lib/types";
 import { useAuth } from "@/lib/auth-context";
 
-const LEVELS = ["All", "High School", "University", "Elite", "Open", "Hybrid"];
+const LEVELS = ["All", "High School", "University", "Open"];
 const REGIONS = ["All", "Asia", "Europe", "Americas", "Africa", "Oceania"];
 const SORT_OPTIONS = [
   { value: "date", label: "Earliest First" },
@@ -45,8 +45,6 @@ export default function MarketplacePage() {
   const [seatsMax, setSeatsMax] = useState(3000);
   const [startDateFrom, setStartDateFrom] = useState("");
   const [startDateTo, setStartDateTo] = useState("");
-  const [deadlineFrom, setDeadlineFrom] = useState("");
-  const [deadlineTo, setDeadlineTo] = useState("");
   const [featuredOnly, setFeaturedOnly] = useState(false);
   const [sort, setSort] = useState("date");
   const [authOpen, setAuthOpen] = useState(false);
@@ -115,8 +113,6 @@ export default function MarketplacePage() {
     const normalizedSeatsMax = Math.max(seatsMin, seatsMax);
     const startFromValue = parseDayValue(startDateFrom);
     const startToValue = parseDayValue(startDateTo);
-    const deadlineFromValue = parseDayValue(deadlineFrom);
-    const deadlineToValue = parseDayValue(deadlineTo);
 
     let result = indexedConferences
       .filter(({ conference: c, searchText }) => {
@@ -132,12 +128,6 @@ export default function MarketplacePage() {
       const matchStartFrom = startFromValue === null || (startValue !== null && startValue >= startFromValue);
       const matchStartTo = startToValue === null || (startValue !== null && startValue <= startToValue);
 
-      const deadlineValue = parseDayValue(c.registrationDeadline);
-      const matchDeadlineFrom =
-        deadlineFromValue === null || (deadlineValue !== null && deadlineValue >= deadlineFromValue);
-      const matchDeadlineTo =
-        deadlineToValue === null || (deadlineValue !== null && deadlineValue <= deadlineToValue);
-
       const matchFeatured = !featuredOnly || c.featured;
 
       return (
@@ -148,8 +138,6 @@ export default function MarketplacePage() {
         matchSeats &&
         matchStartFrom &&
         matchStartTo &&
-        matchDeadlineFrom &&
-        matchDeadlineTo &&
         matchFeatured
       );
       })
@@ -177,8 +165,6 @@ export default function MarketplacePage() {
     seatsMax,
     startDateFrom,
     startDateTo,
-    deadlineFrom,
-    deadlineTo,
     featuredOnly,
     sort,
   ]);
@@ -188,8 +174,7 @@ export default function MarketplacePage() {
   if (region !== "All") activeFilters.push(region);
   if (freeOnly) activeFilters.push("Free only");
   if (seatsMin > 0 || seatsMax < 3000) activeFilters.push(`Seats ${Math.min(seatsMin, seatsMax)}-${Math.max(seatsMin, seatsMax)}`);
-  if (startDateFrom || startDateTo) activeFilters.push(`Start ${startDateFrom || "Any"} to ${startDateTo || "Any"}`);
-  if (deadlineFrom || deadlineTo) activeFilters.push(`Deadline ${deadlineFrom || "Any"} to ${deadlineTo || "Any"}`);
+  if (startDateFrom || startDateTo) activeFilters.push(`Dates ${startDateFrom || "Any"} to ${startDateTo || "Any"}`);
   if (featuredOnly) activeFilters.push("Featured only");
 
   const clearPrice = () => setFreeOnly(false);
@@ -201,10 +186,6 @@ export default function MarketplacePage() {
     setStartDateFrom("");
     setStartDateTo("");
   };
-  const clearDeadlineRange = () => {
-    setDeadlineFrom("");
-    setDeadlineTo("");
-  };
   const clearAll = () => {
     setLevel("All");
     setRegion("All");
@@ -213,8 +194,6 @@ export default function MarketplacePage() {
     setSeatsMax(3000);
     setStartDateFrom("");
     setStartDateTo("");
-    setDeadlineFrom("");
-    setDeadlineTo("");
     setFeaturedOnly(false);
     setSearch("");
   };
@@ -444,27 +423,6 @@ export default function MarketplacePage() {
                 <input type="date" value={startDateTo} onChange={(event) => setStartDateTo(event.target.value)} className="lux-input text-xs" />
               </div>
             </div>
-
-            <div
-              className="rounded-xl p-3"
-              style={{ background: "var(--bg-subtle)", border: "1px solid var(--border)" }}
-            >
-              <div className="flex items-center justify-between mb-2">
-                <p
-                  className="text-[10px] font-semibold"
-                  style={{ color: "var(--fg-muted)", letterSpacing: "0.24em", textTransform: "uppercase" }}
-                >
-                  Registration deadline
-                </p>
-                {(deadlineFrom || deadlineTo) && (
-                  <button onClick={clearDeadlineRange} className="text-[11px]" style={{ color: "var(--accent-warm)" }}>Clear</button>
-                )}
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <input type="date" value={deadlineFrom} onChange={(event) => setDeadlineFrom(event.target.value)} className="lux-input text-xs" />
-                <input type="date" value={deadlineTo} onChange={(event) => setDeadlineTo(event.target.value)} className="lux-input text-xs" />
-              </div>
-            </div>
           </div>
         )}
       </div>
@@ -538,7 +496,7 @@ export default function MarketplacePage() {
   );
 
   return (
-    <div className="lux-shell lux-shell-immersive marketplace-page min-h-screen">
+    <div className="lux-shell marketplace-page min-h-screen">
       <div aria-hidden className="lux-backdrop" />
 
       <Navbar openAuthModal={() => setAuthOpen(true)} />
@@ -553,7 +511,7 @@ export default function MarketplacePage() {
           </span>
           <h1
             className="lux-display mt-8 max-w-4xl"
-            style={{ color: "var(--fg-immersive)" }}
+            style={{ color: "var(--fg)" }}
           >
             Find your next{" "}
             <span className="text-gradient">
@@ -564,7 +522,7 @@ export default function MarketplacePage() {
           <p className="lux-subdisplay mt-6 max-w-2xl">
             {catalogLoading
               ? "Loading published conferences…"
-              : `${allConferences.length} conference${allConferences.length === 1 ? "" : "s"} published — filter by level, region, budget, and dates to find your match.`}
+              : `${allConferences.length} conference${allConferences.length === 1 ? "" : "s"} published. Filter by level, region, budget and dates.`}
           </p>
           {isOrganizerUser && (
             <p className="mt-4 text-sm" style={{ color: "var(--fg-muted)" }}>
@@ -597,7 +555,7 @@ export default function MarketplacePage() {
               </svg>
               <input
                 type="text"
-                placeholder="Search by conference name, city, country, or committee..."
+                placeholder="Search by conference name, city, country or committee..."
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
                 className="marketplace-search-input flex-1 py-4 pr-4 bg-transparent outline-none text-sm"

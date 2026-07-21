@@ -33,17 +33,17 @@ const PILLARS = [
   {
     index: "01",
     title: "Discover",
-    body: "Browse published MUN conferences and filter by dates, region, and level.",
+    body: "Browse published MUN conferences and filter by dates, region and level.",
   },
   {
     index: "02",
     title: "Prepare",
-    body: "Track applications, prep materials, and your registration status in one place.",
+    body: "Track applications, prep materials and your registration status in one place.",
   },
   {
     index: "03",
     title: "Perform",
-    body: "Run registration, issue QR passes, and check in delegates on site.",
+    body: "Run registration, issue QR passes and check in delegates on site.",
   },
 ];
 
@@ -60,12 +60,12 @@ const HERO_FEATURES = [
   },
   {
     title: "Organizer Dashboard",
-    body: "Manage applications, committees, pricing, and your team in one place.",
+    body: "Manage applications, committees, pricing and your team in one place.",
     tag: "Organizers",
   },
   {
     title: "Committee Builder",
-    body: "Agendas, documents, chairs, and allotments without spreadsheets.",
+    body: "Agendas, documents, chairs and allotments without spreadsheets.",
     tag: "Organizers",
   },
   {
@@ -499,7 +499,7 @@ export default function HomePage() {
                 className="lux-display mt-6"
                 style={{ color: "var(--fg-immersive)" }}
               >
-                Conference teams should spend time on diplomacy and logistics, not
+                Conference teams should spend time on diplomacy and logistics — not
                 copy-pasting applicant data across spreadsheets and chat apps.
               </h2>
             </Reveal>
@@ -730,8 +730,8 @@ export default function HomePage() {
             </Reveal>
             <Reveal delay={0.16}>
               <p className="lux-subdisplay mt-8 max-w-xl mx-auto">
-                Hosting a conference, exploring a partnership, or have a question?
-                Our team typically responds within one business day.
+                Hosting a conference, exploring a partnership or asking a question?
+                Our team usually replies within one business day.
               </p>
             </Reveal>
             <Reveal delay={0.22}>
@@ -832,19 +832,19 @@ export default function HomePage() {
               {[
                 {
                   q: "Is Tidingz free for delegates?",
-                  a: "Yes. Creating an account and browsing conferences are free. You only pay when you register for a conference, at the fee set by the organizer.",
+                  a: "Yes. Creating an account and browsing conferences is free. You only pay when you register for a conference, at the fee set by the organizer.",
                 },
                 {
                   q: "How do I register for a conference?",
-                  a: "Browse conferences, open a conference page, and click 'Apply Now'. Fill in your details, select a category, and complete payment. You will receive a confirmation email and can track your status from your dashboard.",
+                  a: "Browse conferences, open a conference page and click Apply Now. Fill in your details, select a category and complete payment. You will get a confirmation email and can track your status from your dashboard.",
                 },
                 {
                   q: "Can I host my conference on Tidingz?",
-                  a: "Absolutely. Head to the Organizers page and create your conference. You get a full suite: application management, delegate allotment, committee builder, QR delegate passes, and payment collection.",
+                  a: "Yes. Go to the Organizers page and create your conference. You get application management, delegate allotment, a committee builder, QR delegate passes and payment collection.",
                 },
                 {
                   q: "How do delegate passes and QR codes work?",
-                  a: "Once an organizer allots and publishes passes, a QR code appears in your dashboard. Show it at the gate for instant check-in. Organizers can scan with any camera. No extra hardware needed.",
+                  a: "Once an organizer allots and publishes passes, a QR code appears in your dashboard. Show it at the gate for check-in. Organizers can scan with any camera — no extra hardware needed.",
                 },
               ].map((item, i) => (
                 <motion.div

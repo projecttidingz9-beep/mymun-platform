@@ -13,7 +13,12 @@ import { moneyNumber } from "@/lib/server/decimal-money";
 import { decodeOrganizerDescription } from "@/lib/server/organizer-description";
 import { decodeOrganizerStoredBlobRecord } from "@/lib/server/organizer-blob-decode";
 import { coerceDate } from "@/lib/server/coerce-date";
-import { getActivePhase, getPhaseStatus } from "@/lib/pricing";
+import {
+  isConferenceRegistrationOpen,
+  resolveConferenceStatusBadge,
+  resolveRegistrationDeadlineDay,
+} from "@/lib/conference-status";
+import { getPhaseStatus } from "@/lib/pricing";
 
 const REGION_BY_COUNTRY: Record<string, Conference["region"]> = {
   india: "Asia",
@@ -71,31 +76,18 @@ function parseVenue(venue: string | null | undefined): { location: string; city:
 }
 
 function statusBadge(
-  end: Date | string,
-  committees: CommitteeConfig[],
+  event: Pick<Event, "endDate">,
   blob: Record<string, unknown> | null
 ): NonNullable<Conference["statusBadgeLabel"]> {
-  const today = new Date().setHours(0, 0, 0, 0);
-  const endDay = new Date(end).setHours(0, 0, 0, 0);
-  if (endDay < today) return "Event Ended";
-
-  const capacity = committees.reduce((s, c) => s + c.seatCount, 0);
   const categories = Array.isArray(blob?.registrationCategories)
     ? (blob!.registrationCategories as RegistrationCategory[])
     : [];
-  const openCategories = categories.filter((category) => category.isOpen !== false);
-  const allPhases = openCategories.flatMap((category) => category.pricingPhases || []);
-  if (capacity <= 0 && allPhases.length === 0 && openCategories.length === 0) return "Coming Soon";
 
-  if (computeRegistrationOpen(blob)) return "Register Now";
-
-  const upcoming = allPhases.some((phase) => {
-    const start = new Date(phase.startDate).setHours(0, 0, 0, 0);
-    return Number.isFinite(start) && start > today;
+  return resolveConferenceStatusBadge({
+    endDate: event.endDate,
+    registrationDeadline: blobString(blob, "registrationDeadline"),
+    categories,
   });
-  if (upcoming) return "Coming Soon";
-
-  return "Registrations Closed";
 }
 
 export type EventWithListing = Event & {
@@ -279,10 +271,6 @@ export function mapPublishedEventToConference(event: EventWithListing): Conferen
     .map((p) => coerceDate(p.startDate))
     .filter((d) => !Number.isNaN(d.getTime()))
     .sort((a, b) => a.getTime() - b.getTime())[0];
-  const latestPhaseEnd = blobPhaseDates
-    .map((p) => coerceDate(p.endDate))
-    .filter((d) => !Number.isNaN(d.getTime()))
-    .sort((a, b) => b.getTime() - a.getTime())[0];
 
   const slug = event.slug?.trim() || toSlug(event.title);
   const blobLevel = blob?.level;
@@ -297,6 +285,16 @@ export function mapPublishedEventToConference(event: EventWithListing): Conferen
   const blobTags = Array.isArray(blob?.tags)
     ? (blob.tags as unknown[]).map((entry) => String(entry).trim()).filter(Boolean)
     : [];
+  const blobCommittees = Array.isArray(blob?.committees)
+    ? (blob.committees as Array<{ id: string; documents?: OrganizerDocument[] }>)
+    : [];
+  const blobCommitteeById = new Map(blobCommittees.map((committee) => [committee.id, committee]));
+
+  const registrationDeadlineDay = resolveRegistrationDeadlineDay({
+    endDate: event.endDate,
+    registrationDeadline: blobString(blob, "registrationDeadline"),
+    categories: blobCategories,
+  });
 
   return {
     id: event.id,
@@ -309,7 +307,9 @@ export function mapPublishedEventToConference(event: EventWithListing): Conferen
     startDate: formatDate(event.startDate),
     endDate: formatDate(event.endDate),
     registrationOpenDate: earliestPhaseStart ? formatDate(earliestPhaseStart) : formatDate(event.startDate),
-    registrationDeadline: latestPhaseEnd ? formatDate(latestPhaseEnd) : formatDate(event.endDate),
+    registrationDeadline: registrationDeadlineDay
+      ? formatDate(new Date(registrationDeadlineDay))
+      : formatDate(event.endDate),
     price,
     currency,
     level,
@@ -339,17 +339,11 @@ export function mapPublishedEventToConference(event: EventWithListing): Conferen
         allottedCount: allotmentByName.get(cm.name) ?? 0,
         logoImageUrl: (cm as { logoImageUrl?: string | null }).logoImageUrl ?? undefined,
         chairs: chairs.length > 0 ? chairs : undefined,
-        documents: (() => {
-          const docs = (cm as CommitteeConfig & { documents?: Array<{ id: string; title: string; category: string; fileUrl: string }> }).documents;
-          return Array.isArray(docs)
-            ? docs.map((doc) => ({
-                id: doc.id,
-                title: doc.title,
-                category: doc.category,
-                url: doc.fileUrl,
-              }))
-            : [];
-        })(),
+        documents: mergeCommitteeDocuments(
+          (cm as CommitteeConfig & { documents?: Array<{ id: string; title: string; category: string; fileUrl: string }> })
+            .documents,
+          blobCommitteeById.get(cm.id)?.documents
+        ),
         noPortfolio,
         portfolioMatrixVisibility: matrixVisibility,
         portfolios,
@@ -380,7 +374,7 @@ export function mapPublishedEventToConference(event: EventWithListing): Conferen
         : publicCommittees.length > 0
           ? publicCommittees.slice(0, 3).map((c) => c.name)
           : ["Model UN", "Published"],
-    statusBadgeLabel: statusBadge(event.endDate, committees, blob),
+    statusBadgeLabel: statusBadge(event, blob),
   };
 }
 
@@ -393,13 +387,49 @@ export type PublicReviewRow = {
   createdAt?: string;
 };
 
+function resolveDocumentUrl(item: Record<string, unknown>): string {
+  const url = typeof item.url === "string" ? item.url.trim() : "";
+  const fileUrl = typeof item.fileUrl === "string" ? item.fileUrl.trim() : "";
+  return url || fileUrl;
+}
+
+function mergeCommitteeDocuments(
+  dbDocs:
+    | Array<{ id: string; title: string; category: string; fileUrl: string }>
+    | undefined,
+  blobDocs: OrganizerDocument[] | undefined
+): Array<{ id: string; title: string; category: string; url: string }> {
+  const merged: Array<{ id: string; title: string; category: string; url: string }> = [];
+  const seen = new Set<string>();
+
+  for (const doc of blobDocs ?? []) {
+    const url = doc.url?.trim();
+    if (!url || url === "#") continue;
+    const key = `${doc.id}:${url}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    merged.push({ id: doc.id, title: doc.title, category: doc.category, url });
+  }
+
+  for (const doc of dbDocs ?? []) {
+    const url = doc.fileUrl?.trim();
+    if (!url || url === "#") continue;
+    const key = `${doc.id}:${url}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    merged.push({ id: doc.id, title: doc.title, category: doc.category, url });
+  }
+
+  return merged;
+}
+
 function normalizeBlobDocuments(blob: Record<string, unknown> | null): OrganizerDocument[] | undefined {
   if (!Array.isArray(blob?.commonDocuments)) return undefined;
   const docs: OrganizerDocument[] = [];
   for (const entry of blob.commonDocuments as unknown[]) {
     if (!entry || typeof entry !== "object") continue;
     const item = entry as Record<string, unknown>;
-    const url = typeof item.url === "string" ? item.url.trim() : "";
+    const url = resolveDocumentUrl(item);
     if (!url || url === "#") continue;
     docs.push({
       id: String(item.id || `doc-${docs.length}`),
@@ -440,17 +470,18 @@ function normalizePartnerConferences(
   return partners.length > 0 ? partners : undefined;
 }
 
-/** Registration is only "open" when a category is not manually closed AND has a currently active pricing phase (or no phases configured at all yet, in which case the category's base price applies indefinitely). */
-function computeRegistrationOpen(blob: Record<string, unknown> | null): boolean {
+function computeRegistrationOpen(
+  blob: Record<string, unknown> | null,
+  eventEndDate: Date | string
+): boolean {
   const categories = Array.isArray(blob?.registrationCategories)
     ? (blob!.registrationCategories as RegistrationCategory[])
     : [];
-  const openCategories = categories.filter((category) => category.isOpen !== false);
-  if (openCategories.length === 0) return false;
-  return openCategories.some((category) => {
-    const phases = category.pricingPhases || [];
-    if (phases.length === 0) return true;
-    return Boolean(getActivePhase(phases));
+
+  return isConferenceRegistrationOpen({
+    endDate: eventEndDate,
+    registrationDeadline: blobString(blob, "registrationDeadline"),
+    categories,
   });
 }
 
@@ -501,7 +532,7 @@ export function mapPublishedEventToPublicDetail(
     previousEditions: normalizeBlobPreviousEditions(blob),
     partnerConferences: normalizePartnerConferences(blob),
     reviews: options?.approvedReviews?.length ? options.approvedReviews : undefined,
-    registrationOpen: computeRegistrationOpen(blob),
+    registrationOpen: computeRegistrationOpen(blob, event.endDate),
     hasDelegationRegistration: Array.isArray(blob?.registrationCategories)
       ? (blob!.registrationCategories as RegistrationCategory[]).some(
           (category) => category.applicationType === "delegation" && category.isOpen !== false

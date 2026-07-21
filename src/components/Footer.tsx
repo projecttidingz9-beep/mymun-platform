@@ -37,7 +37,7 @@ export default function Footer() {
               <FooterBrandLogo />
             </Link>
             <p className="text-sm leading-relaxed max-w-md footer-copy">
-              A modern Model UN platform helping delegates and organizers discover, prepare, and perform at the highest level.
+              A modern Model UN platform helping delegates and organizers discover, prepare and perform at the highest level.
             </p>
             {SOCIAL_LINKS.length > 0 && (
               <div className="flex items-center gap-2">

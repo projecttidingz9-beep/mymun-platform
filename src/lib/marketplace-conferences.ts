@@ -1,5 +1,5 @@
 import { Conference, OrganizerConference } from "@/lib/types";
-import { getActivePhase } from "@/lib/pricing";
+import { resolveConferenceStatusBadge } from "@/lib/conference-status";
 
 const LISTABLE_ORGANIZER_STATUSES = new Set<OrganizerConference["status"]>([
   "Published",
@@ -60,33 +60,20 @@ function parseDayStart(value: string | undefined): number | null {
 }
 
 function getConferenceStatusBadge(conference: OrganizerConference): string {
-  const today = new Date().setHours(0, 0, 0, 0);
-  const eventEnd = parseDayStart(conference.endDate);
-  if (eventEnd !== null && eventEnd < today) return "Event Ended";
+  const openCategories = conference.registrationCategories.filter(
+    (category) => category.isOpen !== false
+  );
+  const registrationDeadline =
+    conference.registrationDeadline ||
+    openCategories
+      .map((category) => category.deadlineOverride || category.registrationDeadline)
+      .find((deadline): deadline is string => Boolean(deadline));
 
-  const openCategories = conference.registrationCategories.filter((category) => category.isOpen !== false);
-  const hasActivePhase = openCategories.some((category) => Boolean(getActivePhase(category.pricingPhases)));
-  if (hasActivePhase) return "Register Now";
-
-  const allPhaseWindows = openCategories.flatMap((category) => category.pricingPhases || []);
-  const hasUpcomingPhase = allPhaseWindows.some((phase) => {
-    const start = parseDayStart(phase.startDate);
-    return start !== null && start > today;
+  return resolveConferenceStatusBadge({
+    endDate: conference.endDate,
+    registrationDeadline,
+    categories: openCategories,
   });
-  const hasEndedPhase = allPhaseWindows.some((phase) => {
-    const end = parseDayStart(phase.endDate);
-    return end !== null && end < today;
-  });
-
-  if (hasUpcomingPhase && !hasEndedPhase) return "Coming Soon";
-  if (hasUpcomingPhase && hasEndedPhase) return "Registrations Closed";
-  if (openCategories.length === 0) return "Registrations Closed";
-
-  const registrationDeadline = parseDayStart(conference.registrationDeadline);
-  if (registrationDeadline !== null && registrationDeadline >= today) {
-    return "Register Now";
-  }
-  return "Registrations Closed";
 }
 
 export function mapOrganizerConferenceToMarketplaceConference(

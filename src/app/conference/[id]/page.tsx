@@ -9,7 +9,8 @@ import Footer from "@/components/Footer";
 import AuthModal from "@/components/AuthModal";
 import type { Conference, PublicConferenceDetail } from "@/lib/types";
 import { useAuth } from "@/lib/auth-context";
-import { getCategoryStartingPrice, getActivePhase, getPhaseStatus } from "@/lib/pricing";
+import { getActivePhase, getPhaseStatus } from "@/lib/pricing";
+import { resolveConferenceStatusBadge } from "@/lib/conference-status";
 import { resolveConferenceBannerImage } from "@/lib/conference-media";
 import { formatMoney } from "@/lib/format-money";
 import {
@@ -264,18 +265,6 @@ function ConferenceDetailPageContent() {
         ...review,
         sourceConferenceTitle: c.title,
       }));
-  const dynamicStartingPrice = showOperationalOverlay
-    ? mergedRegistrationCategories.length > 0
-      ? Math.min(
-          ...mergedRegistrationCategories.map((category) =>
-            getCategoryStartingPrice(
-              category,
-              mergedOrganizerConferences.flatMap((entry) => entry.committees)
-            )
-          )
-        )
-      : c.price
-    : c.price;
   const activeCategoryPhase = showOperationalOverlay
     ? mergedRegistrationCategories
         .map((category) => getActivePhase(category.pricingPhases))
@@ -322,17 +311,21 @@ function ConferenceDetailPageContent() {
     .map((part) => part[0]?.toUpperCase() || "")
     .join("") || "MUN";
   const isOrganizerUser = isLoggedIn && user?.role === "organizer";
-  const registrationIsOpen = showOperationalOverlay
-    ? mergedRegistrationCategories.some(
-        (category) => category.isOpen !== false && Boolean(getActivePhase(category.pricingPhases))
-      )
-    : publicDetail?.registrationOpen ?? true;
+  const registrationStatusLabel = showOperationalOverlay
+    ? resolveConferenceStatusBadge({
+        endDate: organizerConference?.endDate ?? c.endDate,
+        registrationDeadline: organizerConference?.registrationDeadline,
+        categories: mergedRegistrationCategories,
+      })
+    : c.statusBadgeLabel ?? (publicDetail?.registrationOpen ? "Register Now" : "Coming Soon");
+  const registrationIsOpen = registrationStatusLabel === "Register Now";
+  const conferenceEnded = registrationStatusLabel === "Event Ended";
   const hasDelegationRegistration = showOperationalOverlay
     ? mergedRegistrationCategories.some(
         (category) => category.applicationType === "delegation" && category.isOpen !== false
       )
     : publicDetail?.hasDelegationRegistration === true;
-  const conferenceEnded = new Date(c.endDate).setHours(23, 59, 59, 999) < Date.now();
+  const displayContactDetail = organizerConference?.contactDetail?.trim() || "";
   const policySections = publicView.policySections;
   const commonDocuments = publicView.commonDocuments;
   const committeeDocumentGroups = showOperationalOverlay
@@ -359,9 +352,16 @@ function ConferenceDetailPageContent() {
       ? publicView.overviewAwardLines
       : DEFAULT_OVERVIEW_AWARDS;
   const displayPreviousEditions = publicView.previousEditions;
-  const fallbackOverviewDocuments = (
+  const overviewDocumentSources =
     commonDocuments.length > 0
       ? commonDocuments
+      : (publicDetail?.commonDocuments || []).map((document) => ({
+          ...document,
+          sourceConferenceTitle: displayTitle,
+        }));
+  const fallbackOverviewDocuments = (
+    overviewDocumentSources.length > 0
+      ? overviewDocumentSources
       : DEFAULT_OVERVIEW_DOCUMENTS.map((document, index) => ({
           id: `default-doc-${index}`,
           sourceConferenceTitle: displayTitle,
@@ -583,10 +583,10 @@ function ConferenceDetailPageContent() {
           </div>
         </div>
 
-        <div className="max-w-7xl 2xl:max-w-[1320px] mx-auto px-4 sm:px-6 2xl:px-8 py-10 pb-24 relative">
+        <div className="max-w-7xl 2xl:max-w-[1320px] mx-auto px-4 sm:px-6 2xl:px-8 py-6 pb-12 relative">
           {/* Breadcrumb */}
           <div
-            className="flex items-center gap-2 text-xs tracking-[0.22em] uppercase mb-10"
+            className="flex items-center gap-2 text-xs tracking-[0.22em] uppercase mb-6"
             style={{ color: "var(--fg-muted)" }}
           >
             <Link href="/" className="transition-colors">
@@ -600,16 +600,15 @@ function ConferenceDetailPageContent() {
             <span style={{ color: "var(--fg)" }}>{displayTitle}</span>
           </div>
 
-          <div className="grid lg:grid-cols-[minmax(0,1fr)_360px] 2xl:grid-cols-[minmax(0,1fr)_390px] gap-8 lg:gap-10 2xl:gap-12 items-stretch">
-            <div className="order-2 lg:order-none flex-1 min-h-[420px] flex flex-col min-w-0">
-              <h2 className="text-3xl font-semibold" style={{ color: "var(--fg)" }}>{displayTitle}</h2>
-              <div className="mt-6 flex items-center gap-4">
+          <div className="grid lg:grid-cols-[minmax(0,1fr)_340px] 2xl:grid-cols-[minmax(0,1fr)_360px] gap-6 lg:gap-8 items-start">
+            <div className="order-2 lg:order-none min-w-0">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-4">
                 <div
-                  className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl overflow-hidden flex items-center justify-center text-2xl font-black"
+                  className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl overflow-hidden flex items-center justify-center text-xl font-black flex-shrink-0"
                   style={{
                     background: "color-mix(in srgb, var(--bg) 86%, transparent 14%)",
                     border: "2px solid var(--border)",
-                    boxShadow: "0 8px 24px rgba(0,0,0,0.25)",
+                    boxShadow: "var(--card-shadow)",
                     color: "var(--fg)",
                   }}
                   aria-label={`${displayTitle} logo`}
@@ -618,43 +617,39 @@ function ConferenceDetailPageContent() {
                     <Image
                       src={heroLogoImage}
                       alt={`${displayTitle} logo`}
-                      width={112}
-                      height={112}
+                      width={96}
+                      height={96}
                       className="w-full h-full object-cover"
                     />
                   ) : (
                     <span style={{ letterSpacing: "0.08em" }}>{heroLogoFallback}</span>
                   )}
                 </div>
+                <div className="min-w-0">
+                  <p className="text-[10px] uppercase tracking-[0.16em]" style={{ color: "var(--fg-muted)" }}>
+                    Organized by
+                  </p>
+                  <p className="text-lg font-semibold mt-1" style={{ color: "var(--fg)" }}>
+                    {displayOrganizerName}
+                  </p>
+                  {acceptedPartnerTitles.length > 0 && (
+                    <p className="mt-2 text-sm" style={{ color: "var(--fg-muted)" }}>
+                      Co-hosted by {acceptedPartnerTitles.join(", ")}
+                    </p>
+                  )}
+                </div>
               </div>
 
-              {acceptedPartnerTitles.length > 0 && (
-                <p
-                  className="mt-5 text-sm"
-                  style={{ color: "var(--fg-muted)" }}
-                >
-                  Co-hosted by{" "}
-                  {acceptedPartnerTitles.join(", ")}
-                </p>
-              )}
-
-              <div className="mt-8 flex flex-wrap items-center gap-3">
+              <div className="mt-5 flex flex-wrap items-center gap-3">
                 <button type="button" className="btn btn-outline-blue text-xs" onClick={() => setShareOpen(true)}>
                   Share Conference
                 </button>
                 {shareMessage && <span className="text-xs" style={{ color: "var(--success)" }}>{shareMessage}</span>}
               </div>
-              <div className="mt-6 grid sm:grid-cols-2 gap-3 max-w-3xl">
-                <div className="conference-surface rounded-xl px-4 py-3">
-                  <p className="text-[10px] uppercase tracking-[0.16em]" style={{ color: "var(--fg-muted)" }}>Organized by</p>
-                  <p className="text-sm font-semibold mt-1" style={{ color: "var(--fg)" }}>{displayOrganizerName}</p>
-                </div>
-              </div>
-              <div className="hidden lg:block flex-1 min-h-[26px]" />
             </div>
 
-            {/* Registration Card — first on mobile for faster primary action */}
-            <div className="order-1 lg:order-none conference-hero-card w-full max-w-[420px] 2xl:max-w-[390px] mx-auto lg:mx-0 lux-card p-6 sm:p-7 flex-shrink-0 lg:sticky lg:top-[calc(6rem+env(safe-area-inset-top,0px))] 2xl:top-28 self-start lg:min-h-[420px] lg:flex lg:flex-col">
+            {/* Registration Card */}
+            <div className="order-1 lg:order-none conference-hero-card w-full max-w-[420px] mx-auto lg:mx-0 lux-card p-5 sm:p-6 flex-shrink-0 lg:sticky lg:top-[calc(6rem+env(safe-area-inset-top,0px))] self-start">
               <p
                 className="text-xs sm:text-sm font-semibold"
                 style={{
@@ -663,35 +658,18 @@ function ConferenceDetailPageContent() {
                   textTransform: "uppercase",
                 }}
               >
-                {activeCategoryPhase?.name || "Registration"}
+                Registration
               </p>
-              {activeCategoryPhase && (
+              {activeCategoryPhase && registrationIsOpen && (
                 <p className="mt-2 text-sm sm:text-base font-semibold" style={{ color: "var(--blue)" }}>
                   {activeCategoryPhase.name} · Active
                 </p>
               )}
-              <div className="flex items-baseline gap-2 mt-3">
-                <span
-                  className="text-4xl font-semibold"
-                  style={{
-                    color: "var(--fg)",
-                    letterSpacing: "-0.02em",
-                  }}
-                >
-                  {formatMoney(dynamicStartingPrice, c.currency)}
-                </span>
-                <span className="text-sm" style={{ color: "var(--fg-muted)" }}>
-                  {activeCategoryPhase ? `${activeCategoryPhase.name} pricing` : "per delegate"}
-                </span>
-              </div>
-              <p
-                className="mt-2 text-sm"
-                style={{ color: "var(--fg-muted)" }}
-              >
-                {activeCategoryPhase
-                  ? `${activeCategoryPhase.name} phase is active`
-                  : "Pricing details update from organizer dashboard"}
-              </p>
+              {!registrationIsOpen && (
+                <p className="mt-2 text-sm font-semibold" style={{ color: "var(--fg)" }}>
+                  {registrationStatusLabel}
+                </p>
+              )}
               {phaseStatusChips.length > 0 && (
                 <div className="mt-3 space-y-2">
                   <p className="text-xs sm:text-sm font-medium" style={{ color: "var(--fg-muted)" }}>
@@ -717,23 +695,18 @@ function ConferenceDetailPageContent() {
                 </div>
               )}
 
-              <div className="lux-divider my-5" />
+              <div className="lux-divider my-4" />
 
-              <div className="space-y-4">
-                <div className="lux-stat">
-                  <span className="text-[10px] font-semibold uppercase tracking-[0.28em]" style={{ color: "var(--fg-muted)" }}>
-                    Seats
+              <div className="lux-stat">
+                <span className="text-[10px] font-semibold uppercase tracking-[0.28em]" style={{ color: "var(--fg-muted)" }}>
+                  Seats left
+                </span>
+                <span className="text-[22px] font-semibold" style={{ color: "var(--fg)", letterSpacing: "-0.01em" }}>
+                  {seatsLeft}
+                  <span className="text-sm font-normal ml-1" style={{ color: "var(--fg-muted)" }}>
+                    / {derivedCapacity}
                   </span>
-                  <span className="text-[22px] font-semibold" style={{ color: "var(--fg)", letterSpacing: "-0.01em" }}>
-                    {seatsLeft}
-                    <span
-                      className="text-sm font-normal ml-1"
-                      style={{ color: "var(--fg-muted)" }}
-                    >
-                      / {derivedCapacity}
-                    </span>
-                  </span>
-                </div>
+                </span>
               </div>
 
               <button
@@ -743,7 +716,7 @@ function ConferenceDetailPageContent() {
                 disabled={isOrganizerUser || !registrationIsOpen}
                 style={{
                   width: "100%",
-                  marginTop: "22px",
+                  marginTop: "18px",
                   padding: "14px 18px",
                   fontSize: "14px",
                   cursor: isOrganizerUser || !registrationIsOpen ? "not-allowed" : "pointer",
@@ -759,13 +732,15 @@ function ConferenceDetailPageContent() {
               >
                 {isOrganizerUser
                   ? "Organizers cannot register"
-                  : !registrationIsOpen
-                    ? conferenceEnded
-                      ? "Registrations Closed"
-                      : "Coming Soon"
-                    : isLoggedIn
+                  : registrationIsOpen
+                    ? isLoggedIn
                       ? "Register now →"
-                      : "Sign in to register →"}
+                      : "Sign in to register →"
+                    : conferenceEnded
+                      ? "Event ended"
+                      : registrationStatusLabel === "Registrations Closed"
+                        ? "Registrations closed"
+                        : "Coming soon"}
               </button>
               {registrationIsOpen && hasDelegationRegistration && !isOrganizerUser && (
                 <Link
@@ -786,8 +761,10 @@ function ConferenceDetailPageContent() {
               {!registrationIsOpen && !isOrganizerUser && (
                 <p className="mt-2 text-[11px] text-center" style={{ color: "var(--fg-muted)" }}>
                   {conferenceEnded
-                    ? "Registration for this conference has closed."
-                    : "Check back once the organizer opens a registration phase."}
+                    ? "This conference has ended."
+                    : registrationStatusLabel === "Registrations Closed"
+                      ? "Registration is closed for now."
+                      : "Registration opens when the organizer publishes an active phase."}
                 </p>
               )}
 
@@ -839,10 +816,10 @@ function ConferenceDetailPageContent() {
       </div>
 
       {/* Content */}
-      <div className="max-w-7xl 2xl:max-w-[1320px] mx-auto px-4 sm:px-6 2xl:px-8 py-12 relative z-10 isolate">
+      <div className="max-w-7xl 2xl:max-w-[1320px] mx-auto px-4 sm:px-6 2xl:px-8 py-8 relative z-10 isolate">
         {tab === "overview" && (
-          <div className="grid lg:grid-cols-3 gap-10">
-            <div className="lg:col-span-2 space-y-8">
+          <div className="grid lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-2 space-y-6">
               <div className="lux-card p-6 sm:p-7">
                 <h2 className="text-2xl font-bold mb-4" style={{ color: "var(--fg)" }}>
                   About this Conference
@@ -1323,101 +1300,158 @@ function ConferenceDetailPageContent() {
         )}
 
         {tab === "organizer" && (
-          <div className="max-w-5xl">
-            <h2 className="text-2xl font-bold mb-6" style={{ color: "var(--fg)" }}>Meet the Organizer</h2>
-            <div className="card p-8 rounded-2xl space-y-6">
-              <div className="flex items-center gap-5">
+          <div className="max-w-6xl space-y-8">
+            <div>
+              <h2 className="text-2xl font-bold" style={{ color: "var(--fg)" }}>Meet the Organizer</h2>
+              <p className="mt-2 text-sm" style={{ color: "var(--fg-muted)" }}>
+                Contact details and the team behind this conference.
+              </p>
+            </div>
+
+            <div className="lux-card p-6 sm:p-8 rounded-2xl space-y-6">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-5">
                 <div
-                  className="w-16 h-16 rounded-2xl flex items-center justify-center text-white font-bold text-xl"
-                  style={{ background: `linear-gradient(135deg, ${c.color.includes("blue") ? "#2563eb" : "#6d28d9"}, #60a5fa)` }}
+                  className="w-20 h-20 rounded-2xl flex items-center justify-center text-white font-bold text-2xl flex-shrink-0"
+                  style={{ background: "linear-gradient(135deg, var(--blue), var(--accent-warm))" }}
                 >
                   {displayOrganizerName[0]}
                 </div>
                 <div>
-                  <h3 className="text-xl font-bold" style={{ color: "var(--fg)" }}>{displayOrganizerName}</h3>
-                  <p className="text-sm" style={{ color: "var(--fg-muted)" }}>Verified Conference Organizer</p>
+                  <h3 className="text-2xl font-bold" style={{ color: "var(--fg)" }}>{displayOrganizerName}</h3>
+                  <p className="text-sm mt-1" style={{ color: "var(--fg-muted)" }}>Conference organizer</p>
                 </div>
               </div>
-              <div className="space-y-3">
+
+              <div className="grid sm:grid-cols-2 gap-3">
                 {displayOrganizerEmail && (
-                  <div className="flex items-center gap-3 text-sm">
-                    <span className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: "var(--bg-subtle)" }}>✉️</span>
-                    <a href={`mailto:${displayOrganizerEmail}`} style={{ color: "var(--blue)" }}>{displayOrganizerEmail}</a>
+                  <a
+                    href={`mailto:${displayOrganizerEmail}`}
+                    className="conference-surface rounded-2xl px-4 py-4 flex items-center gap-3"
+                    style={{ color: "inherit" }}
+                  >
+                    <span className="w-10 h-10 rounded-xl flex items-center justify-center text-lg" style={{ background: "var(--bg-subtle)" }}>✉️</span>
+                    <div className="min-w-0">
+                      <p className="text-[10px] uppercase tracking-[0.16em]" style={{ color: "var(--fg-muted)" }}>Email</p>
+                      <p className="text-sm font-medium truncate" style={{ color: "var(--blue)" }}>{displayOrganizerEmail}</p>
+                    </div>
+                  </a>
+                )}
+                {displayContactDetail && displayContactDetail !== displayOrganizerEmail && (
+                  <div className="conference-surface rounded-2xl px-4 py-4 flex items-center gap-3">
+                    <span className="w-10 h-10 rounded-xl flex items-center justify-center text-lg" style={{ background: "var(--bg-subtle)" }}>📞</span>
+                    <div className="min-w-0">
+                      <p className="text-[10px] uppercase tracking-[0.16em]" style={{ color: "var(--fg-muted)" }}>Contact</p>
+                      <p className="text-sm font-medium" style={{ color: "var(--fg)" }}>{displayContactDetail}</p>
+                    </div>
                   </div>
                 )}
-                {displayWebsite && (
-                  <div className="flex items-center gap-3 text-sm">
-                    <span className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: "var(--bg-subtle)" }}>🌐</span>
-                    <a href={displayWebsite} target="_blank" rel="noopener noreferrer" style={{ color: "var(--blue)" }}>{displayWebsite}</a>
-                  </div>
+                {displayWebsite && displayWebsite !== "#" && (
+                  <a
+                    href={displayWebsite}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="conference-surface rounded-2xl px-4 py-4 flex items-center gap-3"
+                    style={{ color: "inherit" }}
+                  >
+                    <span className="w-10 h-10 rounded-xl flex items-center justify-center text-lg" style={{ background: "var(--bg-subtle)" }}>🌐</span>
+                    <div className="min-w-0">
+                      <p className="text-[10px] uppercase tracking-[0.16em]" style={{ color: "var(--fg-muted)" }}>Website</p>
+                      <p className="text-sm font-medium truncate" style={{ color: "var(--blue)" }}>{displayWebsite}</p>
+                    </div>
+                  </a>
                 )}
                 {displayInstagram && (
-                  <div className="flex items-center gap-3 text-sm">
-                    <span className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: "var(--bg-subtle)" }}>📸</span>
-                    <a href={displayInstagram} target="_blank" rel="noopener noreferrer" style={{ color: "var(--blue)" }}>Instagram</a>
-                  </div>
+                  <a
+                    href={displayInstagram}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="conference-surface rounded-2xl px-4 py-4 flex items-center gap-3"
+                    style={{ color: "inherit" }}
+                  >
+                    <span className="w-10 h-10 rounded-xl flex items-center justify-center text-lg" style={{ background: "var(--bg-subtle)" }}>📸</span>
+                    <div>
+                      <p className="text-[10px] uppercase tracking-[0.16em]" style={{ color: "var(--fg-muted)" }}>Instagram</p>
+                      <p className="text-sm font-medium" style={{ color: "var(--blue)" }}>View profile</p>
+                    </div>
+                  </a>
                 )}
                 {displayLinkedin && (
-                  <div className="flex items-center gap-3 text-sm">
-                    <span className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: "var(--bg-subtle)" }}>💼</span>
-                    <a href={displayLinkedin} target="_blank" rel="noopener noreferrer" style={{ color: "var(--blue)" }}>LinkedIn</a>
-                  </div>
+                  <a
+                    href={displayLinkedin}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="conference-surface rounded-2xl px-4 py-4 flex items-center gap-3"
+                    style={{ color: "inherit" }}
+                  >
+                    <span className="w-10 h-10 rounded-xl flex items-center justify-center text-lg" style={{ background: "var(--bg-subtle)" }}>💼</span>
+                    <div>
+                      <p className="text-[10px] uppercase tracking-[0.16em]" style={{ color: "var(--fg-muted)" }}>LinkedIn</p>
+                      <p className="text-sm font-medium" style={{ color: "var(--blue)" }}>View profile</p>
+                    </div>
+                  </a>
                 )}
                 {displayTwitter && (
-                  <div className="flex items-center gap-3 text-sm">
-                    <span className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: "var(--bg-subtle)" }}>𝕏</span>
-                    <a href={displayTwitter} target="_blank" rel="noopener noreferrer" style={{ color: "var(--blue)" }}>X / Twitter</a>
-                  </div>
+                  <a
+                    href={displayTwitter}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="conference-surface rounded-2xl px-4 py-4 flex items-center gap-3"
+                    style={{ color: "inherit" }}
+                  >
+                    <span className="w-10 h-10 rounded-xl flex items-center justify-center text-lg" style={{ background: "var(--bg-subtle)" }}>𝕏</span>
+                    <div>
+                      <p className="text-[10px] uppercase tracking-[0.16em]" style={{ color: "var(--fg-muted)" }}>X / Twitter</p>
+                      <p className="text-sm font-medium" style={{ color: "var(--blue)" }}>View profile</p>
+                    </div>
+                  </a>
                 )}
               </div>
-              {publicTeamMembers.length > 0 && (
-                <div className="space-y-7">
-                  {(["organizer", "secretariat"] as const).map((teamType) => {
-                    const members = publicTeamMembers.filter(
-                      (member) => (member.teamType || "organizer") === teamType
-                    );
-                    if (members.length === 0) return null;
-                    return (
-                      <div key={teamType}>
-                        <p className="text-xs font-semibold uppercase tracking-[0.2em] mb-3" style={{ color: "var(--fg-muted)" }}>
-                          {teamType === "secretariat" ? "Secretariat" : "Organizing Team"}
-                        </p>
-                        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                          {members.map((member) => (
-                            <div key={member.id} className="rounded-2xl p-4 conference-surface flex flex-col items-center text-center gap-3">
-                              {member.photoUrl ? (
-                                // eslint-disable-next-line @next/next/no-img-element
-                                <img
-                                  src={member.photoUrl}
-                                  alt={member.name}
-                                  className="w-20 h-20 rounded-2xl object-cover flex-shrink-0"
-                                />
-                              ) : (
-                                <div
-                                  className="w-20 h-20 rounded-2xl flex items-center justify-center text-white font-bold text-2xl flex-shrink-0"
-                                  style={{ background: "linear-gradient(135deg, #2563eb, #60a5fa)" }}
-                                >
-                                  {member.name[0]?.toUpperCase() || "T"}
-                                </div>
-                              )}
-                              <div className="min-w-0">
-                                <p className="text-base font-bold" style={{ color: "var(--fg)" }}>{member.name}</p>
-                                <p className="text-sm mt-1" style={{ color: "var(--fg-muted)" }}>{member.role}</p>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-              {displayOrganizerEmail && (
-                <a href={`mailto:${displayOrganizerEmail}`} className="btn btn-ghost w-full">
-                  Contact Organizer
-                </a>
-              )}
             </div>
+
+            {publicTeamMembers.length > 0 ? (
+              <div className="space-y-5">
+                <h3 className="text-xl font-bold" style={{ color: "var(--fg)" }}>Organizing team</h3>
+                <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-5">
+                  {publicTeamMembers.map((member) => (
+                    <div
+                      key={member.id}
+                      className="lux-card rounded-3xl p-6 flex flex-col items-center text-center gap-4 min-h-[280px]"
+                    >
+                      {member.photoUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={member.photoUrl}
+                          alt={member.name}
+                          className="w-32 h-32 rounded-3xl object-cover flex-shrink-0"
+                        />
+                      ) : (
+                        <div
+                          className="w-32 h-32 rounded-3xl flex items-center justify-center text-white font-bold text-4xl flex-shrink-0"
+                          style={{ background: "linear-gradient(135deg, var(--blue), var(--accent-warm))" }}
+                        >
+                          {member.name[0]?.toUpperCase() || "T"}
+                        </div>
+                      )}
+                      <div className="min-w-0">
+                        <p className="text-xl font-bold" style={{ color: "var(--fg)" }}>{member.name}</p>
+                        <p className="text-sm mt-2 font-medium" style={{ color: "var(--blue)" }}>{member.role}</p>
+                        {member.teamType === "secretariat" && (
+                          <p className="text-xs mt-2 uppercase tracking-[0.16em]" style={{ color: "var(--fg-muted)" }}>
+                            Secretariat
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="lux-card p-8 text-center">
+                <p className="text-sm" style={{ color: "var(--fg-muted)" }}>
+                  The organizer has not added team members yet.
+                </p>
+              </div>
+            )}
           </div>
         )}
 
@@ -1428,21 +1462,18 @@ function ConferenceDetailPageContent() {
               <div className="space-y-3">
                 {reviewsToShow.map((review) => (
                     <div key={review.id} className="card p-5 rounded-2xl">
-                      <div className="flex items-center justify-between">
+                      <div className="flex items-center justify-between gap-3">
                         <p className="text-sm font-bold" style={{ color: "var(--fg)" }}>{review.userName}</p>
-                        <div className="flex items-center gap-2">
-                          <span className="badge badge-blue">{review.rating}/5</span>
-                          {organizerConference && user?.id && "userId" in review && review.userId === user.id && (
-                            <button
-                              type="button"
-                              className="btn btn-danger-ghost text-xs"
-                              disabled={reviewDeletingId === review.id}
-                              onClick={() => void removeOwnReview(review.id)}
-                            >
-                              {reviewDeletingId === review.id ? "Deleting…" : "Delete"}
-                            </button>
-                          )}
-                        </div>
+                        {organizerConference && user?.id && "userId" in review && review.userId === user.id && (
+                          <button
+                            type="button"
+                            className="btn btn-danger-ghost text-xs"
+                            disabled={reviewDeletingId === review.id}
+                            onClick={() => void removeOwnReview(review.id)}
+                          >
+                            {reviewDeletingId === review.id ? "Deleting…" : "Delete"}
+                          </button>
+                        )}
                       </div>
                       <p className="text-[11px]" style={{ color: "var(--fg-muted)" }}>
                         {"sourceConferenceTitle" in review ? review.sourceConferenceTitle : displayTitle}
@@ -1465,8 +1496,6 @@ function ConferenceDetailPageContent() {
               <h3 className="font-bold mb-3" style={{ color: "var(--fg)" }}>Share Your Experience</h3>
               {conferenceEnded ? (
               <div className="space-y-2">
-                <label className="text-xs font-semibold" style={{ color: "var(--fg-muted)" }}>Overall rating (1-5)</label>
-                <input className="input-base text-sm" type="number" min={1} max={5} value={reviewDraft.rating} onChange={(event) => setReviewDraft((prev) => ({ ...prev, rating: Number(event.target.value) }))} placeholder="Overall rating (1-5)" />
                 <textarea className="input-base text-sm" rows={4} value={reviewDraft.comment} onChange={(event) => setReviewDraft((prev) => ({ ...prev, comment: event.target.value }))} placeholder="Write your review..." />
                 <button
                   className="btn btn-primary w-full text-sm"

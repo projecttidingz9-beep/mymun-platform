@@ -1929,8 +1929,41 @@ html.dark .organizer-dashboard .card {
   box-shadow: 0 0 10px color-mix(in srgb, var(--blue) 55%, transparent);
 }
 
+.marketplace-page .lux-backdrop {
+  background:
+    radial-gradient(60% 45% at 78% 12%, rgba(37, 99, 235, 0.08), transparent 70%),
+    radial-gradient(55% 40% at 12% 88%, rgba(99, 102, 241, 0.06), transparent 70%),
+    linear-gradient(180deg, #f3f1ec 0%, #ece8e2 60%, #e7e3dc 100%);
+}
+
+html.dark .marketplace-page .lux-backdrop {
+  background:
+    radial-gradient(60% 45% at 78% 12%, rgba(96, 165, 250, 0.14), transparent 70%),
+    radial-gradient(55% 40% at 12% 88%, rgba(142, 169, 201, 0.1), transparent 70%),
+    linear-gradient(180deg, #0b0d12 0%, #0a0c11 60%, #070a0f 100%);
+}
+
 .marketplace-page .lux-subdisplay {
   color: color-mix(in srgb, var(--fg) 78%, var(--fg-muted) 22%);
+}
+
+.marketplace-page .lux-pill {
+  color: var(--fg-muted);
+  border-color: var(--border);
+  background: color-mix(in srgb, var(--bg) 96%, var(--bg-subtle) 4%);
+}
+
+.marketplace-page .lux-chip {
+  color: var(--fg);
+  border-color: var(--border);
+  background: color-mix(in srgb, var(--bg) 95%, var(--bg-subtle) 5%);
+}
+
+.marketplace-page .lux-card {
+  background: color-mix(in srgb, var(--bg-elevated) 96%, transparent 4%);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  box-shadow: var(--card-shadow);
 }
 
 html.dark .marketplace-page .lux-pill {

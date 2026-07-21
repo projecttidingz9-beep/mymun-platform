@@ -8,7 +8,7 @@ const base = getSiteUrl();
 export const metadata: Metadata = {
   title: "Conferences",
   description:
-    "Browse Model United Nations conferences worldwide — filter by level, region, dates, and pricing on Tidingz.",
+    "Browse Model United Nations conferences worldwide. Filter by level, region, dates and pricing on Tidingz.",
   alternates: { canonical: `${base}${CONFERENCES_PATH}` },
   openGraph: {
     title: "Conferences | Tidingz",

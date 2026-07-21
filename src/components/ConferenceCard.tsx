@@ -32,7 +32,9 @@ export default function ConferenceCard({ conference: c }: ConferenceCardProps) {
         ? "badge-green"
         : c.statusBadgeLabel === "Registrations Closed"
           ? "badge-gold"
-          : "badge-blue";
+          : c.statusBadgeLabel === "Coming Soon"
+            ? "badge-blue"
+            : "badge-blue";
 
   return (
     <Link href={`/conference/${c.id}`} className="block group card rounded-[1.5rem] overflow-hidden cursor-pointer min-w-0">
