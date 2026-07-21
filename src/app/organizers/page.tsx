@@ -10,32 +10,32 @@ import { useAuth } from "@/lib/auth-context";
 
 const FEATURES_FOR_ORGANIZERS = [
   {
-    icon: "🏛️",
+    icon: "01",
     title: "Committee Builder",
     desc: "Create committees, agendas, documents, and chair assignments from one dashboard.",
   },
   {
-    icon: "📝",
+    icon: "02",
     title: "Registration Ops",
     desc: "Manage categories, pricing phases, and incoming applications with clear status flow.",
   },
   {
-    icon: "🎫",
+    icon: "03",
     title: "Allotments & Passes",
     desc: "Assign delegates to committees and issue passes with a streamlined organizer workflow.",
   },
   {
-    icon: "📣",
+    icon: "04",
     title: "Announcements",
     desc: "Broadcast updates to delegates instantly without juggling external tools.",
   },
   {
-    icon: "📊",
+    icon: "05",
     title: "Insights",
     desc: "Track seats, applications, and registration progress in real time.",
   },
   {
-    icon: "🚀",
+    icon: "06",
     title: "Publishing Control",
     desc: "Draft safely and publish only when your conference is ready for the marketplace.",
   },

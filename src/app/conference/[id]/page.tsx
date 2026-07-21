@@ -1409,7 +1409,12 @@ function ConferenceDetailPageContent() {
                     className="conference-surface rounded-2xl px-4 py-4 flex items-center gap-3"
                     style={{ color: "inherit" }}
                   >
-                    <span className="w-10 h-10 rounded-xl flex items-center justify-center text-lg" style={{ background: "var(--bg-subtle)" }}>🌐</span>
+                    <span className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: "var(--bg-subtle)", color: "var(--fg-muted)" }}>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
+                        <circle cx="12" cy="12" r="9" />
+                        <path d="M3 12h18M12 3c2.5 2.8 3.8 5.8 3.8 9s-1.3 6.2-3.8 9c-2.5-2.8-3.8-5.8-3.8-9S9.5 5.8 12 3Z" strokeLinecap="round" />
+                      </svg>
+                    </span>
                     <div className="min-w-0">
                       <p className="text-[10px] uppercase tracking-[0.16em]" style={{ color: "var(--fg-muted)" }}>Website</p>
                       <p className="text-sm font-medium truncate" style={{ color: "var(--blue)" }}>{displayWebsite}</p>

@@ -277,11 +277,10 @@ export default function CheckoutPage() {
     }
   }, [isDelegationCategory, delegationAffiliation, delegationMode, delegationSchoolName, school]);
 
-  /** Step 2: preferences — skipped for OC / secretariat registration. */
+  /** Step 2: preferences — skipped only for organizer / secretariat (no committee allotment). */
   const needsPreferencesStep = Boolean(selectedCategory) && !isOcCategory;
-  /** Step 3: custom questions — only when the category has organizer-defined form fields. */
-  const needsQuestionsStep =
-    Boolean(selectedCategory) && (selectedCategory?.formFields?.length ?? 0) > 0;
+  /** Step 3 is always part of the 4-step flow; empty when no organizer questions. */
+  const hasCategoryQuestions = (selectedCategory?.formFields?.length ?? 0) > 0;
   const needsPortfolioPrefs =
     needsPreferencesStep && (applicationType === "delegate" || applicationType === "delegation");
   const pressCommittees = committees.filter(
@@ -475,7 +474,7 @@ export default function CheckoutPage() {
         (portfolioPrefValues.length === requiredPortfolioPrefs &&
           portfolioPrefValues.every(Boolean))));
   const isQuestionsValid =
-    !needsQuestionsStep ||
+    !hasCategoryQuestions ||
     (!!selectedCategory &&
       selectedCategory.formFields.every(
         (field) =>
@@ -486,14 +485,11 @@ export default function CheckoutPage() {
 
   const goForwardFrom = (from: Step) => {
     if (from === 1) {
-      if (needsPreferencesStep) setStep(2);
-      else if (needsQuestionsStep) setStep(3);
-      else setStep(4);
+      setStep(needsPreferencesStep ? 2 : 3);
       return;
     }
     if (from === 2) {
-      if (needsQuestionsStep) setStep(3);
-      else setStep(4);
+      setStep(3);
       return;
     }
     if (from === 3) setStep(4);
@@ -501,14 +497,11 @@ export default function CheckoutPage() {
 
   const goBackFrom = (from: Step) => {
     if (from === 4) {
-      if (needsQuestionsStep) setStep(3);
-      else if (needsPreferencesStep) setStep(2);
-      else setStep(1);
+      setStep(3);
       return;
     }
     if (from === 3) {
-      if (needsPreferencesStep) setStep(2);
-      else setStep(1);
+      setStep(needsPreferencesStep ? 2 : 1);
       return;
     }
     if (from === 2) setStep(1);
@@ -665,16 +658,31 @@ export default function CheckoutPage() {
       <div className="app-shell">
         <div className="max-w-2xl mx-auto">
           <header className="app-header">
-            <div className="app-header-copy">
-              <div className="section-label mb-3">
-                {step === 5 ? "Checkout · Complete" : `Checkout · Step ${step}/4`}
+            <div className="app-header-copy flex items-start gap-4">
+              {displayLogoUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={displayLogoUrl}
+                  alt={`${displayTitle} logo`}
+                  className="w-14 h-14 rounded-2xl object-cover flex-shrink-0"
+                />
+              ) : (
+                <div
+                  className="w-14 h-14 rounded-2xl flex items-center justify-center flex-shrink-0"
+                  style={{ background: "linear-gradient(135deg, var(--blue), var(--accent-warm))" }}
+                >
+                  <span className="text-white font-black text-xl">
+                    {displayTitle.slice(0, 1).toUpperCase() || "M"}
+                  </span>
+                </div>
+              )}
+              <div className="min-w-0">
+                <div className="section-label mb-3">
+                  {step === 5 ? "Checkout · Complete" : `Checkout · Step ${Math.min(step, 4)}/4`}
+                </div>
+                <h1 className="app-title">Complete Your Registration</h1>
+                <p className="app-subtitle mt-2">{displayTitle}</p>
               </div>
-              <h1 className="app-title">
-                Complete Your Registration
-              </h1>
-              <p className="app-subtitle mt-2">
-                {displayTitle}
-              </p>
             </div>
             <div className="app-header-actions">
               <Link href={`/conference/${params.id}`} className="btn btn-ghost text-sm">
@@ -819,6 +827,9 @@ export default function CheckoutPage() {
                           <div key={phase.id} className="flex flex-wrap items-center gap-2">
                             <span className="text-sm font-medium" style={{ color: "var(--fg)" }}>
                               {phase.name}
+                            </span>
+                            <span className="text-sm" style={{ color: "var(--fg-muted)" }}>
+                              {formatMoney(phase.basePrice, checkoutCurrency)}
                             </span>
                             <span className={`badge text-xs sm:text-sm ${badgeClass}`}>
                               {status === "Ended" ? "Ended" : status}
@@ -1007,9 +1018,18 @@ export default function CheckoutPage() {
             </div>
           )}
 
-          {step === 2 && !existingRegistration && !profileIncomplete && selectedCategory && needsPreferencesStep && (
+          {step === 2 && !existingRegistration && !profileIncomplete && selectedCategory && (
             <div className="card p-6 sm:p-8 rounded-2xl space-y-4">
               <h2 className="text-xl font-bold" style={{ color: "var(--fg)" }}>2. Preferences</h2>
+              {!needsPreferencesStep ? (
+                <p
+                  className="text-sm rounded-xl p-4"
+                  style={{ color: "var(--fg-muted)", background: "var(--bg-subtle)", border: "1px solid var(--border)" }}
+                >
+                  Committee preferences are not required for this registration type. Continue to the next step.
+                </p>
+              ) : (
+                <>
               <div className="rounded-xl p-3" style={{ background: "var(--bg-subtle)", border: "1px solid var(--border)" }}>
                 <p className="text-sm font-semibold" style={{ color: "var(--fg)" }}>
                   {getCategoryTypeLabel(selectedCategory.applicationType)}
@@ -1057,11 +1077,6 @@ export default function CheckoutPage() {
                     </option>
                   ))}
                 </AppSelect>
-                {selectedCommittee && (
-                  <p className="text-xs" style={{ color: "var(--fg-muted)" }}>
-                    Committee-specific questions are disabled for this conference.
-                  </p>
-                )}
                 {requiredCommitteePrefs >= 2 && (
                   <AppSelect
                     label="Committee preference 2 *"
@@ -1151,6 +1166,8 @@ export default function CheckoutPage() {
                 )}
               </div>
               )}
+                </>
+              )}
               <div className="flex flex-col-reverse sm:flex-row gap-3">
                 <button type="button" onClick={() => goBackFrom(2)} className="btn btn-ghost flex-1 min-h-[44px]">← Back</button>
                 <button
@@ -1166,9 +1183,17 @@ export default function CheckoutPage() {
             </div>
           )}
 
-          {step === 3 && !existingRegistration && !profileIncomplete && selectedCategory && needsQuestionsStep && (
+          {step === 3 && !existingRegistration && !profileIncomplete && selectedCategory && (
             <div className="card p-6 sm:p-8 rounded-2xl space-y-4">
               <h2 className="text-xl font-bold" style={{ color: "var(--fg)" }}>3. Additional questions</h2>
+              {!hasCategoryQuestions ? (
+                <p
+                  className="text-sm rounded-xl p-4"
+                  style={{ color: "var(--fg-muted)", background: "var(--bg-subtle)", border: "1px solid var(--border)" }}
+                >
+                  No additional questions for this category. Continue to confirm your registration.
+                </p>
+              ) : null}
               {selectedCategory.formFields.map((field) => (
                 <div key={field.id}>
                   <label className="block text-sm font-semibold mb-1.5" style={{ color: "var(--fg)" }}>
@@ -1378,27 +1403,31 @@ export default function CheckoutPage() {
                     : `Pay now (${formatMoney(submittedRegistration.amount, checkoutCurrency)})`}
                 </button>
               )}
-              <button
-                type="button"
-                className="btn btn-outline-blue w-full"
-                disabled={!submittedRegistration?.paid}
-                title={submittedRegistration?.paid ? undefined : "Pay first to download invoice"}
-                onClick={() => {
-                  if (!user || !submittedRegistration?.paid) return;
-                  void downloadRegistrationInvoice(submittedRegistration, {
-                    name: user.name,
-                    email: user.email,
-                    invoiceAddress: user.invoiceAddress,
-                  }).catch((error) => {
-                    toast.show(
-                      error instanceof Error ? error.message : "Could not download invoice.",
-                      "error"
-                    );
-                  });
-                }}
-              >
-                {submittedRegistration?.paid ? "Download Invoice (PDF)" : "Invoice available after payment"}
-              </button>
+              {submittedRegistration.paid ? (
+                <button
+                  type="button"
+                  className="btn btn-outline-blue w-full"
+                  onClick={() => {
+                    if (!user || !submittedRegistration?.paid) return;
+                    void downloadRegistrationInvoice(submittedRegistration, {
+                      name: user.name,
+                      email: user.email,
+                      invoiceAddress: user.invoiceAddress,
+                    }).catch((error) => {
+                      toast.show(
+                        error instanceof Error ? error.message : "Could not download invoice.",
+                        "error"
+                      );
+                    });
+                  }}
+                >
+                  Download Invoice (PDF)
+                </button>
+              ) : (
+                <p className="text-xs text-center" style={{ color: "var(--fg-muted)" }}>
+                  Invoice becomes available after payment is confirmed.
+                </p>
+              )}
               {(submittedRegistration.categoryName?.toLowerCase().includes("delegation") ||
                 selectedCategory?.applicationType === "delegation") &&
               delegationAffiliation ? (

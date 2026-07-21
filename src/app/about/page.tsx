@@ -11,32 +11,32 @@ export const metadata: Metadata = {
 
 const FEATURES = [
   {
-    icon: "🌐",
+    icon: "01",
     title: "Conference catalog",
     body: "Published MUN conferences with filters for level, region, dates, and budget.",
   },
   {
-    icon: "💳",
+    icon: "02",
     title: "Secure registration",
     body: "Multi-step checkout with Cashfree payments and instant confirmation.",
   },
   {
-    icon: "📋",
+    icon: "03",
     title: "Organizer dashboard",
     body: "Committee builder, applications, allotments, and team tools in one place.",
   },
   {
-    icon: "📱",
+    icon: "04",
     title: "QR delegate passes",
     body: "Digital passes delegates can show at the gate — no extra hardware.",
   },
   {
-    icon: "✅",
+    icon: "05",
     title: "On-site check-in",
     body: "Camera-based QR scanning from any browser at the venue.",
   },
   {
-    icon: "🛡️",
+    icon: "06",
     title: "Admin moderation",
     body: "Super-admin review queue before conferences go live on the marketplace.",
   },

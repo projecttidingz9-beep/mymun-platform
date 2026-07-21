@@ -335,11 +335,25 @@ export default function Navbar({ openAuthModal }: NavbarProps) {
                           >
                             <MenuIcon>
                               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <circle cx="12" cy="8" r="3.5" />
+                                <path d="M5 19.5c1.8-3.2 4.2-4.8 7-4.8s5.2 1.6 7 4.8" strokeLinecap="round" />
+                              </svg>
+                            </MenuIcon>
+                            My Profile
+                          </Link>
+                          <Link
+                            href="/dashboard?tab=security"
+                            onClick={() => setUserMenuOpen(false)}
+                            className="flex items-center gap-3 px-5 py-3 text-sm font-medium transition-colors user-menu-link"
+                            style={{ color: "var(--fg)" }}
+                          >
+                            <MenuIcon>
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                 <circle cx="12" cy="12" r="3" />
                                 <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6 1.7 1.7 0 0 1-3 0 1.7 1.7 0 0 0-1-.6 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.6-1 1.7 1.7 0 0 1 0-3 1.7 1.7 0 0 0 .6-1 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.6 1.7 1.7 0 0 1 3 0 1.7 1.7 0 0 0 1 .6 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9c.24.37.4.8.6 1 .73.11 1.4.47 1.4 2s-.67 1.89-1.4 2c-.2.2-.36.63-.6 1Z" strokeLinecap="round" strokeLinejoin="round" />
                               </svg>
                             </MenuIcon>
-                            Profile &amp; Settings
+                            Settings
                           </Link>
                         </>
                       )}

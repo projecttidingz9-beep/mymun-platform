@@ -11,6 +11,39 @@ import { useAuth } from "@/lib/auth-context";
 import { DelegateMunAward, DelegateMunParticipation, User } from "@/lib/types";
 import { CONFERENCES_PATH } from "@/lib/paths";
 
+const MONTH_LABELS = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+];
+
+const compareTimelineDesc = (
+  a: { year?: number; month?: number },
+  b: { year?: number; month?: number }
+) => {
+  const yearA = a.year ?? 0;
+  const yearB = b.year ?? 0;
+  if (yearB !== yearA) return yearB - yearA;
+  return (b.month ?? 0) - (a.month ?? 0);
+};
+
+const formatTimelineLabel = (year?: number, month?: number) => {
+  if (!year) return "";
+  if (month && month >= 1 && month <= 12) {
+    return `${MONTH_LABELS[month - 1]} ${year}`;
+  }
+  return String(year);
+};
+
 /** Keyed by delegate id so fetch state resets when the route param changes (no sync setState in effects). */
 export default function DelegateProfilePage() {
   const params = useParams();
@@ -175,10 +208,15 @@ function DelegateProfileInner({ delegateId }: { delegateId: string }) {
                   <p className="text-sm" style={{ color: "var(--fg-muted)" }}>No participations added.</p>
                 ) : (
                   <div className="space-y-3">
-                    {(profile.munParticipations || []).map((entry: DelegateMunParticipation) => (
+                    {[...(profile.munParticipations || [])]
+                      .sort(compareTimelineDesc)
+                      .map((entry: DelegateMunParticipation) => (
                       <div key={entry.id} className="rounded-xl p-4" style={{ background: "var(--bg-subtle)" }}>
                         <p className="text-sm font-semibold" style={{ color: "var(--fg)" }}>
-                          {entry.conferenceName} {entry.year ? `(${entry.year})` : ""}
+                          {entry.conferenceName}
+                          {formatTimelineLabel(entry.year, entry.month)
+                            ? ` · ${formatTimelineLabel(entry.year, entry.month)}`
+                            : ""}
                         </p>
                         <p className="text-xs mt-1" style={{ color: "var(--fg-muted)" }}>
                           {entry.role || "Delegate"} {entry.committee ? `· ${entry.committee}` : ""}{" "}
@@ -213,7 +251,9 @@ function DelegateProfileInner({ delegateId }: { delegateId: string }) {
                   <p className="text-sm" style={{ color: "var(--fg-muted)" }}>No awards added.</p>
                 ) : (
                   <div className="space-y-3">
-                    {(profile.munAwards || []).map((entry: DelegateMunAward) => (
+                    {[...(profile.munAwards || [])]
+                      .sort(compareTimelineDesc)
+                      .map((entry: DelegateMunAward) => (
                       <div key={entry.id} className="rounded-xl p-4" style={{ background: "var(--bg-subtle)" }}>
                         <div className="flex items-center gap-3">
                           {entry.logoUrl && (
@@ -228,7 +268,10 @@ function DelegateProfileInner({ delegateId }: { delegateId: string }) {
                             />
                           )}
                           <p className="text-sm font-semibold" style={{ color: "var(--fg)" }}>
-                            {entry.title} · {entry.conferenceName} {entry.year ? `(${entry.year})` : ""}
+                            {entry.title} · {entry.conferenceName}
+                            {formatTimelineLabel(entry.year, entry.month)
+                              ? ` · ${formatTimelineLabel(entry.year, entry.month)}`
+                              : ""}
                           </p>
                         </div>
                         <p className="text-xs mt-1" style={{ color: "var(--fg-muted)" }}>

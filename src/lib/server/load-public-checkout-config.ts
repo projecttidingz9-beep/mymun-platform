@@ -168,7 +168,16 @@ export async function loadPublicCheckoutConfig(eventKey: string): Promise<Public
       : [];
 
   if (blobCategories && blobCategories.length > 0) {
-    registrationCategories = [...blobCategories];
+    // Blob is source of truth for per-category phases + form fields. Fall back to
+    // legacy event-wide PricingPhaseConfig rows when a blob category has none yet.
+    registrationCategories = blobCategories.map((category) => ({
+      ...category,
+      formFields: Array.isArray(category.formFields) ? category.formFields : [],
+      pricingPhases:
+        Array.isArray(category.pricingPhases) && category.pricingPhases.length > 0
+          ? category.pricingPhases
+          : pricingPhases,
+    }));
     for (const dbCategory of dbCategories) {
       const hasType = registrationCategories.some(
         (entry) => (entry.applicationType || "delegate") === (dbCategory.applicationType || "delegate")
@@ -180,6 +189,8 @@ export async function loadPublicCheckoutConfig(eventKey: string): Promise<Public
         registrationCategories.push({
           ...dbCategory,
           formFields: blobMatch?.formFields?.length ? blobMatch.formFields : dbCategory.formFields,
+          pricingPhases:
+            blobMatch?.pricingPhases?.length ? blobMatch.pricingPhases : dbCategory.pricingPhases,
         });
       }
     }
@@ -191,6 +202,8 @@ export async function loadPublicCheckoutConfig(eventKey: string): Promise<Public
       return {
         ...category,
         formFields: blobMatch?.formFields?.length ? blobMatch.formFields : category.formFields,
+        pricingPhases:
+          blobMatch?.pricingPhases?.length ? blobMatch.pricingPhases : category.pricingPhases,
       };
     });
   } else {

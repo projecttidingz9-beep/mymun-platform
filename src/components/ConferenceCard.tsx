@@ -10,16 +10,16 @@ interface ConferenceCardProps {
   conference: Conference;
 }
 
-const LEVEL_BADGE: Record<string, { class: string; emoji: string }> = {
-  "High School": { class: "badge-green", emoji: "🎓" },
-  "University": { class: "badge-blue", emoji: "🎓" },
-  "Elite": { class: "badge-gold", emoji: "⭐" },
-  "Open": { class: "badge-gray", emoji: "🌐" },
-  "Hybrid": { class: "badge-purple", emoji: "💻" },
+const LEVEL_BADGE: Record<string, string> = {
+  "High School": "badge-green",
+  University: "badge-blue",
+  Elite: "badge-gold",
+  Open: "badge-gray",
+  Hybrid: "badge-purple",
 };
 
 export default function ConferenceCard({ conference: c }: ConferenceCardProps) {
-  const badge = LEVEL_BADGE[c.level] || LEVEL_BADGE["Open"];
+  const badgeClass = LEVEL_BADGE[c.level] || LEVEL_BADGE["Open"];
   const bannerImageUrl = resolveConferenceBannerImage({ conference: c });
   const hasBanner = Boolean(bannerImageUrl);
   const hasLogo = Boolean(c.logoImageUrl);
@@ -89,13 +89,13 @@ export default function ConferenceCard({ conference: c }: ConferenceCardProps) {
         )}
         {/* Badges top row */}
         <div className="absolute top-4 left-4 right-4 flex items-center justify-between z-[3]">
-          <span className={`badge ${badge.class}`} style={{ background: "rgba(10,12,18,0.52)", color: "rgba(255,255,255,0.96)" }}>
-            {badge.emoji} {c.level}
+          <span className={`badge ${badgeClass}`} style={{ background: "rgba(10,12,18,0.52)", color: "rgba(255,255,255,0.96)" }}>
+            {c.level}
           </span>
           <div className="flex items-center gap-1.5">
             {c.featured && (
               <span className="badge" style={{ background: "rgba(10,12,18,0.52)", color: "rgba(255,255,255,0.96)" }}>
-                ⭐ Featured
+                Featured
               </span>
             )}
           </div>

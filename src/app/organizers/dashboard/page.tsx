@@ -133,7 +133,8 @@ function registrationFlowPreviewMeta(category: RegistrationCategory, conference:
   const isDelegation = applicationType === "delegation";
   const isPress = applicationType === "press";
   const needsPreferences = !isOc;
-  const needsQuestions = category.formFields.length > 0 || isDelegation;
+  const needsQuestions = true;
+  const hasCategoryQuestions = category.formFields.length > 0;
   const needsPortfolio =
     needsPreferences && (applicationType === "delegate" || applicationType === "delegation");
   const committees = conference.committees || [];
@@ -160,6 +161,7 @@ function registrationFlowPreviewMeta(category: RegistrationCategory, conference:
     isPress,
     needsPreferences,
     needsQuestions,
+    hasCategoryQuestions,
     needsPortfolio,
     checkoutCommittees,
     firstCommittee,
@@ -6667,8 +6669,26 @@ export default function OrganizerDashboardPage() {
                                 </p>
                               ) : (
                                 <div className="space-y-2">
-                                  {category.pricingPhases.map((phase) => (
+                                  {category.pricingPhases.map((phase) => {
+                                    const phaseStatus = getPhaseStatus(phase, new Date());
+                                    const phaseBadgeClass =
+                                      phaseStatus === "Active"
+                                        ? "badge-green"
+                                        : phaseStatus === "Upcoming"
+                                          ? "badge-blue"
+                                          : "badge-gray";
+                                    return (
                                     <div key={phase.id} className="rounded-lg p-2" style={{ border: "1px solid var(--border)" }}>
+                                      <div className="flex flex-wrap items-center gap-2 mb-2">
+                                        <span className={`badge text-[10px] ${phaseBadgeClass}`}>
+                                          {phaseStatus === "Ended" ? "Ended" : phaseStatus}
+                                        </span>
+                                        {phaseStatus === "Ended" && (
+                                          <span className="text-[11px]" style={{ color: "var(--fg-muted)" }}>
+                                            Kept on the student form as Ended — use Remove only to delete permanently.
+                                          </span>
+                                        )}
+                                      </div>
                                       <div className="grid md:grid-cols-4 gap-2">
                                         <input
                                           className="input-base text-xs"
@@ -6718,21 +6738,33 @@ export default function OrganizerDashboardPage() {
                                         </p>
                                       )}
                                       <div className="flex justify-end mt-2">
-                                        <button
-                                          className="btn btn-ghost text-xs mr-2"
-                                          onClick={() => void endCategoryPricingPhase(selectedConference.id, category, phase.id)}
-                                        >
-                                          End Phase
-                                        </button>
+                                        {phaseStatus !== "Ended" && (
+                                          <button
+                                            className="btn btn-ghost text-xs mr-2"
+                                            onClick={() => void endCategoryPricingPhase(selectedConference.id, category, phase.id)}
+                                          >
+                                            End Phase
+                                          </button>
+                                        )}
                                         <button
                                           className="btn btn-danger-ghost text-xs"
-                                          onClick={() => void removeCategoryPricingPhase(selectedConference.id, category, phase.id)}
+                                          onClick={() => {
+                                            if (
+                                              !window.confirm(
+                                                "Remove this phase permanently? Prefer End Phase so students still see it as Ended."
+                                              )
+                                            ) {
+                                              return;
+                                            }
+                                            void removeCategoryPricingPhase(selectedConference.id, category, phase.id);
+                                          }}
                                         >
                                           Remove Phase
                                         </button>
                                       </div>
                                     </div>
-                                  ))}
+                                    );
+                                  })}
                                 </div>
                               )}
                             </div>
@@ -6750,12 +6782,12 @@ export default function OrganizerDashboardPage() {
                                   {
                                     step: 2,
                                     label: "Preferences",
-                                    skipped: !preview.needsPreferences,
+                                    skipped: false,
                                   },
                                   {
                                     step: 3,
                                     label: "Questions",
-                                    skipped: !preview.needsQuestions,
+                                    skipped: false,
                                   },
                                   { step: 4, label: preview.isAllotFirst ? "Confirm" : "Payment", skipped: false },
                                 ];
@@ -6945,22 +6977,16 @@ export default function OrganizerDashboardPage() {
                                           <h4 className="text-sm font-bold" style={{ color: "var(--fg)" }}>
                                             3. Additional questions
                                           </h4>
-                                          {!preview.needsQuestions ? (
+                                          {!preview.hasCategoryQuestions ? (
                                             <p className="text-xs" style={{ color: "var(--fg-muted)" }}>
                                               No questions yet — use the Application Questions editor below to add some.
-                                              This step is skipped in checkout until questions exist.
+                                              Students still see this step with an empty-state message.
                                             </p>
                                           ) : (
                                             <>
-                                              {category.formFields.length === 0 ? (
-                                                <p className="text-xs" style={{ color: "var(--fg-muted)" }}>
-                                                  Only the delegation size question is shown for this category.
-                                                </p>
-                                              ) : (
-                                                <div className="space-y-3">
-                                                  {category.formFields.map((field) => renderPreviewFormField(field))}
-                                                </div>
-                                              )}
+                                              <div className="space-y-3">
+                                                {category.formFields.map((field) => renderPreviewFormField(field))}
+                                              </div>
                                               {preview.isDelegation && (
                                                 <div>
                                                   <label

@@ -226,16 +226,22 @@ function DashboardPageContent() {
   }, [authReady, isLoggedIn, openAuthModal, router, user?.role]);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    // Support both `?tab=` (reliable across client-side navigations from other pages,
-    // e.g. the navbar's profile menu) and `#hash` (in-page section links) for picking
-    // the initial tab — the profile-menu "Settings" vs "Dashboard" links rely on this.
+    // Keep Dashboard vs Profile in sync when navigating from the account menu
+    // while already on /dashboard (query must drive the active tab).
     const queryTab = searchParams.get("tab");
-    const hash = window.location.hash.replace(/^#/, "");
-    const initial = (queryTab && isDelegateTabId(queryTab) && queryTab) || (hash && isDelegateTabId(hash) && hash);
-    if (initial) {
-      setActiveTab(initial);
+    if (queryTab && isDelegateTabId(queryTab)) {
+      setActiveTab(queryTab);
+      return;
     }
+    if (typeof window === "undefined") return;
+    const hash = window.location.hash.replace(/^#/, "");
+    if (hash && isDelegateTabId(hash)) {
+      setActiveTab(hash);
+    }
+  }, [searchParams]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
     const onHashChange = () => {
       const next = window.location.hash.replace(/^#/, "");
       if (next && isDelegateTabId(next)) {
@@ -244,7 +250,6 @@ function DashboardPageContent() {
     };
     window.addEventListener("hashchange", onHashChange);
     return () => window.removeEventListener("hashchange", onHashChange);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -262,7 +267,10 @@ function DashboardPageContent() {
       });
     }
     if (verified || verifyFailed) {
-      router.replace("/dashboard", { scroll: false });
+      const keepTab = searchParams.get("tab");
+      const next =
+        keepTab && isDelegateTabId(keepTab) ? `/dashboard?tab=${keepTab}` : "/dashboard";
+      router.replace(next, { scroll: false });
     }
   }, [searchParams, router]);
 
@@ -278,10 +286,7 @@ function DashboardPageContent() {
 
   const changeActiveTab = (next: DelegateTabId) => {
     setActiveTab(next);
-    if (typeof window !== "undefined") {
-      const newUrl = `${window.location.pathname}${window.location.search}#${next}`;
-      window.history.replaceState(null, "", newUrl);
-    }
+    router.replace(`/dashboard?tab=${next}`, { scroll: false });
   };
 
   useEffect(() => {
@@ -1196,20 +1201,24 @@ function DashboardPageContent() {
                           className="mt-4 pt-4 space-y-3"
                           style={{ borderTop: "1px solid var(--border)" }}
                         >
-                          <p className="text-sm font-semibold" style={{ color: "var(--fg-muted)" }}>
-                            Invoice &amp; Pass
-                          </p>
-                          <button
-                            type="button"
-                            className="btn btn-outline-blue text-sm w-full sm:w-auto"
-                            onClick={() => void onDownloadInvoicePdf(reg)}
-                            disabled={!reg.paid || downloadingInvoiceId === reg.id}
-                          >
-                            {downloadingInvoiceId === reg.id ? "Downloading…" : "Download Invoice (PDF)"}
-                          </button>
+                          {reg.paid && (
+                            <>
+                              <p className="text-sm font-semibold" style={{ color: "var(--fg-muted)" }}>
+                                Invoice &amp; Pass
+                              </p>
+                              <button
+                                type="button"
+                                className="btn btn-outline-blue text-sm w-full sm:w-auto"
+                                onClick={() => void onDownloadInvoicePdf(reg)}
+                                disabled={downloadingInvoiceId === reg.id}
+                              >
+                                {downloadingInvoiceId === reg.id ? "Downloading…" : "Download Invoice (PDF)"}
+                              </button>
+                            </>
+                          )}
                           {!reg.paid && (
                             <p className="text-sm font-medium" style={{ color: "var(--fg-muted)" }}>
-                              Invoice will be available after payment is confirmed.
+                              Invoice becomes available after payment is confirmed.
                             </p>
                           )}
                           {matchedPass ? (
@@ -2088,17 +2097,17 @@ function DashboardPageContent() {
                             {registration.paid ? "Paid" : "Pending"}
                           </span>
                         </div>
-                        <button
-                          className="btn btn-ghost text-xs mt-2 w-full"
-                          disabled={!registration.paid || downloadingInvoiceId === registration.id}
-                          onClick={() => void onDownloadInvoicePdf(registration)}
-                        >
-                          {downloadingInvoiceId === registration.id
-                            ? "Downloading…"
-                            : registration.paid
-                              ? "Download Invoice (PDF)"
-                              : "Invoice available after payment"}
-                        </button>
+                        {registration.paid && (
+                          <button
+                            className="btn btn-ghost text-xs mt-2 w-full"
+                            disabled={downloadingInvoiceId === registration.id}
+                            onClick={() => void onDownloadInvoicePdf(registration)}
+                          >
+                            {downloadingInvoiceId === registration.id
+                              ? "Downloading…"
+                              : "Download Invoice (PDF)"}
+                          </button>
+                        )}
                         {!registration.paid && registration.amount > 0 && (
                           <button
                             type="button"
