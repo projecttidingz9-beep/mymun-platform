@@ -15,7 +15,7 @@ import {
   RegistrationCategory,
 } from "@/lib/types";
 import { getPhaseStatus, resolveRegistrationPrice } from "@/lib/pricing";
-import { getCategoryTypeLabel } from "@/lib/registration-category-types";
+import { getCategoryTypeHint, getCategoryTypeLabel } from "@/lib/registration-category-types";
 import { preferenceLabelForCommittee } from "@/lib/india-committee-presets";
 import { getMarketplaceConferences } from "@/lib/marketplace-conferences";
 import { formatMoney } from "@/lib/format-money";
@@ -265,6 +265,18 @@ export default function CheckoutPage() {
   const isChairCategory = applicationType === "chair";
   const isDelegationCategory = applicationType === "delegation";
   const isPressCategory = applicationType === "press";
+
+  useEffect(() => {
+    if (isDelegationCategory && !delegationAffiliation && delegationMode === null) {
+      setDelegationMode("create");
+      if (!delegationSchoolName && school) setDelegationSchoolName(school);
+    }
+    if (!isDelegationCategory && delegationMode !== null) {
+      setDelegationMode(null);
+      setDelegationError("");
+    }
+  }, [isDelegationCategory, delegationAffiliation, delegationMode, delegationSchoolName, school]);
+
   /** Step 2: preferences — skipped for OC / secretariat registration. */
   const needsPreferencesStep = Boolean(selectedCategory) && !isOcCategory;
   /** Step 3: custom questions — only when the category has organizer-defined form fields. */
@@ -562,7 +574,7 @@ export default function CheckoutPage() {
       const code = payload.delegation.code || payload.delegation.inviteToken || "";
       setDelegationAffiliation({ ...payload.delegation, code });
       setDelegationJoinCode(code);
-      toast.show("Delegation created. Share the team code with your teammates.", "success");
+      toast.show("Team code generated. Share it with your teammates.", "success");
     } catch (error) {
       setDelegationError(error instanceof Error ? error.message : "Could not create delegation.");
     } finally {
@@ -769,7 +781,14 @@ export default function CheckoutPage() {
                 <button
                   key={category.id}
                   type="button"
-                  onClick={() => setSelectedCategoryId(category.id)}
+                  onClick={() => {
+                    setSelectedCategoryId(category.id);
+                    if (category.applicationType === "delegation") {
+                      setDelegationMode("create");
+                      setDelegationError("");
+                      if (!delegationSchoolName && school) setDelegationSchoolName(school);
+                    }
+                  }}
                   className="app-card app-card-interactive app-card-tight text-left"
                   data-selected={selectedCategoryId === category.id ? "true" : "false"}
                 >
@@ -790,6 +809,11 @@ export default function CheckoutPage() {
                     {getCategoryTypeLabel(category.applicationType)}
                   </p>
                   <p className="text-sm mt-1" style={{ color: "var(--fg-muted)" }}>{category.description || "No description provided."}</p>
+                  {category.applicationType === "delegation" && (
+                    <p className="text-xs mt-2" style={{ color: "var(--fg-muted)" }}>
+                      {getCategoryTypeHint("delegation")}
+                    </p>
+                  )}
                   {category.pricingPhases.length > 0 && (
                     <div className="mt-2 space-y-1.5">
                       {category.pricingPhases.map((phase) => {
@@ -819,10 +843,10 @@ export default function CheckoutPage() {
                 >
                   <div>
                     <p className="text-sm font-semibold" style={{ color: "var(--fg)" }}>
-                      Delegation team
+                      Team formation
                     </p>
                     <p className="text-xs mt-1" style={{ color: "var(--fg-muted)" }}>
-                      Every teammate registers, selects preferences, and pays separately under one shared team.
+                      Create a unique team code or join with a code from your delegation head. After joining, each member continues with their own preferences and payment.
                     </p>
                   </div>
                   {delegationLoading && !delegationAffiliation ? (
@@ -876,7 +900,7 @@ export default function CheckoutPage() {
                       </div>
                       {delegationAffiliation.isHead && (
                         <p className="text-xs" style={{ color: "var(--fg-muted)" }}>
-                          Share this code with teammates. They can choose “Join with code” and complete their own registration.
+                          Share this code with teammates. They can choose “Join code” and complete their own registration.
                         </p>
                       )}
                     </div>
@@ -893,7 +917,7 @@ export default function CheckoutPage() {
                             if (!delegationSchoolName) setDelegationSchoolName(school);
                           }}
                         >
-                          Create team
+                          Create code
                         </button>
                         <button
                           type="button"
@@ -904,7 +928,7 @@ export default function CheckoutPage() {
                             setDelegationError("");
                           }}
                         >
-                          Join with code
+                          Join code
                         </button>
                       </div>
                       {delegationMode === "create" && (
@@ -934,7 +958,7 @@ export default function CheckoutPage() {
                             disabled={creatingDelegation}
                             onClick={() => void handleCreateDelegation()}
                           >
-                            {creatingDelegation ? "Creating team…" : "Create team & generate code"}
+                            {creatingDelegation ? "Generating code…" : "Generate team code"}
                           </button>
                         </div>
                       )}
@@ -952,7 +976,7 @@ export default function CheckoutPage() {
                             disabled={delegationLoading || !delegationJoinCode.trim()}
                             onClick={() => void handleJoinDelegation()}
                           >
-                            {delegationLoading ? "Joining team…" : "Join team"}
+                            {delegationLoading ? "Joining…" : "Join with code"}
                           </button>
                         </div>
                       )}

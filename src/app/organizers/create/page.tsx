@@ -7,6 +7,7 @@ import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import AuthModal from "@/components/AuthModal";
 import { useAuth } from "@/lib/auth-context";
+import { getDefaultConferenceRegistrationCategories } from "@/lib/registration-category-types";
 
 export default function CreateOrganizerConferencePage() {
   const router = useRouter();
@@ -85,19 +86,7 @@ export default function CreateOrganizerConferencePage() {
         endDate: "",
         currency: "INR",
         socialLinks: {},
-        registrationCategories: [
-          {
-            id: "cat-default",
-            name: "Delegate Registration",
-            description: "Default delegate category.",
-            applicationType: "delegate",
-            isOpen: true,
-            basePrice: 0,
-            requiresCommitteeSelection: false,
-            formFields: [],
-            pricingPhases: [],
-          },
-        ],
+        registrationCategories: getDefaultConferenceRegistrationCategories(),
         committees: [],
       });
       if (!result.ok) {

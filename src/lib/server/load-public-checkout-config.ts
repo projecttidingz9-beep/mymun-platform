@@ -162,20 +162,37 @@ export async function loadPublicCheckoutConfig(eventKey: string): Promise<Public
   const pricingPhases = pricingPhasesFromDb(event.organizerConfig?.pricingPhases ?? [], dbCommittees);
 
   let registrationCategories: RegistrationCategory[];
+  const dbCategories =
+    (event.organizerConfig?.registrationCategories.length ?? 0) > 0
+      ? categoriesFromDb(event.organizerConfig!.registrationCategories, pricingPhases)
+      : [];
+
   if (blobCategories && blobCategories.length > 0) {
-    registrationCategories = blobCategories;
-  } else if ((event.organizerConfig?.registrationCategories.length ?? 0) > 0) {
-    registrationCategories = categoriesFromDb(event.organizerConfig!.registrationCategories, pricingPhases).map(
-      (category) => {
-        const blobMatch = blobCategories?.find(
-          (entry) => entry.id === category.id || entry.applicationType === category.applicationType
+    registrationCategories = [...blobCategories];
+    for (const dbCategory of dbCategories) {
+      const hasType = registrationCategories.some(
+        (entry) => (entry.applicationType || "delegate") === (dbCategory.applicationType || "delegate")
+      );
+      if (!hasType && dbCategory.isOpen !== false) {
+        const blobMatch = blobCategories.find(
+          (entry) => entry.id === dbCategory.id || entry.applicationType === dbCategory.applicationType
         );
-        return {
-          ...category,
-          formFields: blobMatch?.formFields?.length ? blobMatch.formFields : category.formFields,
-        };
+        registrationCategories.push({
+          ...dbCategory,
+          formFields: blobMatch?.formFields?.length ? blobMatch.formFields : dbCategory.formFields,
+        });
       }
-    );
+    }
+  } else if (dbCategories.length > 0) {
+    registrationCategories = dbCategories.map((category) => {
+      const blobMatch = blobCategories?.find(
+        (entry) => entry.id === category.id || entry.applicationType === category.applicationType
+      );
+      return {
+        ...category,
+        formFields: blobMatch?.formFields?.length ? blobMatch.formFields : category.formFields,
+      };
+    });
   } else {
     registrationCategories = [
       {

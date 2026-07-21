@@ -49,7 +49,9 @@ export const getCategoryRegistrationLabel = (applicationType?: RegistrationCateg
 };
 
 export const getCategoryTypeHint = (applicationType?: RegistrationCategory["applicationType"]) => {
-  if (applicationType === "delegation") return "This category is intended for delegation-level applications.";
+  if (applicationType === "delegation") {
+    return "Create a unique team code or join with a code from your delegation head. Each member completes their own preferences and payment.";
+  }
   if (applicationType === "press") return "This category is intended for International Press / Press Corps.";
   if (applicationType === "chair") return "This category is intended for executive board and chair applications.";
   if (applicationType === "organizer") return "This category is intended for organizer team applications.";
@@ -74,7 +76,7 @@ export const getDefaultCategoryForType = (
   const descriptions: Record<RegistrationCategoryType, string> = {
     delegate: "Default delegate category.",
     chair: "Executive board and chair applications.",
-    delegation: "Register an entire delegation.",
+    delegation: "Form a school or institution team with a shared code. Each member registers individually.",
     organizer: "Internal organising team onboarding category.",
     secretariat: "Secretariat applications.",
     press: "International Press / Press Corps registration.",
@@ -103,3 +105,15 @@ export const getDefaultCategoryForType = (
 
   return base;
 };
+
+/** Default registration categories seeded when a conference is first created. */
+export function getDefaultConferenceRegistrationCategories(
+  conference: Pick<OrganizerConference, "registrationDeadline"> = { registrationDeadline: undefined }
+): RegistrationCategory[] {
+  const delegate = getDefaultCategoryForType("delegate", conference);
+  const delegation = getDefaultCategoryForType("delegation", conference);
+  return [
+    { ...delegate, id: "cat-default" },
+    { ...delegation, id: "cat-delegation" },
+  ];
+}

@@ -1,6 +1,7 @@
 import { randomUUID } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import type { RegistrationCategory } from "@/lib/types";
+import { getDefaultConferenceRegistrationCategories } from "@/lib/registration-category-types";
 import { getRequestActor, requireOrganizer, resolveActorUserId } from "@/lib/server/auth";
 import { demoDenied, isDemoAccount } from "@/lib/server/demo-guard";
 import { requireVerifiedEmail } from "@/lib/server/require-verified-email";
@@ -11,20 +12,7 @@ import { mapManagedEventToOrganizerConference } from "@/lib/server/map-managed-e
 import { persistRegistrationCategories } from "@/lib/server/persist-registration-categories";
 
 function defaultRegistrationCategories(registrationDeadline: string): RegistrationCategory[] {
-  return [
-    {
-      id: "cat-default",
-      name: "Delegate Registration",
-      description: "Default delegate category.",
-      applicationType: "delegate",
-      isOpen: true,
-      deadlineOverride: registrationDeadline,
-      basePrice: 0,
-      requiresCommitteeSelection: false,
-      formFields: [],
-      pricingPhases: [],
-    },
-  ];
+  return getDefaultConferenceRegistrationCategories({ registrationDeadline });
 }
 
 export async function POST(request: NextRequest) {
