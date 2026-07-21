@@ -1,6 +1,6 @@
 /**
- * Marketing pages with a dark immersive hero: navbar keeps dark lockups;
- * footer uses the light lockup asset on these routes.
+ * Marketing pages with a dark immersive surface: navbar and footer both use
+ * the dark lockup assets on these routes.
  */
 const FORCE_DARK_BRAND_LOGO_PATHS = new Set(["/", "/organizers"]);
 
