@@ -501,17 +501,34 @@ export async function mapManagedEventToOrganizerConference(eventId: string): Pro
     })),
   ];
 
-  const awards: OrganizerAwardConfig[] = event.awards.map((a) => ({
-    id: a.id,
-    category: a.category,
-    prizeTitle: a.prizeTitle ?? undefined,
-    amount: a.amount == null ? undefined : moneyNumber(a.amount),
-    description: a.description ?? undefined,
-    participantId: a.recipientRegistrationId ?? undefined,
-    participantName: a.participantName ?? undefined,
-    participantUserId: a.recipientUserId ?? undefined,
-    recipientDelegationId: a.recipientDelegationId ?? undefined,
-  }));
+  const blobAwardById = new Map<string, OrganizerAwardConfig>();
+  const blobAwardByCategory = new Map<string, OrganizerAwardConfig>();
+  if (Array.isArray(blob.awards)) {
+    for (const entry of blob.awards as OrganizerAwardConfig[]) {
+      if (!entry || typeof entry !== "object") continue;
+      if (entry.id) blobAwardById.set(String(entry.id), entry);
+      if (entry.category?.trim()) blobAwardByCategory.set(entry.category.trim().toLowerCase(), entry);
+    }
+  }
+  const awards: OrganizerAwardConfig[] = event.awards.map((a) => {
+    const blobAward =
+      blobAwardById.get(a.id) ||
+      (a.category?.trim() ? blobAwardByCategory.get(a.category.trim().toLowerCase()) : undefined);
+    return {
+      id: a.id,
+      category: a.category,
+      prizeTitle: a.prizeTitle ?? undefined,
+      amount: a.amount == null ? undefined : moneyNumber(a.amount),
+      description: a.description ?? undefined,
+      committeeId: blobAward?.committeeId,
+      committeeName: blobAward?.committeeName,
+      portfolioName: blobAward?.portfolioName,
+      participantId: a.recipientRegistrationId ?? undefined,
+      participantName: a.participantName ?? undefined,
+      participantUserId: a.recipientUserId ?? undefined,
+      recipientDelegationId: a.recipientDelegationId ?? undefined,
+    };
+  });
 
   const reviews: ConferenceReview[] = event.reviews.map((r) => ({
     id: r.id,

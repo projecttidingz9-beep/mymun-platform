@@ -184,6 +184,9 @@ function normalizeBlobAwards(blob: Record<string, unknown> | null): OrganizerAwa
       prizeTitle: typeof item.prizeTitle === "string" ? item.prizeTitle : undefined,
       description: typeof item.description === "string" ? item.description : undefined,
       amount,
+      committeeId: typeof item.committeeId === "string" ? item.committeeId : undefined,
+      committeeName: typeof item.committeeName === "string" ? item.committeeName : undefined,
+      portfolioName: typeof item.portfolioName === "string" ? item.portfolioName : undefined,
       participantName,
     });
   }
@@ -286,7 +289,12 @@ export function mapPublishedEventToConference(event: EventWithListing): Conferen
     ? (blob.tags as unknown[]).map((entry) => String(entry).trim()).filter(Boolean)
     : [];
   const blobCommittees = Array.isArray(blob?.committees)
-    ? (blob.committees as Array<{ id: string; documents?: OrganizerDocument[] }>)
+    ? (blob.committees as Array<{
+        id: string;
+        documents?: OrganizerDocument[];
+        logoImageUrl?: string;
+        chairs?: Array<{ id: string; name: string; email?: string; role?: string }>;
+      }>)
     : [];
   const blobCommitteeById = new Map(blobCommittees.map((committee) => [committee.id, committee]));
 
@@ -315,7 +323,16 @@ export function mapPublishedEventToConference(event: EventWithListing): Conferen
     level,
     committees: publicCommittees.map((cm) => {
       const agendas = parseAgendasJson((cm as { agendasJson?: string | null }).agendasJson);
-      const chairs = parseChairsJson((cm as { chairsJson?: string | null }).chairsJson);
+      const dbChairs = parseChairsJson((cm as { chairsJson?: string | null }).chairsJson);
+      const blobChairs = (blobCommitteeById.get(cm.id)?.chairs ?? [])
+        .filter((chair) => chair?.name?.trim())
+        .map((chair, index) => ({
+          id: String(chair.id || `chair-blob-${index}`),
+          name: String(chair.name),
+          email: chair.email ? String(chair.email) : undefined,
+          role: chair.role ? String(chair.role) : undefined,
+        }));
+      const chairs = dbChairs.length > 0 ? dbChairs : blobChairs;
       const noPortfolio = (cm as { noPortfolio?: boolean }).noPortfolio === true;
       const portfolios = noPortfolio
         ? []
@@ -337,7 +354,10 @@ export function mapPublishedEventToConference(event: EventWithListing): Conferen
         difficulty: "Intermediate" as const,
         size: cm.seatCount,
         allottedCount: allotmentByName.get(cm.name) ?? 0,
-        logoImageUrl: (cm as { logoImageUrl?: string | null }).logoImageUrl ?? undefined,
+        logoImageUrl:
+          blobCommitteeById.get(cm.id)?.logoImageUrl ||
+          (cm as { logoImageUrl?: string | null }).logoImageUrl ||
+          undefined,
         chairs: chairs.length > 0 ? chairs : undefined,
         documents: mergeCommitteeDocuments(
           (cm as CommitteeConfig & { documents?: Array<{ id: string; title: string; category: string; fileUrl: string }> })

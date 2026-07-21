@@ -643,6 +643,9 @@ const normalizeOrganizerConference = (raw: unknown): OrganizerConference | null 
             sponsorName: award.sponsorName ? String(award.sponsorName) : undefined,
             sponsorLogoUrl: award.sponsorLogoUrl ? String(award.sponsorLogoUrl) : undefined,
             description: award.description ? String(award.description) : undefined,
+            committeeId: award.committeeId ? String(award.committeeId) : undefined,
+            committeeName: award.committeeName ? String(award.committeeName) : undefined,
+            portfolioName: award.portfolioName ? String(award.portfolioName) : undefined,
             participantId: award.participantId ? String(award.participantId) : undefined,
             participantName: award.participantName ? String(award.participantName) : undefined,
             participantUserId: award.participantUserId ? String(award.participantUserId) : undefined,
@@ -1825,6 +1828,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           awardTitle,
           conferenceName: conferenceTitle,
           category: award.category || undefined,
+          committee: award.committeeName || undefined,
           logoUrl: award.sponsorLogoUrl || undefined,
         }),
       });

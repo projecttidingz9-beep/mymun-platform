@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
@@ -445,6 +445,7 @@ function ConferenceDetailPageContent() {
       const availableSeats = Math.max(0, totalSeats - (portfolio.assignedApplicantIds?.length || 0));
       return Array.from({ length: totalSeats }).map((_, seatIndex) => ({
         label: totalSeats > 1 ? `${portfolio.name} ${seatIndex + 1}` : portfolio.name,
+        portfolioName: portfolio.name,
         available: seatIndex < availableSeats,
         showStatus,
       }));
@@ -513,6 +514,28 @@ function ConferenceDetailPageContent() {
   ];
   const publicAwards =
     (showOperationalOverlay ? organizerConference?.awards : publicDetail?.awards) || [];
+  const awardWinnerByPortfolioKey = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const award of publicAwards) {
+      const committeeName = award.committeeName?.trim();
+      const portfolioName = award.portfolioName?.trim();
+      const winner =
+        ("winnerName" in award ? award.winnerName : undefined) || award.participantName;
+      if (!committeeName || !portfolioName || !winner?.trim()) continue;
+      map.set(`${committeeName.toLowerCase()}::${portfolioName.toLowerCase()}`, winner.trim());
+    }
+    return map;
+  }, [publicAwards]);
+  const awardsByCommittee = useMemo(() => {
+    const groups = new Map<string, typeof publicAwards>();
+    for (const award of publicAwards) {
+      const key = award.committeeName?.trim() || "Conference-wide";
+      const list = groups.get(key) || [];
+      list.push(award);
+      groups.set(key, list);
+    }
+    return Array.from(groups.entries());
+  }, [publicAwards]);
 
   return (
     <div className="conference-detail-page min-h-screen" style={{ background: "var(--bg)", color: "var(--fg)" }}>
@@ -600,7 +623,7 @@ function ConferenceDetailPageContent() {
             <span style={{ color: "var(--fg)" }}>{displayTitle}</span>
           </div>
 
-          <div className="grid lg:grid-cols-[minmax(0,1fr)_340px] 2xl:grid-cols-[minmax(0,1fr)_360px] gap-6 lg:gap-8 items-start">
+          <div className="grid lg:grid-cols-[minmax(0,1fr)_340px] 2xl:grid-cols-[minmax(0,1fr)_360px] gap-5 lg:gap-6 items-start">
             <div className="order-2 lg:order-none min-w-0">
               <div className="flex flex-col sm:flex-row sm:items-center gap-4">
                 <div
@@ -898,47 +921,65 @@ function ConferenceDetailPageContent() {
               )}
               {isSectionVisible("awards") && (
               <div className="lux-card p-6 sm:p-8">
-                <h2 className="text-3xl font-bold mb-6" style={{ color: "var(--fg)" }}>Awards</h2>
-                <div className="grid sm:grid-cols-2 gap-4">
-                  {publicAwards.length > 0
-                    ? publicAwards.map((award) => (
-                        <div
-                          key={award.id}
-                          className="rounded-2xl p-5 conference-surface"
-                          style={{ border: "1px solid var(--border)" }}
-                        >
-                          <p className="text-xs font-semibold uppercase tracking-[0.18em]" style={{ color: "var(--fg-muted)" }}>
-                            {award.category}
-                          </p>
-                          <p className="text-xl font-bold mt-2" style={{ color: "var(--fg)" }}>
-                            {award.prizeTitle || award.category}
-                          </p>
-                          {typeof award.amount === "number" && award.amount > 0 && (
-                            <p className="text-base font-semibold mt-2" style={{ color: "var(--blue)" }}>
-                              {formatMoney(award.amount, c.currency)}
-                            </p>
-                          )}
-                          {("winnerName" in award ? award.winnerName : undefined) ||
-                          award.participantName ? (
-                            <p className="text-sm mt-3" style={{ color: "var(--fg-muted)" }}>
-                              Winner:{" "}
-                              <strong style={{ color: "var(--fg)" }}>
-                                {("winnerName" in award ? award.winnerName : undefined) ||
-                                  award.participantName}
-                              </strong>
-                            </p>
-                          ) : null}
-                          {award.description && (
-                            <p className="text-sm mt-2" style={{ color: "var(--fg-muted)" }}>{award.description}</p>
-                          )}
+                <h2 className="text-3xl font-bold mb-4" style={{ color: "var(--fg)" }}>Awards</h2>
+                {publicAwards.length > 0 ? (
+                  <div className="space-y-4">
+                    {awardsByCommittee.map(([committeeName, committeeAwards]) => (
+                      <div key={committeeName}>
+                        <p className="text-sm font-semibold mb-3" style={{ color: "var(--fg-muted)" }}>
+                          {committeeName}
+                        </p>
+                        <div className="grid sm:grid-cols-2 gap-4">
+                          {committeeAwards.map((award) => (
+                            <div
+                              key={award.id}
+                              className="rounded-2xl p-5 conference-surface"
+                              style={{ border: "1px solid var(--border)" }}
+                            >
+                              <p className="text-xs font-semibold uppercase tracking-[0.18em]" style={{ color: "var(--fg-muted)" }}>
+                                {award.category}
+                              </p>
+                              <p className="text-xl font-bold mt-2" style={{ color: "var(--fg)" }}>
+                                {award.prizeTitle || award.category}
+                              </p>
+                              {award.portfolioName && (
+                                <p className="text-sm mt-2" style={{ color: "var(--fg-muted)" }}>
+                                  Portfolio: {award.portfolioName}
+                                </p>
+                              )}
+                              {typeof award.amount === "number" && award.amount > 0 && (
+                                <p className="text-base font-semibold mt-2" style={{ color: "var(--blue)" }}>
+                                  {formatMoney(award.amount, c.currency)}
+                                </p>
+                              )}
+                              {("winnerName" in award ? award.winnerName : undefined) ||
+                              award.participantName ? (
+                                <p className="text-sm mt-3" style={{ color: "var(--fg-muted)" }}>
+                                  Winner:{" "}
+                                  <strong style={{ color: "var(--fg)" }}>
+                                    {("winnerName" in award ? award.winnerName : undefined) ||
+                                      award.participantName}
+                                  </strong>
+                                </p>
+                              ) : null}
+                              {award.description && (
+                                <p className="text-sm mt-2" style={{ color: "var(--fg-muted)" }}>{award.description}</p>
+                              )}
+                            </div>
+                          ))}
                         </div>
-                      ))
-                    : fallbackOverviewAwards.map((award) => (
-                        <div key={award} className="rounded-2xl p-5 conference-surface">
-                          <p className="text-lg font-semibold" style={{ color: "var(--fg)" }}>{award}</p>
-                        </div>
-                      ))}
-                </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    {fallbackOverviewAwards.map((award) => (
+                      <div key={award} className="rounded-2xl p-5 conference-surface">
+                        <p className="text-lg font-semibold" style={{ color: "var(--fg)" }}>{award}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
               )}
 
@@ -1075,7 +1116,7 @@ function ConferenceDetailPageContent() {
 
         {tab === "committees" && (
           <div>
-            <h2 className="text-2xl font-bold mb-6" style={{ color: "var(--fg)" }}>Committees</h2>
+            <h2 className="text-2xl font-bold mb-4" style={{ color: "var(--fg)" }}>Committees</h2>
             {displayCommittees.length === 0 ? (
               <div className="lux-card p-8 text-center max-w-lg">
                 <p className="text-sm" style={{ color: "var(--fg-muted)" }}>
@@ -1181,7 +1222,7 @@ function ConferenceDetailPageContent() {
               ))}
             </div>
             )}
-            <div className="mt-8">
+            <div className="mt-6">
               <h3 className="text-xl font-bold mb-4" style={{ color: "var(--fg)" }}>Portfolio Matrix</h3>
               <div className="space-y-4">
                 {displayCommittees.map((committee, committeeIndex) => {
@@ -1206,7 +1247,22 @@ function ConferenceDetailPageContent() {
                           {seats.map((seat, seatIndex) => {
                             const showStatus = seat.showStatus;
                             const available = seat.available;
-                            const style = showStatus
+                            const awardWinner =
+                              "portfolioName" in seat && seat.portfolioName
+                                ? awardWinnerByPortfolioKey.get(
+                                    `${committee.name.trim().toLowerCase()}::${String(seat.portfolioName).trim().toLowerCase()}`
+                                  )
+                                : undefined;
+                            const displayLabel = awardWinner
+                              ? `${seat.portfolioName} · ${awardWinner}`
+                              : seat.label;
+                            const style = awardWinner
+                              ? {
+                                  background: "rgba(231,195,144,0.18)",
+                                  color: "var(--fg)",
+                                  border: "1px solid rgba(231,195,144,0.45)",
+                                }
+                              : showStatus
                               ? {
                                   background: available ? "rgba(22,163,74,0.14)" : "rgba(220,38,38,0.16)",
                                   color: available ? "#16a34a" : "#dc2626",
@@ -1222,8 +1278,9 @@ function ConferenceDetailPageContent() {
                                 key={`${committee.id}-seat-${seatIndex}`}
                                 className="text-[10px] font-semibold rounded-md px-2 py-2 text-center"
                                 style={style}
+                                title={awardWinner ? `Award winner: ${awardWinner}` : undefined}
                               >
-                                {seat.label}
+                                {displayLabel}
                               </span>
                             );
                           })}

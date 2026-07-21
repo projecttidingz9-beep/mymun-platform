@@ -183,6 +183,9 @@ export interface PublicConferenceDetail extends Conference {
     prizeTitle?: string;
     description?: string;
     amount?: number;
+    committeeId?: string;
+    committeeName?: string;
+    portfolioName?: string;
     participantName?: string;
     /** Only populated once the organizer has assigned a winner (and/or the conference has ended). */
     winnerName?: string;
@@ -453,6 +456,9 @@ export interface OrganizerAwardConfig {
   /** Optional, blank by default. Shown below the award once filled in. */
   amount?: number;
   description?: string;
+  committeeId?: string;
+  committeeName?: string;
+  portfolioName?: string;
   participantId?: string;
   participantName?: string;
   participantUserId?: string;

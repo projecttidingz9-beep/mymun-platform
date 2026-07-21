@@ -314,12 +314,7 @@ export default function CheckoutPage() {
     return `${committee.name} — ${formatMoney(amount, checkoutCurrency)}`;
   };
 
-  const committeeQuestionsValid = (() => {
-    if (!selectedCommittee) return true;
-    return (selectedCommittee.customQuestions ?? []).every(
-      (q) => !q.required || (answers[`cq-${selectedCommittee.id}-${q.id}`] !== undefined && String(answers[`cq-${selectedCommittee.id}-${q.id}`]).trim() !== "")
-    );
-  })();
+  const committeeQuestionsValid = true;
 
   const startOnlinePayment = async (paymentIntentId: string, amount: number): Promise<boolean> => {
     if (amount <= 0) return true;
@@ -1062,29 +1057,10 @@ export default function CheckoutPage() {
                     </option>
                   ))}
                 </AppSelect>
-                {selectedCommittee && (selectedCommittee.customQuestions ?? []).length > 0 && (
-                  <div className="p-4 rounded-xl space-y-4" style={{ background: "var(--bg-subtle)", border: "1px solid var(--border)" }}>
-                    <p className="text-sm font-bold" style={{ color: "var(--fg)" }}>{selectedCommittee.name} Questions</p>
-                    {(selectedCommittee.customQuestions ?? []).map((q) => (
-                      <div key={q.id}>
-                        <label className="block text-sm font-semibold mb-1.5" style={{ color: "var(--fg)" }}>
-                          {q.question} {q.required ? "*" : ""}
-                        </label>
-                        <textarea
-                          className="input-base text-sm min-h-[44px]"
-                          rows={2}
-                          value={String(answers[`cq-${selectedCommittee.id}-${q.id}`] ?? "")}
-                          onChange={(event) =>
-                            setAnswers((prev) => ({
-                              ...prev,
-                              [`cq-${selectedCommittee.id}-${q.id}`]: event.target.value,
-                            }))
-                          }
-                          placeholder="Your answer..."
-                        />
-                      </div>
-                    ))}
-                  </div>
+                {selectedCommittee && (
+                  <p className="text-xs" style={{ color: "var(--fg-muted)" }}>
+                    Committee-specific questions are disabled for this conference.
+                  </p>
                 )}
                 {requiredCommitteePrefs >= 2 && (
                   <AppSelect

@@ -48,12 +48,14 @@ import {
   findIncompletePricingPhases,
   formatIncompletePricingPhasesMessage,
   getActivePhase,
+  getPhaseStatus,
   isPricingPhaseComplete,
   mergeNewCommitteesIntoPhases,
   resolveRegistrationPrice,
 } from "@/lib/pricing";
 import {
   getCategoryRegistrationLabel,
+  getCategoryTypeHint,
   getCategoryTypeLabel,
   getDefaultCategoryForType,
   REGISTRATION_CATEGORY_UI_TYPES,
@@ -82,7 +84,7 @@ import ConfirmModal, { DestructiveConfirmButton } from "@/components/ConfirmModa
 const nextScheduleDayName = (entries: ConferenceScheduleEntry[]) =>
   `Day ${new Set(entries.map((entry) => entry.day)).size + 1}`;
 
-type RegistrationPreviewStep = 2 | 3 | 4;
+type RegistrationPreviewStep = 1 | 2 | 3 | 4;
 
 type QuestionFieldDraft = {
   label: string;
@@ -589,6 +591,53 @@ const SECTION_SEARCH_KEYWORDS: Record<OrganizerSectionId, string[]> = {
   settings: ["documents", "previous editions", "banking details"],
 };
 
+const SECTION_SEARCH_HEADINGS: Partial<Record<OrganizerSectionId, string[]>> = {
+  overview: ["Dashboard Overview", "Insights", "Performance", "Conference health"],
+  conferences: ["My Conferences", "Create conference", "Published", "Draft"],
+  preview: [
+    "Conference Page Preview",
+    "Conference Policies & Info",
+    "Public page sections",
+    "Allocation mode",
+    "Conference Stats & Tags",
+  ],
+  applications: [
+    "Applications",
+    "Release allotments",
+    "Open Profile",
+    "Allot draft",
+    "Auto-assign all pending",
+  ],
+  participants: [
+    "Participants & Allotments",
+    "Country Matrix",
+    "Participant Records",
+    "Delegations",
+    "Save matrix visibility",
+  ],
+  committees: [
+    "Committees",
+    "Add Committee",
+    "Edit Details",
+    "Seat count",
+    "International press",
+    "Portfolios",
+  ],
+  pricing: [
+    "Categories & Pricing",
+    "Student registration preview",
+    "Application Questions",
+    "Pricing phases",
+    "Save categories & pricing",
+  ],
+  communications: ["Broadcast Announcement", "Status Email Templates", "Announcements"],
+  awards: ["Awards Module", "Winner", "Committee awards", "Portfolio winner reflection"],
+  team: ["Teams", "Organizing Team", "Secretariat", "Import accepted applications"],
+  transactions: ["Transactions", "Payments", "Refunds", "Finance summary"],
+  settings: ["Conference Settings", "Common documents", "Committee documents", "Previous editions", "Partner conferences"],
+  cameraCheckIn: ["Camera Check-In", "QR check in", "Issue Pass"],
+};
+
 const isOrganizerSectionId = (value: string): value is OrganizerSectionId =>
   Object.prototype.hasOwnProperty.call(ORGANIZER_SECTION_META, value);
 
@@ -699,7 +748,6 @@ export default function OrganizerDashboardPage() {
     () => new Set()
   );
   const [assignmentPortfolio, setAssignmentPortfolio] = useState<Record<string, string>>({});
-  const [allotConfirmStep, setAllotConfirmStep] = useState<Record<string, 0 | 1 | 2>>({});
   const [selectedApplicantId, setSelectedApplicantId] = useState<string>("");
   const [applicationTypeTab, setApplicationTypeTab] = useState<
     "delegate" | "chair" | "organizer" | "secretariat" | "delegation"
@@ -708,7 +756,7 @@ export default function OrganizerDashboardPage() {
   const [autoAssignProgress, setAutoAssignProgress] = useState("");
   const [pricingCategoryTypeTab, setPricingCategoryTypeTab] =
     useState<RegistrationCategoryUiType>("delegate");
-  const [registrationPreviewStep, setRegistrationPreviewStep] = useState<RegistrationPreviewStep>(2);
+  const [registrationPreviewStep, setRegistrationPreviewStep] = useState<RegistrationPreviewStep>(1);
   const [applicantProfileDrawerOpen, setApplicantProfileDrawerOpen] = useState(false);
   const [chairAllotModalOpen, setChairAllotModalOpen] = useState(false);
   const [chairAllotApplicantId, setChairAllotApplicantId] = useState("");
@@ -727,6 +775,9 @@ export default function OrganizerDashboardPage() {
     useState<OrganizerStatusEmailTemplateKey>("allotted");
   const [countryMatrixCommitteeFilter, setCountryMatrixCommitteeFilter] = useState("all");
   const [countryMatrixSeatFilter, setCountryMatrixSeatFilter] = useState<"all" | "available" | "allotted">("all");
+  const [portfolioMatrixVisibilityDraft, setPortfolioMatrixVisibilityDraft] =
+    useState<"PUBLIC" | "PRIVATE">("PRIVATE");
+  const [portfolioMatrixVisibilitySaving, setPortfolioMatrixVisibilitySaving] = useState(false);
   const [countryMatrixSearch, setCountryMatrixSearch] = useState("");
   const [matrixOnlyAvailable, setMatrixOnlyAvailable] = useState(false);
   const [matrixCommitteeType, setMatrixCommitteeType] = useState("all");
@@ -742,7 +793,6 @@ export default function OrganizerDashboardPage() {
     name: "",
     email: "",
     role: "USG",
-    photoUrl: "",
   });
   const [questionEditorState, setQuestionEditorState] = useState<Record<string, QuestionEditorEntry>>({});
   const [editionDraft, setEditionDraft] = useState({
@@ -756,6 +806,7 @@ export default function OrganizerDashboardPage() {
     prizeTitle: "",
     amount: "",
     description: "",
+    committeeId: "",
     participantId: "",
   });
   const [committeeDraft, setCommitteeDraft] = useState({
@@ -1071,35 +1122,6 @@ export default function OrganizerDashboardPage() {
     }));
   };
 
-  const addCommitteeQuestionDraftRow = () => {
-    setDetailsEditorDraft((prev) => ({
-      ...prev,
-      customQuestions: [
-        ...prev.customQuestions,
-        { id: `cq-${Date.now()}`, question: "", required: false },
-      ],
-    }));
-  };
-
-  const updateCommitteeQuestionDraftRow = (
-    questionId: string,
-    patch: Partial<{ question: string; required: boolean }>
-  ) => {
-    setDetailsEditorDraft((prev) => ({
-      ...prev,
-      customQuestions: prev.customQuestions.map((entry) =>
-        entry.id === questionId ? { ...entry, ...patch } : entry
-      ),
-    }));
-  };
-
-  const removeCommitteeQuestionDraftRow = (questionId: string) => {
-    setDetailsEditorDraft((prev) => ({
-      ...prev,
-      customQuestions: prev.customQuestions.filter((entry) => entry.id !== questionId),
-    }));
-  };
-
   const readImageFileToDataUrl = (
     event: ChangeEvent<HTMLInputElement>,
     onDone: (dataUrl: string) => void,
@@ -1174,13 +1196,6 @@ export default function OrganizerDashboardPage() {
           role: chair.role.trim() || undefined,
         }))
         .filter((chair) => chair.name);
-      const normalizedCustomQuestions = detailsEditorDraft.customQuestions
-        .map((entry, index) => ({
-          id: entry.id || `${detailsEditorCommitteeId}-cq-${index}`,
-          question: entry.question.trim(),
-          required: entry.required,
-        }))
-        .filter((entry) => entry.question);
       updateOrganizerCommitteeConfig(conferenceId, detailsEditorCommitteeId, {
         name: detailsEditorDraft.name.trim() || "Committee",
         description: detailsEditorDraft.description.trim() || undefined,
@@ -1190,7 +1205,7 @@ export default function OrganizerDashboardPage() {
         chairs: normalizedChairs,
         chairName: normalizedChairs[0]?.name,
         chairEmail: normalizedChairs[0]?.email,
-        customQuestions: normalizedCustomQuestions,
+        customQuestions: [],
         ...(selectedDetailsEditorCommittee?.noPortfolio
           ? {
               seatCount: Math.max(1, Number(detailsEditorDraft.seatCount) || 1),
@@ -1453,7 +1468,8 @@ export default function OrganizerDashboardPage() {
     (Object.keys(ORGANIZER_SECTION_META) as OrganizerSectionId[]).forEach((sectionId) => {
       const meta = ORGANIZER_SECTION_META[sectionId];
       const keywordText = (SECTION_SEARCH_KEYWORDS[sectionId] || []).join(" ");
-      const haystack = `${meta.label} ${meta.eyebrow} ${meta.subtitle} ${keywordText}`.toLowerCase();
+      const headingText = (SECTION_SEARCH_HEADINGS[sectionId] || []).join(" ");
+      const haystack = `${meta.label} ${meta.eyebrow} ${meta.subtitle} ${keywordText} ${headingText}`.toLowerCase();
       if (!haystack.includes(q)) return;
       pushUnique({
         id: `section-${sectionId}`,
@@ -1698,11 +1714,27 @@ export default function OrganizerDashboardPage() {
 
   useEffect(() => {
     if (!selectedConference) return;
+    setPortfolioMatrixVisibilityDraft(selectedConference.portfolioMatrixVisibility || "PRIVATE");
     const hasSelected = selectedConference.committees.some((committee) => committee.id === committeeDocumentTargetId);
     if (!hasSelected) {
       setCommitteeDocumentTargetId(selectedConference.committees[0]?.id || "");
     }
   }, [selectedConference, committeeDocumentTargetId]);
+
+  const savePortfolioMatrixVisibility = async () => {
+    if (!selectedConference || portfolioMatrixVisibilitySaving) return;
+    setPortfolioMatrixVisibilitySaving(true);
+    try {
+      await updateOrganizerConferenceConfigAsync(selectedConference.id, {
+        portfolioMatrixVisibility: portfolioMatrixVisibilityDraft,
+      });
+      toast.show("Portfolio matrix visibility saved.", "success");
+    } catch {
+      toast.show("Could not save portfolio matrix visibility.", "error");
+    } finally {
+      setPortfolioMatrixVisibilitySaving(false);
+    }
+  };
 
   useEffect(() => {
     if (!selectedConference) return;
@@ -2131,7 +2163,7 @@ export default function OrganizerDashboardPage() {
     pricingCategoriesJson !== pricingSavedCategoriesJson;
 
   useEffect(() => {
-    setRegistrationPreviewStep(2);
+    setRegistrationPreviewStep(1);
   }, [pricingCategoryTypeTab]);
 
   useEffect(() => {
@@ -3230,18 +3262,6 @@ export default function OrganizerDashboardPage() {
                       </p>
                       <p style={{ color: "var(--fg-muted)" }}><strong style={{ color: "var(--fg)" }}>Capacity:</strong> {selectedConference.capacity}</p>
                     </div>
-                    <label className="flex items-center gap-2 text-xs mt-4" style={{ color: "var(--fg-muted)" }}>
-                      <input
-                        type="checkbox"
-                        checked={selectedConference.portfolioMatrixVisibility === "PUBLIC"}
-                        onChange={(event) => {
-                          void updateOrganizerConferenceConfigAsync(selectedConference.id, {
-                            portfolioMatrixVisibility: event.target.checked ? "PUBLIC" : "PRIVATE",
-                          });
-                        }}
-                      />
-                      Show allotment status on public portfolio matrix
-                    </label>
                   </div>
                   )}
 
@@ -3646,23 +3666,27 @@ export default function OrganizerDashboardPage() {
                             <button
                               type="button"
                               className="btn btn-primary text-xs"
-                              onClick={() =>
+                              onClick={() => {
+                                if (!window.confirm("Set allocation mode to Pay first?")) return;
+                                if (!window.confirm("Please confirm again: lock conference to Pay first mode?")) return;
                                 updateOrganizerConferenceConfig(selectedConference.id, {
                                   allocationMode: "PAY_FIRST",
-                                })
-                              }
+                                });
+                              }}
                             >
                               Pay first
                             </button>
                             <button
                               type="button"
                               className="btn btn-outline-blue text-xs"
-                              onClick={() =>
+                              onClick={() => {
+                                if (!window.confirm("Set allocation mode to Allot first?")) return;
+                                if (!window.confirm("Please confirm again: lock conference to Allot first mode?")) return;
                                 updateOrganizerConferenceConfig(selectedConference.id, {
                                   allocationMode: "ALLOT_FIRST",
                                   paymentDeadlineDays: 7,
-                                })
-                              }
+                                });
+                              }}
                             >
                               Allot first
                             </button>
@@ -3895,9 +3919,9 @@ export default function OrganizerDashboardPage() {
 
                   {activeSection === "applications" && (
                   <>
-                  <div className="card p-6 rounded-2xl">
-                    <h3 className="text-2xl font-bold mb-4" style={{ color: "var(--fg)" }}>Applications</h3>
-                    <div className="flex flex-wrap gap-2 mb-4">
+                  <div className="card p-5 rounded-2xl">
+                    <h3 className="text-2xl font-bold mb-3" style={{ color: "var(--fg)" }}>Applications</h3>
+                    <div className="flex flex-wrap gap-2 mb-3">
                       {([
                         { id: "organizer", label: "Organiser Committee Applications" },
                         { id: "secretariat", label: "Secretariat Applications" },
@@ -3916,7 +3940,7 @@ export default function OrganizerDashboardPage() {
                         </button>
                       ))}
                     </div>
-                    <div className="grid md:grid-cols-3 gap-2 mb-4">
+                    <div className="grid md:grid-cols-3 gap-2 mb-3">
                       {(["Pending", "Allotted", "Rejected"] as const).map((status) => {
                         const count = filteredApplications.filter((entry) => entry.status === status).length;
                         return (
@@ -3927,7 +3951,35 @@ export default function OrganizerDashboardPage() {
                         );
                       })}
                     </div>
-                    <div className="mb-4 flex flex-wrap items-center gap-3">
+                    {applicationTypeTab === "chair" && (
+                      <div className="grid md:grid-cols-2 gap-2 mb-3">
+                        <div className="rounded-xl p-3" style={{ background: "var(--bg-subtle)" }}>
+                          <p className="text-sm font-semibold" style={{ color: "var(--fg-muted)" }}>
+                            EB Draft (Not Released)
+                          </p>
+                          <p className="text-2xl font-black" style={{ color: "var(--warning-fg)" }}>
+                            {
+                              filteredApplications.filter(
+                                (entry) => entry.status === "Allotted" && entry.released === false
+                              ).length
+                            }
+                          </p>
+                        </div>
+                        <div className="rounded-xl p-3" style={{ background: "var(--bg-subtle)" }}>
+                          <p className="text-sm font-semibold" style={{ color: "var(--fg-muted)" }}>
+                            EB Released
+                          </p>
+                          <p className="text-2xl font-black" style={{ color: "var(--success-fg)" }}>
+                            {
+                              filteredApplications.filter(
+                                (entry) => entry.status === "Allotted" && entry.released === true
+                              ).length
+                            }
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                    <div className="mb-3 flex flex-wrap items-center gap-3">
                       {applicationTypeTab !== "organizer" && applicationTypeTab !== "secretariat" && (
                         <button
                           type="button"
@@ -4002,7 +4054,14 @@ export default function OrganizerDashboardPage() {
                             applicationTypeTab === "organizer" ||
                             applicationTypeTab === "secretariat";
                           const isChairTab = applicationTypeTab === "chair";
-                          const allotStep = allotConfirmStep[applicant.id] ?? 0;
+                          const chairAssignment = isChairTab
+                            ? selectedConference.committees
+                                .map((committee) => ({
+                                  committee,
+                                  chair: (committee.chairs ?? []).find((entry) => entry.id === applicant.id),
+                                }))
+                                .find((entry) => entry.chair)
+                            : undefined;
                           const selectedCommitteeId = assignmentCommittee[applicant.id] || applicant.assignedCommitteeId || "";
                           const selectedCommittee = selectedConference.committees.find((committee) => committee.id === selectedCommitteeId);
                           const selectedPortfolioId = assignmentPortfolio[applicant.id] || applicant.assignedPortfolioId || "";
@@ -4030,22 +4089,49 @@ export default function OrganizerDashboardPage() {
                                   </p>
                                   {((applicant.committeePreferences || []).length > 0) && !isOcTab && (
                                     <div className="mt-1 space-y-0.5">
+                                      {isChairTab && (
+                                        <p className="text-xs font-semibold" style={{ color: "var(--fg-muted)" }}>
+                                          Committee preferences:
+                                        </p>
+                                      )}
                                       {(applicant.committeePreferences || []).slice(0, 3).map((pref, prefIndex) => {
-                                        const portfolioPref = applicant.portfolioPreferencesByCommittee?.[pref]?.[0];
+                                        const portfolioPrefs = (applicant.portfolioPreferencesByCommittee?.[pref] || [])
+                                          .slice(0, 3)
+                                          .map((entry) => resolvePreferenceLabel(entry, selectedConference.committees));
                                         return (
                                           <p key={`${applicant.id}-pref-${prefIndex}`} className="text-sm" style={{ color: "var(--blue)" }}>
                                             {prefIndex + 1}. {resolvePreferenceLabel(pref, selectedConference.committees)}
-                                            {portfolioPref
-                                              ? ` → ${resolvePreferenceLabel(portfolioPref, selectedConference.committees)}`
+                                            {portfolioPrefs.length > 0
+                                              ? ` → ${portfolioPrefs.join(" / ")}`
                                               : ""}
                                           </p>
                                         );
                                       })}
                                     </div>
                                   )}
+                                  {isChairTab && chairAssignment?.chair && (
+                                    <p className="text-sm mt-1" style={{ color: "var(--fg-muted)" }}>
+                                      EB assignment:{" "}
+                                      <strong style={{ color: "var(--fg)" }}>
+                                        {chairAssignment.committee.name}
+                                        {chairAssignment.chair.role ? ` · ${chairAssignment.chair.role}` : ""}
+                                      </strong>
+                                    </p>
+                                  )}
                                   {isDraftAllotment && (
                                     <p className="text-sm mt-1" style={{ color: "var(--fg-muted)" }}>
                                       Draft allotment — not visible to the student until you release allotments.
+                                    </p>
+                                  )}
+                                  {applicant.status === "Allotted" && (
+                                    <p className="text-sm mt-1" style={{ color: applicant.released ? "var(--success-fg)" : "var(--warning-fg)" }}>
+                                      {applicant.released
+                                        ? isChairTab
+                                          ? "EB allotment released to applicant."
+                                          : "Allotment released to student."
+                                        : isChairTab
+                                          ? "EB allotment is draft only (not released yet)."
+                                          : "Allotment not released yet."}
                                     </p>
                                   )}
                                 </div>
@@ -4069,11 +4155,6 @@ export default function OrganizerDashboardPage() {
                                   value={selectedCommitteeId}
                                   onChange={(event) => {
                                     setAssignmentCommittee((prev) => ({ ...prev, [applicant.id]: event.target.value }));
-                                    setAllotConfirmStep((prev) => {
-                                      const next = { ...prev };
-                                      delete next[applicant.id];
-                                      return next;
-                                    });
                                   }}
                                 >
                                   <option value="">Select committee</option>
@@ -4095,11 +4176,6 @@ export default function OrganizerDashboardPage() {
                                     value={selectedPortfolioId}
                                     onChange={(event) => {
                                       setAssignmentPortfolio((prev) => ({ ...prev, [applicant.id]: event.target.value }));
-                                      setAllotConfirmStep((prev) => {
-                                        const next = { ...prev };
-                                        delete next[applicant.id];
-                                        return next;
-                                      });
                                     }}
                                     disabled={!selectedCommittee || (selectedCommittee.portfolios ?? []).length === 0}
                                   >
@@ -4129,6 +4205,32 @@ export default function OrganizerDashboardPage() {
                                         applicantActionRef.current = applicant.id;
                                         setApplicantActionId(applicant.id);
                                         updateApplicantStatus(selectedConference.id, applicant.id, "Allotted");
+                                        const existingTeam = selectedConference.organizerTeam || [];
+                                        const existingEmails = new Set(
+                                          existingTeam.map((entry) => entry.email.trim().toLowerCase()).filter(Boolean)
+                                        );
+                                        const applicantEmail = (applicant.userEmail || "").trim();
+                                        if (applicantEmail && !existingEmails.has(applicantEmail.toLowerCase())) {
+                                          updateOrganizerConferenceConfig(selectedConference.id, {
+                                            organizerTeam: [
+                                              ...existingTeam,
+                                              {
+                                                id: `team-auto-${applicant.id}`,
+                                                name: applicant.name,
+                                                email: applicantEmail,
+                                                role:
+                                                  applicationTypeTab === "secretariat"
+                                                    ? "Secretary-General"
+                                                    : "USG",
+                                                teamType: applicationTypeTab === "secretariat" ? "secretariat" : "organizer",
+                                                permissions:
+                                                  applicationTypeTab === "secretariat"
+                                                    ? []
+                                                    : (["view", "applications"] as const),
+                                              },
+                                            ],
+                                          });
+                                        }
                                         toast.show("Organiser application accepted.", "success");
                                         applicantActionRef.current = null;
                                         setApplicantActionId(null);
@@ -4168,30 +4270,36 @@ export default function OrganizerDashboardPage() {
                                   <button
                                     type="button"
                                     onClick={() => {
+                                      const existingChairAssignment = selectedConference.committees
+                                        .map((committee) => ({
+                                          committeeId: committee.id,
+                                          chair: (committee.chairs ?? []).find((entry) => entry.id === applicant.id),
+                                        }))
+                                        .find((entry) => entry.chair);
                                       setChairAllotApplicantId(applicant.id);
-                                      setChairAllotCommitteeId(selectedCommitteeId);
-                                      setChairAllotRole("Chair");
-                                      setChairAllotCustomRole("");
+                                      setChairAllotCommitteeId(existingChairAssignment?.committeeId || selectedCommitteeId);
+                                      const existingRole = existingChairAssignment?.chair?.role?.trim();
+                                      const normalizedRole = existingRole && CHAIR_ROLE_PRESETS.includes(existingRole)
+                                        ? existingRole
+                                        : existingRole
+                                          ? "Other"
+                                          : "Chair";
+                                      setChairAllotRole(normalizedRole);
+                                      setChairAllotCustomRole(
+                                        normalizedRole === "Other" && existingRole ? existingRole : ""
+                                      );
                                       setChairAllotModalOpen(true);
                                     }}
                                     className="btn btn-primary text-xs"
-                                    disabled={!selectedCommitteeId}
+                                    disabled={selectedConference.committees.length === 0}
                                   >
-                                    Assign to Committee…
+                                    {chairAssignment?.chair ? "Reassign EB Role…" : "Assign EB Role…"}
                                   </button>
                                 ) : (
                                 <button
                                   onClick={() => {
                                     if (!selectedCommitteeId) return;
                                     if (applicantActionRef.current === applicant.id) return;
-                                    const currentStep = allotConfirmStep[applicant.id] ?? 0;
-                                    if (currentStep < 2) {
-                                      setAllotConfirmStep((prev) => ({
-                                        ...prev,
-                                        [applicant.id]: (currentStep + 1) as 1 | 2,
-                                      }));
-                                      return;
-                                    }
                                     applicantActionRef.current = applicant.id;
                                     setApplicantActionId(applicant.id);
                                     const result = assignApplicant({
@@ -4204,22 +4312,13 @@ export default function OrganizerDashboardPage() {
                                     else toast.show("Draft allotment saved. Release when ready.", "success");
                                     applicantActionRef.current = null;
                                     setApplicantActionId(null);
-                                    setAllotConfirmStep((prev) => {
-                                      const next = { ...prev };
-                                      delete next[applicant.id];
-                                      return next;
-                                    });
                                   }}
                                   className="btn btn-primary text-xs"
                                   disabled={!selectedCommitteeId || applicantActionId === applicant.id}
                                 >
                                   {applicantActionId === applicant.id
                                     ? "Saving…"
-                                    : allotStep === 2
-                                      ? "Are you sure? This is final."
-                                      : allotStep === 1
-                                        ? "Confirm allotment?"
-                                        : "Allot (draft)"}
+                                    : "Allot (draft)"}
                                 </button>
                                 )}
                                 <button
@@ -4297,6 +4396,9 @@ export default function OrganizerDashboardPage() {
                             "Applicant"}{" "}
                           will appear under the selected committee with the chosen role.
                         </p>
+                        <p className="mt-1 text-xs text-[var(--fg-muted)]">
+                          This saves as draft. The chair assignment is visible to students only after you release allotments.
+                        </p>
                         <div className="mt-5 space-y-4">
                           <div>
                             <label className="text-xs font-semibold block mb-1" style={{ color: "var(--fg-muted)" }}>
@@ -4365,6 +4467,23 @@ export default function OrganizerDashboardPage() {
                                 toast.show("Enter a role for this EB member.", "error");
                                 return;
                               }
+                              const targetCommittee = selectedConference.committees.find(
+                                (committee) => committee.id === chairAllotCommitteeId
+                              );
+                              if (
+                                !window.confirm(
+                                  `Assign this EB applicant to ${targetCommittee?.name || "the selected committee"} as ${resolvedRole}?`
+                                )
+                              ) {
+                                return;
+                              }
+                              if (
+                                !window.confirm(
+                                  "Please confirm again. This will update the draft chair allotment."
+                                )
+                              ) {
+                                return;
+                              }
                               const result = allotChairWithRole({
                                 conferenceId: selectedConference.id,
                                 applicantId: chairAllotApplicantId,
@@ -4395,8 +4514,8 @@ export default function OrganizerDashboardPage() {
 
                   {activeSection === "participants" && (
                   <>
-                  <div className="card p-6 rounded-2xl">
-                    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
+                  <div className="card p-5 rounded-2xl">
+                    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-3">
                       <h3 className="text-lg font-bold" style={{ color: "var(--fg)" }}>Participants &amp; Allotments</h3>
                       <div className="flex flex-wrap items-center gap-2">
                         <div className="text-xs" style={{ color: "var(--fg-muted)" }}>
@@ -4433,7 +4552,7 @@ export default function OrganizerDashboardPage() {
                         </button>
                       </div>
                     </div>
-                    <div className="grid md:grid-cols-[1.4fr_180px_160px] gap-2 mb-4">
+                    <div className="grid md:grid-cols-[1.4fr_180px_160px] gap-2 mb-3">
                       <input
                         className="input-base text-xs"
                         placeholder="Search by name, school, committee, country/member..."
@@ -4633,15 +4752,21 @@ export default function OrganizerDashboardPage() {
                     <label className="flex items-center gap-2 text-xs mb-4" style={{ color: "var(--fg-muted)" }}>
                       <input
                         type="checkbox"
-                        checked={selectedConference.portfolioMatrixVisibility === "PUBLIC"}
-                        onChange={(event) => {
-                          void updateOrganizerConferenceConfigAsync(selectedConference.id, {
-                            portfolioMatrixVisibility: event.target.checked ? "PUBLIC" : "PRIVATE",
-                          });
-                        }}
+                        checked={portfolioMatrixVisibilityDraft === "PUBLIC"}
+                        onChange={(event) =>
+                          setPortfolioMatrixVisibilityDraft(event.target.checked ? "PUBLIC" : "PRIVATE")
+                        }
                       />
                       Show allotment status on public portfolio matrix
                     </label>
+                    <button
+                      type="button"
+                      className="btn btn-primary text-xs mb-4"
+                      disabled={portfolioMatrixVisibilitySaving || portfolioMatrixVisibilityDraft === (selectedConference.portfolioMatrixVisibility || "PRIVATE")}
+                      onClick={() => void savePortfolioMatrixVisibility()}
+                    >
+                      {portfolioMatrixVisibilitySaving ? "Saving…" : "Save matrix visibility"}
+                    </button>
 
                     <div className="flex items-center gap-2 mb-4 flex-wrap text-xs">
                       <span className="badge badge-success">Green = Available</span>
@@ -5197,9 +5322,9 @@ export default function OrganizerDashboardPage() {
                   )}
 
                   {activeSection === "communications" && (
-                    <div className="card p-6 rounded-2xl">
-                      <h3 className="text-lg font-bold mb-4" style={{ color: "var(--fg)" }}>Broadcast Announcement</h3>
-                      <p className="text-sm mb-4" style={{ color: "var(--fg-muted)" }}>
+                    <div className="card p-5 rounded-2xl">
+                      <h3 className="text-lg font-bold mb-3" style={{ color: "var(--fg)" }}>Broadcast Announcement</h3>
+                      <p className="text-sm mb-3" style={{ color: "var(--fg-muted)" }}>
                         Broadcasts are sent by email to registered delegates who have applied or paid. There is no in-app messaging.
                       </p>
                       <div className="space-y-3">
@@ -5539,8 +5664,8 @@ export default function OrganizerDashboardPage() {
                   )}
 
                   {activeSection === "settings" && (
-                    <div className="card p-6 rounded-2xl">
-                      <h3 className="text-2xl font-bold mb-4" style={{ color: "var(--fg)" }}>Conference Settings</h3>
+                    <div className="card p-5 rounded-2xl">
+                      <h3 className="text-2xl font-bold mb-3" style={{ color: "var(--fg)" }}>Conference Settings</h3>
                       <div className="space-y-3">
                         <div className="p-3 rounded-xl" style={{ background: "var(--bg-subtle)" }}>
                           <p className="text-xs font-semibold mb-2" style={{ color: "var(--fg)" }}>Currency</p>
@@ -5667,6 +5792,7 @@ export default function OrganizerDashboardPage() {
                                   label="Remove"
                                   confirmTitle={`Remove "${doc.title}"?`}
                                   confirmDescription="This document will no longer be visible on the public conference page."
+                                  requireTypedText="REMOVE"
                                   onConfirm={() => void removeCommonDocument(doc.id)}
                                 />
                               </div>
@@ -5762,6 +5888,7 @@ export default function OrganizerDashboardPage() {
                                         label="Remove"
                                         confirmTitle={`Remove "${doc.title}"?`}
                                         confirmDescription={`This document will no longer be visible under ${committee.name} on the public conference page.`}
+                                        requireTypedText="REMOVE"
                                         onConfirm={() => void removeCommitteeDocument(committee.id, doc.id)}
                                       />
                                     </div>
@@ -5820,6 +5947,7 @@ export default function OrganizerDashboardPage() {
                                   label="Remove"
                                   confirmTitle={`Remove previous edition "${edition.title}"?`}
                                   confirmDescription="This edition will no longer appear on the public conference page."
+                                  requireTypedText="REMOVE"
                                   onConfirm={() => {
                                     updateOrganizerConferenceConfig(selectedConference.id, {
                                       previousEditions: (selectedConference.previousEditions || []).filter((entry) => entry.id !== edition.id),
@@ -6011,9 +6139,9 @@ export default function OrganizerDashboardPage() {
                   )}
 
                   {activeSection === "team" && (
-                    <div className="card p-6 rounded-2xl">
-                      <h3 className="text-lg font-bold mb-4" style={{ color: "var(--fg)" }}>Teams</h3>
-                      <div className="grid grid-cols-2 gap-2 mb-4">
+                    <div className="card p-5 rounded-2xl">
+                      <h3 className="text-lg font-bold mb-3" style={{ color: "var(--fg)" }}>Teams</h3>
+                      <div className="grid grid-cols-2 gap-2 mb-3">
                         {([
                           { id: "organizer", label: "Organizing Team" },
                           { id: "secretariat", label: "Secretariat" },
@@ -6035,11 +6163,74 @@ export default function OrganizerDashboardPage() {
                           </button>
                         ))}
                       </div>
-                      <p className="text-xs mb-4" style={{ color: "var(--fg-muted)" }}>
+                      <p className="text-xs mb-3" style={{ color: "var(--fg-muted)" }}>
                         {teamTypeTab === "secretariat"
                           ? "Add the Secretary-General, Deputy Secretary-General, Directors, and other secretariat members shown on the public conference page."
                           : "Add organizers who help manage conference operations and applications."}
                       </p>
+                      <button
+                        type="button"
+                        className="btn btn-ghost text-xs mb-3"
+                        onClick={() => {
+                          if (
+                            !window.confirm(
+                              `Import accepted ${teamTypeTab === "secretariat" ? "secretariat" : "organizer"} applications into the team list?`
+                            )
+                          ) {
+                            return;
+                          }
+                          const categoryTypeById = new Map(
+                            selectedConference.registrationCategories.map((category) => [
+                              category.id,
+                              category.applicationType || "delegate",
+                            ])
+                          );
+                          const targetType = teamTypeTab;
+                          const current = selectedConference.organizerTeam || [];
+                          const existingEmails = new Set(
+                            current.map((entry) => entry.email.trim().toLowerCase()).filter(Boolean)
+                          );
+                          const imported = (selectedConference.applicants || [])
+                            .filter((applicant) => applicant.status === "Allotted")
+                            .filter((applicant) => {
+                              const type = applicant.categoryId
+                                ? categoryTypeById.get(applicant.categoryId) || "delegate"
+                                : "delegate";
+                              return type === targetType;
+                            })
+                            .filter((applicant) => {
+                              const email = (applicant.userEmail || "").trim().toLowerCase();
+                              return email && !existingEmails.has(email);
+                            })
+                            .map((applicant) => ({
+                              id: `team-import-${applicant.id}`,
+                              name: applicant.name,
+                              email: applicant.userEmail || "",
+                              role:
+                                teamTypeTab === "secretariat"
+                                  ? "Secretary-General"
+                                  : "USG",
+                              teamType: teamTypeTab,
+                              permissions:
+                                teamTypeTab === "secretariat"
+                                  ? []
+                                  : (["view", "applications"] as const),
+                            }));
+
+                          if (imported.length === 0) {
+                            toast.show("No new accepted applications to import.", "info");
+                            return;
+                          }
+
+                          updateOrganizerConferenceConfig(selectedConference.id, {
+                            organizerTeam: [...current, ...imported],
+                          });
+                          toast.show(`Imported ${imported.length} team member(s).`, "success");
+                          void syncOrganizerConferenceById(selectedConference.id);
+                        }}
+                      >
+                        Import accepted {teamTypeTab === "secretariat" ? "secretariat" : "organizer"} applications
+                      </button>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-2">
                         <input className="input-base text-xs" placeholder="Name" value={teamDraft.name} onChange={(event) => setTeamDraft((prev) => ({ ...prev, name: event.target.value }))} />
                         <input className="input-base text-xs" placeholder="Email" value={teamDraft.email} onChange={(event) => setTeamDraft((prev) => ({ ...prev, email: event.target.value }))} />
@@ -6053,38 +6244,6 @@ export default function OrganizerDashboardPage() {
                           value={teamDraft.role}
                           onChange={(event) => setTeamDraft((prev) => ({ ...prev, role: event.target.value }))}
                         />
-                        <div className="col-span-2">
-                          <label className="text-xs font-semibold" style={{ color: "var(--fg-muted)" }}>Photo (optional)</label>
-                          <p className="text-[11px] mt-0.5 mb-1" style={{ color: "var(--fg-muted)" }}>
-                            Upload now or skip — you can add a photo later by removing and re-adding the member.
-                          </p>
-                          <input
-                            type="file"
-                            accept="image/*"
-                            className="input-base text-xs mt-1"
-                            onChange={(event) => {
-                              const file = event.target.files?.[0];
-                              if (!file) return;
-                              if (file.size > 2 * 1024 * 1024) {
-                                toast.show("Team photo must be under 2MB.", "error");
-                                event.target.value = "";
-                                return;
-                              }
-                              const reader = new FileReader();
-                              reader.onload = () => {
-                                setTeamDraft((prev) => ({
-                                  ...prev,
-                                  photoUrl: typeof reader.result === "string" ? reader.result : "",
-                                }));
-                              };
-                              reader.readAsDataURL(file);
-                            }}
-                          />
-                          {teamDraft.photoUrl && (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img src={teamDraft.photoUrl} alt="Team preview" className="mt-2 w-14 h-14 rounded-xl object-cover" />
-                          )}
-                        </div>
                       </div>
                       <button
                         className="btn btn-primary text-xs mb-3"
@@ -6102,7 +6261,6 @@ export default function OrganizerDashboardPage() {
                                 email: teamDraft.email.trim(),
                                 role: teamDraft.role,
                                 teamType: teamTypeTab,
-                                photoUrl: teamDraft.photoUrl || undefined,
                                 permissions:
                                   teamTypeTab === "secretariat"
                                     ? []
@@ -6120,7 +6278,6 @@ export default function OrganizerDashboardPage() {
                             name: "",
                             email: "",
                             role: teamTypeTab === "secretariat" ? "Secretary-General" : "USG",
-                            photoUrl: "",
                           });
                           toast.show(
                             teamTypeTab === "secretariat"
@@ -6145,30 +6302,9 @@ export default function OrganizerDashboardPage() {
                           .filter((member) => (member.teamType || "organizer") === teamTypeTab)
                           .map((member) => (
                           <div key={member.id} className="p-3 rounded-xl flex items-start justify-between gap-3" style={{ background: "var(--bg-subtle)" }}>
-                            <div className="flex items-start gap-3 min-w-0">
-                              {member.photoUrl ? (
-                                // eslint-disable-next-line @next/next/no-img-element
-                                <img src={member.photoUrl} alt={member.name} className="w-12 h-12 rounded-xl object-cover flex-shrink-0" />
-                              ) : (
-                                <div
-                                  className="w-12 h-12 rounded-xl flex items-center justify-center text-white text-base font-bold flex-shrink-0"
-                                  style={{ background: "linear-gradient(135deg, #2563eb, #60a5fa)" }}
-                                >
-                                  {member.name[0]?.toUpperCase() || "T"}
-                                </div>
-                              )}
-                              <div className="min-w-0">
-                                <p className="text-sm font-semibold" style={{ color: "var(--fg)" }}>{member.name}</p>
-                                <p className="text-xs mt-0.5" style={{ color: "var(--blue)" }}>{member.role}</p>
-                                <p className="text-xs mt-0.5" style={{ color: "var(--fg-muted)" }}>{member.email}</p>
-                                <div className="flex flex-wrap gap-1 mt-2">
-                                  {member.permissions.map((permission) => (
-                                    <span key={permission} className="badge badge-gray text-[10px]">
-                                      {permission}
-                                    </span>
-                                  ))}
-                                </div>
-                              </div>
+                            <div className="min-w-0">
+                              <p className="text-sm font-semibold" style={{ color: "var(--fg)" }}>{member.name}</p>
+                              <p className="text-xs mt-0.5" style={{ color: "var(--fg-muted)" }}>{member.email}</p>
                             </div>
                             <DestructiveConfirmButton
                               label="Remove"
@@ -6193,7 +6329,7 @@ export default function OrganizerDashboardPage() {
                   )}
 
                   {activeSection === "awards" && (
-                  <div className="grid md:grid-cols-1 gap-6">
+                  <div className="space-y-4">
                     <div className="card p-6 rounded-2xl">
                       <h3 className="text-lg font-bold mb-4" style={{ color: "var(--fg)" }}>Awards Module</h3>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-2">
@@ -6209,8 +6345,28 @@ export default function OrganizerDashboardPage() {
                         />
                         <select
                           className="input-base text-sm app-select-modern"
+                          value={awardDraft.committeeId}
+                          onChange={(event) => setAwardDraft((prev) => ({ ...prev, committeeId: event.target.value }))}
+                        >
+                          <option value="">Select committee (optional)</option>
+                          {selectedConference.committees.map((committee) => (
+                            <option key={committee.id} value={committee.id}>
+                              {committee.name}
+                            </option>
+                          ))}
+                        </select>
+                        <select
+                          className="input-base text-sm app-select-modern"
                           value={awardDraft.participantId}
-                          onChange={(event) => setAwardDraft((prev) => ({ ...prev, participantId: event.target.value }))}
+                          onChange={(event) => {
+                            const participantId = event.target.value;
+                            const participant = selectedConference.applicants.find((entry) => entry.id === participantId);
+                            setAwardDraft((prev) => ({
+                              ...prev,
+                              participantId,
+                              committeeId: participant?.assignedCommitteeId || prev.committeeId,
+                            }));
+                          }}
                         >
                           <option value="">Select winner (optional — assign later)</option>
                           {selectedConference.applicants.map((applicant) => (
@@ -6226,12 +6382,18 @@ export default function OrganizerDashboardPage() {
                         onClick={() => {
                           if (!awardDraft.category.trim()) return;
                           const participant = selectedConference.applicants.find((entry) => entry.id === awardDraft.participantId);
+                          const selectedCommittee = selectedConference.committees.find(
+                            (committee) => committee.id === awardDraft.committeeId
+                          );
                           const amountValue = awardDraft.amount.trim() ? Number(awardDraft.amount) : undefined;
                           addConferenceAward(selectedConference.id, {
                             category: awardDraft.category.trim(),
                             prizeTitle: awardDraft.prizeTitle.trim() || undefined,
                             amount: amountValue && Number.isFinite(amountValue) && amountValue > 0 ? amountValue : undefined,
                             description: awardDraft.description.trim() || undefined,
+                            committeeId: selectedCommittee?.id || participant?.assignedCommitteeId || undefined,
+                            committeeName: selectedCommittee?.name || participant?.assignedCommitteeName || undefined,
+                            portfolioName: participant?.assignedPortfolioName || undefined,
                             participantId: participant?.id,
                             participantName: participant?.name,
                             participantUserId: participant?.userId,
@@ -6242,20 +6404,43 @@ export default function OrganizerDashboardPage() {
                             prizeTitle: "",
                             amount: "",
                             description: "",
+                            committeeId: "",
                             participantId: "",
                           });
                         }}
                       >
                         Add Award
                       </button>
-                      <div className="space-y-2">
-                        {(selectedConference.awards || []).map((award) => (
+                      <p className="text-xs mb-3" style={{ color: "var(--fg-muted)" }}>
+                        Awards are committee-specific. When you assign a winner with a portfolio, it appears on the public portfolio matrix for that committee.
+                      </p>
+                      <div className="space-y-4">
+                        {Object.entries(
+                          (selectedConference.awards || []).reduce<Record<string, typeof selectedConference.awards>>(
+                            (groups, award) => {
+                              const key = award?.committeeName?.trim() || "Conference-wide";
+                              groups[key] = [...(groups[key] || []), award];
+                              return groups;
+                            },
+                            {}
+                          )
+                        ).map(([committeeName, committeeAwards]) => (
+                          <div key={committeeName}>
+                            <p className="text-xs font-semibold mb-2" style={{ color: "var(--fg-muted)" }}>
+                              {committeeName}
+                            </p>
+                            <div className="space-y-2">
+                              {(committeeAwards || []).map((award) => (
                           <div key={award.id} className="p-3 rounded-xl flex items-center justify-between" style={{ background: "var(--bg-subtle)" }}>
                             <div>
                               <p className="text-sm font-semibold" style={{ color: "var(--fg)" }}>{award.category}</p>
                               <p className="text-xs" style={{ color: "var(--fg-muted)" }}>
                                 {award.prizeTitle || "No prize title"}
                                 {award.amount ? ` · ${formatMoney(award.amount, selectedConference?.currency || "INR")}` : ""}
+                              </p>
+                              <p className="text-xs" style={{ color: "var(--fg-muted)" }}>
+                                Committee: {award.committeeName || "Not set"}
+                                {award.portfolioName ? ` · Portfolio: ${award.portfolioName}` : ""}
                               </p>
                               <p className="text-xs" style={{ color: "var(--fg-muted)" }}>
                                 Winner: {award.participantName || "Not assigned yet"}
@@ -6267,6 +6452,9 @@ export default function OrganizerDashboardPage() {
                               confirmDescription={`"${award.category}" will be permanently removed.`}
                               onConfirm={() => removeConferenceAward(selectedConference.id, award.id)}
                             />
+                          </div>
+                              ))}
+                            </div>
                           </div>
                         ))}
                       </div>
@@ -6310,7 +6498,7 @@ export default function OrganizerDashboardPage() {
                         Category type
                       </p>
                       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
-                        {REGISTRATION_CATEGORY_UI_TYPES.map((type) => (
+                        {REGISTRATION_CATEGORY_UI_TYPES.filter((type) => type !== "other").map((type) => (
                           <button
                             key={type}
                             type="button"
@@ -6428,7 +6616,7 @@ export default function OrganizerDashboardPage() {
                                 />
                               </div>
                             )}
-                            <div className="rounded-lg p-3 mt-3 space-y-2" style={{ background: "var(--bg)" }}>
+                            <div className="rounded-lg p-3 mt-2 space-y-2" style={{ background: "var(--bg)" }}>
                               <div className="flex items-center justify-between gap-2">
                                 <p className="text-xs font-semibold" style={{ color: "var(--fg)" }}>Category Pricing</p>
                                 {!isNoPhasesCategory && (
@@ -6554,6 +6742,7 @@ export default function OrganizerDashboardPage() {
                                   label: string;
                                   skipped: boolean;
                                 }> = [
+                                  { step: 1, label: "Category", skipped: false },
                                   {
                                     step: 2,
                                     label: "Preferences",
@@ -6598,7 +6787,7 @@ export default function OrganizerDashboardPage() {
                                             }}
                                             onClick={() => setRegistrationPreviewStep(entry.step)}
                                           >
-                                            Step {entry.step - 1}: {entry.label}
+                                            Step {entry.step}: {entry.label}
                                             {entry.skipped ? " (skipped)" : ""}
                                           </button>
                                         );
@@ -6608,10 +6797,72 @@ export default function OrganizerDashboardPage() {
                                       className="rounded-xl p-4 space-y-3"
                                       style={{ background: "var(--bg-subtle)", border: "1px solid var(--border)" }}
                                     >
+                                      {registrationPreviewStep === 1 && (
+                                        <>
+                                          <h4 className="text-sm font-bold" style={{ color: "var(--fg)" }}>
+                                            1. Select a category
+                                          </h4>
+                                          <div
+                                            className="rounded-xl p-4 space-y-2"
+                                            style={{ border: "1px solid var(--border)", background: "var(--bg)" }}
+                                          >
+                                            <div className="flex items-center justify-between gap-2">
+                                              <span className="font-bold text-sm" style={{ color: "var(--fg)" }}>
+                                                {category.name}
+                                              </span>
+                                              <span className="badge badge-blue">
+                                                {formatMoney(preview.priceResult.amount, previewCurrency)}
+                                              </span>
+                                            </div>
+                                            <p className="text-xs" style={{ color: "var(--blue)" }}>
+                                              {getCategoryTypeLabel(category.applicationType)}
+                                            </p>
+                                            <p className="text-xs" style={{ color: "var(--fg-muted)" }}>
+                                              {category.description || "No description provided."}
+                                            </p>
+                                            {preview.activePhase && (
+                                              <p className="text-xs font-medium" style={{ color: "var(--blue)" }}>
+                                                {preview.activePhase.name} · Active
+                                              </p>
+                                            )}
+                                            {category.pricingPhases.length > 0 && (
+                                              <div className="mt-2 space-y-1.5">
+                                                {category.pricingPhases.map((phase) => {
+                                                  const status = getPhaseStatus(phase, new Date());
+                                                  const badgeClass =
+                                                    status === "Active"
+                                                      ? "badge-green"
+                                                      : status === "Upcoming"
+                                                        ? "badge-blue"
+                                                        : "badge-gray";
+                                                  return (
+                                                    <div key={phase.id} className="flex flex-wrap items-center gap-2">
+                                                      <span className="text-xs font-medium" style={{ color: "var(--fg)" }}>
+                                                        {phase.name}
+                                                      </span>
+                                                      <span className={`badge text-[10px] ${badgeClass}`}>
+                                                        {status === "Ended" ? "Ended" : status}
+                                                      </span>
+                                                    </div>
+                                                  );
+                                                })}
+                                              </div>
+                                            )}
+                                            {preview.isDelegation && (
+                                              <p className="text-[11px] pt-1" style={{ color: "var(--fg-muted)" }}>
+                                                {getCategoryTypeHint("delegation")}
+                                              </p>
+                                            )}
+                                          </div>
+                                          <button type="button" className="btn btn-primary text-xs w-full" disabled>
+                                            Continue →
+                                          </button>
+                                        </>
+                                      )}
                                       {registrationPreviewStep === 2 && (
                                         <>
                                           <h4 className="text-sm font-bold" style={{ color: "var(--fg)" }}>
-                                            1. Preferences
+                                            2. Preferences
                                           </h4>
                                           {preview.isOc ? (
                                             <p className="text-xs" style={{ color: "var(--fg-muted)" }}>
@@ -6675,29 +6926,9 @@ export default function OrganizerDashboardPage() {
                                               )}
                                               {preview.firstCommittee && (
                                                 <p className="text-[11px]" style={{ color: "var(--fg-muted)" }}>
-                                                  Questions asked for {preview.firstCommittee.name}:{" "}
-                                                  {preview.committeeQuestionCount} question
-                                                  {preview.committeeQuestionCount === 1 ? "" : "s"} — edit in the
-                                                  Committees section (Edit Details → Committee Questions).
+                                                  Committee-specific questions are disabled and not shown to students.
                                                 </p>
                                               )}
-                                              {preview.firstCommittee &&
-                                                (preview.firstCommittee.customQuestions ?? []).length > 0 && (
-                                                  <div className="space-y-2 pt-1">
-                                                    {(preview.firstCommittee.customQuestions ?? []).map((question) => (
-                                                      <div key={question.id}>
-                                                        <label
-                                                          className="block text-xs font-semibold mb-1"
-                                                          style={{ color: "var(--fg)" }}
-                                                        >
-                                                          {question.question}
-                                                          {question.required ? " *" : ""}
-                                                        </label>
-                                                        <input className="input-base text-xs w-full" disabled />
-                                                      </div>
-                                                    ))}
-                                                  </div>
-                                                )}
                                             </>
                                           )}
                                           <button type="button" className="btn btn-primary text-xs w-full" disabled>
@@ -6708,7 +6939,7 @@ export default function OrganizerDashboardPage() {
                                       {registrationPreviewStep === 3 && (
                                         <>
                                           <h4 className="text-sm font-bold" style={{ color: "var(--fg)" }}>
-                                            2. Additional questions
+                                            3. Additional questions
                                           </h4>
                                           {!preview.needsQuestions ? (
                                             <p className="text-xs" style={{ color: "var(--fg-muted)" }}>
@@ -6756,7 +6987,7 @@ export default function OrganizerDashboardPage() {
                                       {registrationPreviewStep === 4 && (
                                         <>
                                           <h4 className="text-sm font-bold" style={{ color: "var(--fg)" }}>
-                                            3. {preview.isAllotFirst || preview.priceResult.amount <= 0
+                                            4. {preview.isAllotFirst || preview.priceResult.amount <= 0
                                               ? "Confirm application"
                                               : "Payment"}
                                           </h4>
@@ -7738,61 +7969,13 @@ export default function OrganizerDashboardPage() {
               </div>
             </div>
 
-            <div className="rounded-xl p-3 mb-4 space-y-2" style={{ background: "var(--bg-subtle)" }}>
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs font-semibold" style={{ color: "var(--fg)" }}>Committee Questions</p>
-                  <p className="text-[11px] mt-1" style={{ color: "var(--fg-muted)" }}>
-                    Shown in checkout Step 2 when a student picks this committee as their 1st preference.
-                  </p>
-                </div>
-                <button className="btn btn-ghost text-xs" onClick={addCommitteeQuestionDraftRow}>
-                  + Add Question
-                </button>
-              </div>
-              {detailsEditorDraft.customQuestions.length === 0 ? (
-                <p className="text-xs" style={{ color: "var(--fg-muted)" }}>No committee questions yet.</p>
-              ) : (
-                <div className="space-y-2">
-                  {detailsEditorDraft.customQuestions.map((question, questionIndex) => (
-                    <div
-                      key={question.id}
-                      className="rounded-lg p-2 space-y-2"
-                      style={{ border: "1px solid var(--border)" }}
-                    >
-                      <p className="text-xs font-semibold" style={{ color: "var(--fg-muted)" }}>
-                        Question {questionIndex + 1}
-                      </p>
-                      <input
-                        className="input-base text-xs"
-                        placeholder="Question text"
-                        value={question.question}
-                        onChange={(event) =>
-                          updateCommitteeQuestionDraftRow(question.id, { question: event.target.value })
-                        }
-                      />
-                      <label className="flex items-center gap-2 text-xs" style={{ color: "var(--fg-muted)" }}>
-                        <input
-                          type="checkbox"
-                          checked={question.required}
-                          onChange={(event) =>
-                            updateCommitteeQuestionDraftRow(question.id, { required: event.target.checked })
-                          }
-                        />
-                        Required
-                      </label>
-                      <div className="flex justify-end">
-                        <button
-                          className="btn btn-danger-ghost text-xs"
-                          onClick={() => removeCommitteeQuestionDraftRow(question.id)}
-                        >
-                          Remove Question
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+            <div className="rounded-xl p-3 mb-4" style={{ background: "var(--bg-subtle)" }}>
+              <p className="text-xs font-semibold" style={{ color: "var(--fg)" }}>
+                Committee Questions
+              </p>
+              <p className="text-[11px] mt-1" style={{ color: "var(--fg-muted)" }}>
+                Committee-based questions are disabled for students.
+              </p>
             </div>
 
             <div className="flex gap-2 mt-4">
@@ -7821,6 +8004,7 @@ export default function OrganizerDashboardPage() {
         onClose={() => setReleaseAllotmentsOpen(false)}
         onConfirm={() => {
           if (!selectedConference) return;
+          if (!window.confirm("Confirm release of all draft allotments now?")) return;
           void (async () => {
             setReleasingAllotments(true);
             try {
