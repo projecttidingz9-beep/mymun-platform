@@ -165,6 +165,30 @@ function ConferenceDetailPageContent() {
   const conference = publicView?.conference;
   const useServerPublicContent = publicView?.useServerPublicContent ?? false;
   const showOperationalOverlay = publicView?.hasOrganizerOperationalOverlay ?? false;
+  const publicAwards =
+    (showOperationalOverlay ? organizerConference?.awards : publicDetail?.awards) || [];
+  const awardWinnerByPortfolioKey = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const award of publicAwards) {
+      const committeeName = award.committeeName?.trim();
+      const portfolioName = award.portfolioName?.trim();
+      const winner =
+        ("winnerName" in award ? award.winnerName : undefined) || award.participantName;
+      if (!committeeName || !portfolioName || !winner?.trim()) continue;
+      map.set(`${committeeName.toLowerCase()}::${portfolioName.toLowerCase()}`, winner.trim());
+    }
+    return map;
+  }, [publicAwards]);
+  const awardsByCommittee = useMemo(() => {
+    const groups = new Map<string, typeof publicAwards>();
+    for (const award of publicAwards) {
+      const key = award.committeeName?.trim() || "Conference-wide";
+      const list = groups.get(key) || [];
+      list.push(award);
+      groups.set(key, list);
+    }
+    return Array.from(groups.entries());
+  }, [publicAwards]);
 
   if (organizerConference && organizerConference.status !== "Published" && !canPreviewUnpublishedConference) {
     return (
@@ -512,31 +536,6 @@ function ConferenceDetailPageContent() {
     { key: "organizer", label: "Organizer" },
     { key: "reviews", label: `Reviews (${reviewsToShow.length})` },
   ];
-  const publicAwards =
-    (showOperationalOverlay ? organizerConference?.awards : publicDetail?.awards) || [];
-  const awardWinnerByPortfolioKey = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const award of publicAwards) {
-      const committeeName = award.committeeName?.trim();
-      const portfolioName = award.portfolioName?.trim();
-      const winner =
-        ("winnerName" in award ? award.winnerName : undefined) || award.participantName;
-      if (!committeeName || !portfolioName || !winner?.trim()) continue;
-      map.set(`${committeeName.toLowerCase()}::${portfolioName.toLowerCase()}`, winner.trim());
-    }
-    return map;
-  }, [publicAwards]);
-  const awardsByCommittee = useMemo(() => {
-    const groups = new Map<string, typeof publicAwards>();
-    for (const award of publicAwards) {
-      const key = award.committeeName?.trim() || "Conference-wide";
-      const list = groups.get(key) || [];
-      list.push(award);
-      groups.set(key, list);
-    }
-    return Array.from(groups.entries());
-  }, [publicAwards]);
-
   return (
     <div className="conference-detail-page min-h-screen" style={{ background: "var(--bg)", color: "var(--fg)" }}>
 
