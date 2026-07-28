@@ -674,6 +674,7 @@ html.dark .conference-detail-page .lux-card {
   background: #ffffff;
   border: 1px solid var(--border);
   box-shadow: var(--card-shadow);
+  overflow: visible;
 }
 
 html.dark .conference-detail-page .conference-hero-card {
@@ -682,6 +683,7 @@ html.dark .conference-detail-page .conference-hero-card {
   box-shadow:
     0 1px 0 rgba(243, 237, 224, 0.04) inset,
     0 20px 42px rgba(0, 0, 0, 0.34);
+  overflow: visible;
 }
 
 .conference-detail-page .conference-banner-shell {

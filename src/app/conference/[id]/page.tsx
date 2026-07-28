@@ -671,7 +671,7 @@ function ConferenceDetailPageContent() {
             </div>
 
             {/* Registration Card */}
-            <div className="order-1 lg:order-none conference-hero-card w-full max-w-[420px] mx-auto lg:mx-0 lux-card p-5 sm:p-6 flex-shrink-0 lg:sticky lg:top-[calc(6rem+env(safe-area-inset-top,0px))] self-start">
+            <div className="order-1 lg:order-none conference-hero-card w-full max-w-[420px] mx-auto lg:mx-0 lux-card p-5 pb-8 sm:p-6 sm:pb-8 flex-shrink-0 lg:sticky lg:top-[calc(6rem+env(safe-area-inset-top,0px))] self-start">
               <p
                 className="text-xs sm:text-sm font-semibold"
                 style={{
@@ -739,7 +739,9 @@ function ConferenceDetailPageContent() {
                 style={{
                   width: "100%",
                   marginTop: "18px",
+                  minHeight: "46px",
                   padding: "14px 18px",
+                  lineHeight: 1.2,
                   fontSize: "14px",
                   cursor: isOrganizerUser || !registrationIsOpen ? "not-allowed" : "pointer",
                   opacity: isOrganizerUser || !registrationIsOpen ? 0.6 : 1,
