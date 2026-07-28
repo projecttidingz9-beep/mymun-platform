@@ -9,7 +9,7 @@ import Footer from "@/components/Footer";
 import DemoAccountBanner from "@/components/DemoAccountBanner";
 import AppRouteSkeleton from "@/components/AppRouteSkeleton";
 import SignInGate from "@/components/SignInGate";
-import { DestructiveConfirmButton } from "@/components/ConfirmModal";
+import ConfirmModal, { DestructiveConfirmButton } from "@/components/ConfirmModal";
 import { useToast } from "@/components/Toast";
 import { ensureServerSession } from "@/lib/client/session";
 import { isDemoAccount } from "@/lib/demo-account";
@@ -205,6 +205,15 @@ function DashboardPageContent() {
   const [withdrawConfirmId, setWithdrawConfirmId] = useState<string | null>(null);
   const [payingRegistrationId, setPayingRegistrationId] = useState<string | null>(null);
   const [rejectingAllotmentId, setRejectingAllotmentId] = useState<string | null>(null);
+  const [pendingConfirm, setPendingConfirm] = useState<{
+    title: string;
+    description?: string;
+    requireTypedText?: string;
+    confirmLabel?: string;
+    danger?: boolean;
+    onConfirm: () => void | Promise<void>;
+  } | null>(null);
+  const requestConfirm = (config: NonNullable<typeof pendingConfirm>) => setPendingConfirm(config);
   const [downloadingInvoiceId, setDownloadingInvoiceId] = useState<string | null>(null);
   const [withdrawNotice, setWithdrawNotice] = useState("");
   const [notificationPreferences, setNotificationPreferences] = useState<
@@ -676,10 +685,13 @@ function DashboardPageContent() {
       toast.show("Please confirm your password to delete account.", "error");
       return;
     }
-    const confirmed = window.confirm(
-      "This will permanently delete your account data. This action cannot be undone."
-    );
-    if (!confirmed) return;
+    requestConfirm({
+      title: "Permanently delete your account?",
+      description:
+        "This cannot be undone. All profile data will be removed. Type DELETE to confirm.",
+      requireTypedText: "DELETE",
+      confirmLabel: "Delete my account",
+      onConfirm: async () => {
     setDeleteLoading(true);
     try {
       const response = await fetch("/api/auth/delete-account", {
@@ -699,6 +711,8 @@ function DashboardPageContent() {
     } finally {
       setDeleteLoading(false);
     }
+      },
+    });
   };
 
   const onResendVerification = async () => {
@@ -730,6 +744,12 @@ function DashboardPageContent() {
   };
 
   const onLogoutAllDevices = async () => {
+    requestConfirm({
+      title: "Sign out all devices?",
+      description:
+        "You will be signed out everywhere, including this browser. Continue only if you suspect unauthorized access.",
+      confirmLabel: "Sign out everywhere",
+      onConfirm: async () => {
     setLogoutAllNotice("");
     setLogoutAllLoading(true);
     try {
@@ -748,6 +768,8 @@ function DashboardPageContent() {
     } finally {
       setLogoutAllLoading(false);
     }
+      },
+    });
   };
 
   const onForgotPasswordFromSecurity = async () => {
@@ -823,10 +845,13 @@ function DashboardPageContent() {
 
   const onRejectAllotment = async (registration: Registration) => {
     if (registration.paid || !registration.allotmentReleased || rejectingAllotmentId === registration.id) return;
-    const confirmed = window.confirm(
-      "Reject this allotment? The seat will be released and you will not be assigned to that committee."
-    );
-    if (!confirmed) return;
+    requestConfirm({
+      title: "Reject this allotment?",
+      description:
+        "The seat will be released and you will not be assigned to that committee. Type REJECT to confirm.",
+      requireTypedText: "REJECT",
+      confirmLabel: "Reject allotment",
+      onConfirm: async () => {
     setRejectingAllotmentId(registration.id);
     try {
       const res = await fetch(`/api/registrations/${registration.id}/reject-allotment`, {
@@ -845,6 +870,8 @@ function DashboardPageContent() {
     } finally {
       setRejectingAllotmentId(null);
     }
+      },
+    });
   };
 
   const onSaveNotificationPreferences = async () => {
@@ -1110,8 +1137,8 @@ function DashboardPageContent() {
                             )}
                           </div>
                         </div>
-                        <div className="flex items-center justify-between mt-5 pt-5" style={{ borderTop: "1px solid var(--border)" }}>
-                          <div className="flex items-center gap-2">
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mt-5 pt-5" style={{ borderTop: "1px solid var(--border)" }}>
+                          <div className="flex items-center gap-2 flex-wrap">
                             <span className={`badge text-xs ${reg.paid ? "badge-success" : "badge-danger"}`}>
                               {reg.paid ? "Paid" : "Pending Payment"}
                             </span>
@@ -1119,11 +1146,11 @@ function DashboardPageContent() {
                               {formatMoney(reg.amount, "INR")}
                             </span>
                           </div>
-                          <div className="flex gap-2 flex-wrap">
+                          <div className="flex gap-2 flex-wrap justify-start sm:justify-end">
                             {!reg.paid && reg.amount > 0 && reg.organizerStatus !== "Rejected" && (
                               <button
                                 type="button"
-                                className="btn btn-primary text-xs"
+                                className="btn btn-primary text-xs min-h-[44px] touch-manipulation"
                                 style={{ padding: "6px 14px", borderRadius: "8px" }}
                                 disabled={payingRegistrationId === reg.id}
                                 onClick={() => void onPayRegistration(reg)}
@@ -1134,7 +1161,7 @@ function DashboardPageContent() {
                             {reg.allotmentReleased && !reg.paid && reg.organizerStatus === "Allotted" && (
                               <button
                                 type="button"
-                                className="btn btn-ghost text-xs"
+                                className="btn btn-ghost text-xs min-h-[44px] touch-manipulation"
                                 style={{ padding: "6px 14px", borderRadius: "8px", color: "#b91c1c" }}
                                 disabled={rejectingAllotmentId === reg.id}
                                 onClick={() => void onRejectAllotment(reg)}
@@ -1967,7 +1994,7 @@ function DashboardPageContent() {
                   <button
                     type="button"
                     onClick={onLogoutAllDevices}
-                    className="btn btn-secondary text-xs w-full"
+                    className="btn btn-secondary text-xs w-full min-h-[44px] touch-manipulation"
                     disabled={logoutAllLoading}
                   >
                     {logoutAllLoading ? "Signing out..." : "Sign out all devices"}
@@ -1989,7 +2016,7 @@ function DashboardPageContent() {
                   />
                   <button
                     onClick={onDeleteAccount}
-                    className="btn btn-danger text-xs w-full mt-2"
+                    className="btn btn-danger text-xs w-full mt-2 min-h-[44px] touch-manipulation"
                     disabled={deleteLoading}
                   >
                     {deleteLoading ? "Deleting..." : "Delete My Account"}
@@ -2226,6 +2253,20 @@ function DashboardPageContent() {
           </div>
         </div>
       </div>
+      <ConfirmModal
+        open={Boolean(pendingConfirm)}
+        title={pendingConfirm?.title || ""}
+        description={pendingConfirm?.description}
+        requireTypedText={pendingConfirm?.requireTypedText}
+        confirmLabel={pendingConfirm?.confirmLabel}
+        danger={pendingConfirm?.danger !== false}
+        onClose={() => setPendingConfirm(null)}
+        onConfirm={async () => {
+          const action = pendingConfirm?.onConfirm;
+          setPendingConfirm(null);
+          if (action) await action();
+        }}
+      />
       <Footer />
     </>
   );

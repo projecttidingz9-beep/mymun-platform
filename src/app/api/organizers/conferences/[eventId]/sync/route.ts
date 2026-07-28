@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
 import type { OrganizerConference } from "@/lib/types";
 import {
+  assertEventMutableForOrganizer,
   getRequestActor,
   isSuperAdmin,
   requireEventOrganizerAccess,
@@ -33,6 +34,13 @@ export async function PUT(
 
   if (!(await requireEventOrganizerAccess(actor, eventId))) {
     return NextResponse.json({ error: "You do not have access to this conference." }, { status: 403 });
+  }
+  const mutability = await assertEventMutableForOrganizer(eventId);
+  if (!mutability.ok) {
+    return NextResponse.json(
+      { error: "Conference is closed and can no longer be modified." },
+      { status: 409 }
+    );
   }
 
   const body = (await request.json().catch(() => ({}))) as {

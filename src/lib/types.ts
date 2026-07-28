@@ -122,6 +122,7 @@ export interface RegistrationCategory {
   name: string;
   description: string;
   applicationType?: "delegate" | "chair" | "delegation" | "organizer" | "secretariat" | "press" | "other";
+  minDelegatesPerDelegation?: number;
   maxDelegatesPerDelegation?: number;
   isOpen?: boolean;
   deadlineOverride?: string;
@@ -386,6 +387,8 @@ export interface OrganizerConference {
   bankingDetails?: OrganizerBankingDetails;
   statusEmailTemplates?: OrganizerStatusEmailTemplates;
   status: "Draft" | "Review" | "Published";
+  /** True when organizer write actions are blocked by lifecycle status (e.g. archived/cancelled). */
+  isWriteLocked?: boolean;
   /** Set by platform super-admin when a publish request is rejected (returned to Draft). */
   adminRejectionNote?: string;
   registrationCategories: RegistrationCategory[];

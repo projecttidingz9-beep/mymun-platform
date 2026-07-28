@@ -26,7 +26,7 @@ import { useToast } from "@/components/Toast";
 import AppSelect from "@/components/AppSelect";
 import { normalizeDelegationCode } from "@/lib/delegation-code";
 
-type Step = 1 | 2 | 3 | 4 | 5;
+type Step = 1 | 2 | 3 | 4 | 5 | 6;
 
 type DelegationAffiliation = {
   id: string;
@@ -75,7 +75,7 @@ export default function CheckoutPage() {
   const [submittedRegistration, setSubmittedRegistration] = useState<Registration | null>(null);
   const [submittedPaymentIntentId, setSubmittedPaymentIntentId] = useState<string | null>(null);
   const [payingOnline, setPayingOnline] = useState(false);
-  const [delegationSchoolName, setDelegationSchoolName] = useState("");
+  const [delegationName, setDelegationName] = useState("");
   const [delegationMaxMembers, setDelegationMaxMembers] = useState("");
   const [delegationJoinCode, setDelegationJoinCode] = useState("");
   const [delegationMode, setDelegationMode] = useState<"create" | "join" | null>(null);
@@ -262,27 +262,31 @@ export default function CheckoutPage() {
     committees.find((committee) => committee.id === selectedCommitteeId)?.portfolios ?? [];
   const applicationType = selectedCategory?.applicationType || "delegate";
   const isOcCategory = applicationType === "organizer" || applicationType === "secretariat";
-  const isChairCategory = applicationType === "chair";
+  const isSecretariatCategory = applicationType === "secretariat";
+  const isEbCategory = applicationType === "chair";
   const isDelegationCategory = applicationType === "delegation";
   const isPressCategory = applicationType === "press";
+  const isSecretariatDirectSubmit = isSecretariatCategory;
+  const isEbDirectSubmit = isEbCategory;
 
   useEffect(() => {
     if (isDelegationCategory && !delegationAffiliation && delegationMode === null) {
       setDelegationMode("create");
-      if (!delegationSchoolName && school) setDelegationSchoolName(school);
     }
     if (!isDelegationCategory && delegationMode !== null) {
       setDelegationMode(null);
       setDelegationError("");
     }
-  }, [isDelegationCategory, delegationAffiliation, delegationMode, delegationSchoolName, school]);
+  }, [isDelegationCategory, delegationAffiliation, delegationMode]);
 
-  /** Step 2: preferences — skipped only for organizer / secretariat (no committee allotment). */
-  const needsPreferencesStep = Boolean(selectedCategory) && !isOcCategory;
-  /** Step 3 is always part of the 4-step flow; empty when no organizer questions. */
-  const hasCategoryQuestions = (selectedCategory?.formFields?.length ?? 0) > 0;
+  /** Step 2: committee preferences — skipped only for organizer / secretariat. */
+  const needsCommitteeStep = Boolean(selectedCategory) && !isOcCategory;
+  /** Step 3: portfolio/country prefs — after committees, for delegate/delegation when portfolios exist. */
   const needsPortfolioPrefs =
-    needsPreferencesStep && (applicationType === "delegate" || applicationType === "delegation");
+    needsCommitteeStep && (applicationType === "delegate" || applicationType === "delegation");
+  /** Step 4: organizer custom questions — only when the category has form fields. */
+  const hasCategoryQuestions = (selectedCategory?.formFields?.length ?? 0) > 0;
+  const needsQuestionsStep = hasCategoryQuestions;
   const pressCommittees = committees.filter(
     (committee) =>
       committee.committeeFormat === "PRESS_CORPS" ||
@@ -290,8 +294,12 @@ export default function CheckoutPage() {
       committee.customTypeLabel?.toLowerCase().includes("press")
   );
   const checkoutCommittees = isPressCategory && pressCommittees.length > 0 ? pressCommittees : committees;
-  const requiredCommitteePrefs = Math.min(3, Math.max(1, checkoutCommittees.length || 1));
+  /** When organizers have not added committees yet, do not block registration on prefs. */
+  const requiredCommitteePrefs =
+    checkoutCommittees.length === 0 ? 0 : Math.min(3, Math.max(1, checkoutCommittees.length));
   const requiredPortfolioPrefs = Math.min(3, Math.max(0, selectedCommitteePortfolios.length));
+  const needsPortfolioStep =
+    needsPortfolioPrefs && checkoutCommittees.length > 0 && requiredPortfolioPrefs > 0;
   const preferenceLabel = selectedCommittee
     ? preferenceLabelForCommittee(selectedCommittee.committeeType, selectedCommittee.committeeFormat)
     : "Country";
@@ -305,7 +313,30 @@ export default function CheckoutPage() {
         status: "base" as const,
       };
 
-  const resolvedFeeDisplay = formatMoney(priceResult.amount, checkoutCurrency);
+  const effectiveCheckoutAmount = isSecretariatDirectSubmit || isEbDirectSubmit ? 0 : priceResult.amount;
+  const resolvedFeeDisplay = formatMoney(effectiveCheckoutAmount, checkoutCurrency);
+  const flowSteps: Array<{ id: Step; label: string }> = [
+    { id: 1, label: "Category" },
+    ...(needsCommitteeStep ? [{ id: 2 as Step, label: "Committees" }] : []),
+    ...(needsPortfolioStep ? [{ id: 3 as Step, label: "Portfolios" }] : []),
+    ...(needsQuestionsStep ? [{ id: 4 as Step, label: "Questions" }] : []),
+    {
+      id: 5,
+      label:
+        isSecretariatDirectSubmit || isEbDirectSubmit || isAllotFirst || effectiveCheckoutAmount <= 0
+          ? "Confirm"
+          : "Payment",
+    },
+  ];
+  const activeFlowStepId = (Math.min(step, 5) as Step);
+  const currentFlowIndex = Math.max(
+    0,
+    flowSteps.findIndex((entry) => entry.id === activeFlowStepId)
+  );
+  const flowStepDisplay =
+    step >= 6
+      ? "Checkout · Complete"
+      : `Checkout · Step ${currentFlowIndex + 1}/${flowSteps.length}`;
 
   const committeeOptionLabel = (committee: OrganizerCommittee) => {
     if (!selectedCategory) return committee.name;
@@ -436,16 +467,18 @@ export default function CheckoutPage() {
       setSubmittedPaymentIntentId(paymentIntentId);
 
       const shouldPayOnline =
+        !isSecretariatDirectSubmit &&
+        !isEbDirectSubmit &&
         !isAllotFirst &&
-        priceResult.amount > 0 &&
+        effectiveCheckoutAmount > 0 &&
         !payload.clientRegistration.paid &&
         Boolean(paymentIntentId);
 
       if (shouldPayOnline && paymentIntentId) {
-        await startOnlinePayment(paymentIntentId, priceResult.amount);
+        await startOnlinePayment(paymentIntentId, effectiveCheckoutAmount);
       }
 
-      setStep(5);
+      setStep(6);
     } finally {
       setLoading(false);
     }
@@ -465,43 +498,77 @@ export default function CheckoutPage() {
     portfolioPreferenceSecondary,
     portfolioPreferenceTertiary,
   ].slice(0, requiredPortfolioPrefs);
-  const isPreferencesValid =
-    !needsPreferencesStep ||
-    (committeePrefValues.every(Boolean) &&
-      committeeQuestionsValid &&
-      (!needsPortfolioPrefs ||
-        selectedCommitteePortfolios.length === 0 ||
-        (portfolioPrefValues.length === requiredPortfolioPrefs &&
-          portfolioPrefValues.every(Boolean))));
+  const isCommitteePrefsValid =
+    !needsCommitteeStep ||
+    checkoutCommittees.length === 0 ||
+    (committeePrefValues.every(Boolean) && committeeQuestionsValid);
+  const isPortfolioPrefsValid =
+    !needsPortfolioStep ||
+    (portfolioPrefValues.length === requiredPortfolioPrefs && portfolioPrefValues.every(Boolean));
   const isQuestionsValid =
-    !hasCategoryQuestions ||
+    !needsQuestionsStep ||
     (!!selectedCategory &&
       selectedCategory.formFields.every(
         (field) =>
           !field.required ||
           (answers[field.id] !== undefined && String(answers[field.id]).trim() !== "")
       ));
-  const isStep4Valid = isStep1Valid && isPreferencesValid && isQuestionsValid;
+  const isStep5Valid =
+    isStep1Valid && isCommitteePrefsValid && isPortfolioPrefsValid && isQuestionsValid;
+
+  const nextAfterCommittees = (): Step => {
+    if (needsPortfolioStep) return 3;
+    if (needsQuestionsStep) return 4;
+    return 5;
+  };
+  const nextAfterPortfolios = (): Step => (needsQuestionsStep ? 4 : 5);
+  const prevBeforePayment = (): Step => {
+    if (needsQuestionsStep) return 4;
+    if (needsPortfolioStep) return 3;
+    if (needsCommitteeStep) return 2;
+    return 1;
+  };
+  const prevBeforeQuestions = (): Step => {
+    if (needsPortfolioStep) return 3;
+    if (needsCommitteeStep) return 2;
+    return 1;
+  };
 
   const goForwardFrom = (from: Step) => {
     if (from === 1) {
-      setStep(needsPreferencesStep ? 2 : 3);
+      if (needsCommitteeStep) {
+        setStep(2);
+        return;
+      }
+      if (needsQuestionsStep) {
+        setStep(4);
+        return;
+      }
+      setStep(5);
       return;
     }
     if (from === 2) {
-      setStep(3);
-      return;
-    }
-    if (from === 3) setStep(4);
-  };
-
-  const goBackFrom = (from: Step) => {
-    if (from === 4) {
-      setStep(3);
+      setStep(nextAfterCommittees());
       return;
     }
     if (from === 3) {
-      setStep(needsPreferencesStep ? 2 : 1);
+      setStep(nextAfterPortfolios());
+      return;
+    }
+    if (from === 4) setStep(5);
+  };
+
+  const goBackFrom = (from: Step) => {
+    if (from === 5) {
+      setStep(prevBeforePayment());
+      return;
+    }
+    if (from === 4) {
+      setStep(prevBeforeQuestions());
+      return;
+    }
+    if (from === 3) {
+      setStep(needsCommitteeStep ? 2 : 1);
       return;
     }
     if (from === 2) setStep(1);
@@ -523,9 +590,9 @@ export default function CheckoutPage() {
   };
 
   const handleCreateDelegation = async () => {
-    const schoolName = delegationSchoolName.trim() || school;
-    if (!schoolName) {
-      setDelegationError("Enter your school or institution name.");
+    const trimmedDelegationName = delegationName.trim();
+    if (!trimmedDelegationName) {
+      setDelegationError("Enter a delegation name.");
       return;
     }
     const maxMembers = delegationMaxMembers ? Number(delegationMaxMembers) : undefined;
@@ -548,7 +615,8 @@ export default function CheckoutPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           eventId: resolvedEventId,
-          schoolName,
+          delegationName: trimmedDelegationName,
+          schoolName: school || trimmedDelegationName,
           maxMembers,
         }),
       });
@@ -677,11 +745,34 @@ export default function CheckoutPage() {
                 </div>
               )}
               <div className="min-w-0">
-                <div className="section-label mb-3">
-                  {step === 5 ? "Checkout · Complete" : `Checkout · Step ${Math.min(step, 4)}/4`}
-                </div>
+                <div className="section-label mb-3">{flowStepDisplay}</div>
                 <h1 className="app-title">Complete Your Registration</h1>
                 <p className="app-subtitle mt-2">{displayTitle}</p>
+                {step < 6 && (
+                  <div className="flex flex-wrap gap-2 mt-4">
+                    {flowSteps.map((entry, index) => {
+                      const isActive = entry.id === activeFlowStepId;
+                      const isDone = currentFlowIndex > index;
+                      return (
+                        <span
+                          key={entry.id}
+                          className="text-[11px] sm:text-xs font-semibold px-2.5 py-1 rounded-lg"
+                          style={{
+                            background: isActive
+                              ? "var(--blue)"
+                              : isDone
+                                ? "rgba(37,99,235,0.12)"
+                                : "var(--bg-subtle)",
+                            color: isActive ? "#fff" : "var(--fg-muted)",
+                            border: isActive ? "none" : "1px solid var(--border)",
+                          }}
+                        >
+                          {index + 1}. {entry.label}
+                        </span>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </div>
             <div className="app-header-actions">
@@ -691,7 +782,7 @@ export default function CheckoutPage() {
             </div>
           </header>
 
-          {existingRegistration && step < 5 && (
+          {existingRegistration && step < 6 && (
             <div
               className="rounded-xl px-4 py-4 mb-6"
               style={{ background: "rgba(59,130,246,0.1)", border: "1px solid rgba(59,130,246,0.25)" }}
@@ -789,15 +880,14 @@ export default function CheckoutPage() {
                     if (category.applicationType === "delegation") {
                       setDelegationMode("create");
                       setDelegationError("");
-                      if (!delegationSchoolName && school) setDelegationSchoolName(school);
                     }
                   }}
                   className="app-card app-card-interactive app-card-tight text-left"
                   data-selected={selectedCategoryId === category.id ? "true" : "false"}
                 >
-                  <div className="flex items-center justify-between gap-2">
+                  <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
                     <span className="font-bold text-base" style={{ color: "var(--fg)" }}>{category.name}</span>
-                    <div className="text-right">
+                    <div className="sm:text-right shrink-0">
                       <span className="badge badge-blue">
                         {formatMoney(categoryPrice.amount, checkoutCurrency)}
                       </span>
@@ -852,7 +942,7 @@ export default function CheckoutPage() {
                       Team formation
                     </p>
                     <p className="text-xs mt-1" style={{ color: "var(--fg-muted)" }}>
-                      Create a unique team code or join with a code from your delegation head. After joining, each member continues with their own preferences and payment.
+                      Create a delegation or join one with a code from your delegation leader. After joining, each member continues with their own committee preferences, portfolio preferences, questions, and payment/submission.
                     </p>
                   </div>
                   {delegationLoading && !delegationAffiliation ? (
@@ -920,10 +1010,9 @@ export default function CheckoutPage() {
                           onClick={() => {
                             setDelegationMode("create");
                             setDelegationError("");
-                            if (!delegationSchoolName) setDelegationSchoolName(school);
                           }}
                         >
-                          Create code
+                          Create new delegation
                         </button>
                         <button
                           type="button"
@@ -934,16 +1023,16 @@ export default function CheckoutPage() {
                             setDelegationError("");
                           }}
                         >
-                          Join code
+                          Join existing delegation
                         </button>
                       </div>
                       {delegationMode === "create" && (
                         <div className="space-y-3">
                           <input
                             className="input-base text-sm"
-                            placeholder="School / institution name"
-                            value={delegationSchoolName}
-                            onChange={(event) => setDelegationSchoolName(event.target.value)}
+                            placeholder="Delegation name"
+                            value={delegationName}
+                            onChange={(event) => setDelegationName(event.target.value)}
                           />
                           <input
                             className="input-base text-sm"
@@ -952,8 +1041,8 @@ export default function CheckoutPage() {
                             max={selectedCategory?.maxDelegatesPerDelegation}
                             placeholder={
                               selectedCategory?.maxDelegatesPerDelegation
-                                ? `Team size (max ${selectedCategory.maxDelegatesPerDelegation})`
-                                : "Maximum team members (optional)"
+                                ? `Delegation size (max ${selectedCategory.maxDelegatesPerDelegation})`
+                                : "Maximum delegation members (optional)"
                             }
                             value={delegationMaxMembers}
                             onChange={(event) => setDelegationMaxMembers(event.target.value)}
@@ -964,7 +1053,7 @@ export default function CheckoutPage() {
                             disabled={creatingDelegation}
                             onClick={() => void handleCreateDelegation()}
                           >
-                            {creatingDelegation ? "Generating code…" : "Generate team code"}
+                            {creatingDelegation ? "Generating code…" : "Create delegation & generate code"}
                           </button>
                         </div>
                       )}
@@ -972,7 +1061,7 @@ export default function CheckoutPage() {
                         <div className="space-y-3">
                           <input
                             className="input-base text-sm font-mono uppercase tracking-wider"
-                            placeholder="Enter team code"
+                            placeholder="Enter delegation code"
                             value={delegationJoinCode}
                             onChange={(event) => setDelegationJoinCode(event.target.value)}
                           />
@@ -982,7 +1071,7 @@ export default function CheckoutPage() {
                             disabled={delegationLoading || !delegationJoinCode.trim()}
                             onClick={() => void handleJoinDelegation()}
                           >
-                            {delegationLoading ? "Joining…" : "Join with code"}
+                            {delegationLoading ? "Joining…" : "Join delegation with code"}
                           </button>
                         </div>
                       )}
@@ -1020,8 +1109,10 @@ export default function CheckoutPage() {
 
           {step === 2 && !existingRegistration && !profileIncomplete && selectedCategory && (
             <div className="card p-6 sm:p-8 rounded-2xl space-y-4">
-              <h2 className="text-xl font-bold" style={{ color: "var(--fg)" }}>2. Preferences</h2>
-              {!needsPreferencesStep ? (
+              <h2 className="text-xl font-bold" style={{ color: "var(--fg)" }}>
+                {(flowSteps.findIndex((entry) => entry.id === 2) + 1) || 2}. Committee preferences
+              </h2>
+              {!needsCommitteeStep ? (
                 <p
                   className="text-sm rounded-xl p-4"
                   style={{ color: "var(--fg-muted)", background: "var(--bg-subtle)", border: "1px solid var(--border)" }}
@@ -1035,13 +1126,13 @@ export default function CheckoutPage() {
                   {getCategoryTypeLabel(selectedCategory.applicationType)}
                 </p>
                 <p className="text-sm mt-1" style={{ color: "var(--fg-muted)" }}>
-                  {isChairCategory
-                    ? `Choose ${requiredCommitteePrefs} committee preference${requiredCommitteePrefs === 1 ? "" : "s"}.`
-                    : `Choose ${requiredCommitteePrefs} committee preference${requiredCommitteePrefs === 1 ? "" : "s"}${
-                        needsPortfolioPrefs && requiredPortfolioPrefs > 0
-                          ? ` and ${requiredPortfolioPrefs} portfolio preference${requiredPortfolioPrefs === 1 ? "" : "s"}`
-                          : ""
-                      }.`}
+                  {checkoutCommittees.length === 0
+                    ? "Committees are not listed yet. You can continue and the organizer will collect preferences later if needed."
+                    : `Choose your preferred committees first${
+                        needsPortfolioStep
+                          ? `. Portfolio / ${preferenceLabel.toLowerCase()} preferences come next.`
+                          : "."
+                      }`}
                 </p>
               </div>
               {checkoutCommittees.length === 0 ? (
@@ -1049,7 +1140,7 @@ export default function CheckoutPage() {
                   className="text-sm rounded-xl p-4"
                   style={{ color: "var(--fg-muted)", background: "var(--bg-subtle)", border: "1px solid var(--border)" }}
                 >
-                  No committees have been set up for this conference yet. Preferences will be available once committees are added.
+                  No committees have been set up for this conference yet. You can continue without preferences.
                 </p>
               ) : (
               <div className="space-y-4">
@@ -1059,6 +1150,12 @@ export default function CheckoutPage() {
                   onChange={(event) => {
                     const nextId = event.target.value;
                     setSelectedCommitteeId(nextId);
+                    setPortfolioPreferencePrimary("");
+                    setPortfolioPreferenceSecondary("");
+                    setPortfolioPreferenceTertiary("");
+                    setCountryPreferencePrimary("");
+                    setCountryPreferenceSecondary("");
+                    setCountryPreferenceTertiary("");
                     setAnswers((prev) => {
                       const next = { ...prev };
                       Object.keys(next).forEach((key) => {
@@ -1109,61 +1206,6 @@ export default function CheckoutPage() {
                       ))}
                   </AppSelect>
                 )}
-                {needsPortfolioPrefs && requiredPortfolioPrefs > 0 && (
-                  <>
-                    <AppSelect
-                      label={`${preferenceLabel} preference 1 *`}
-                      value={portfolioPreferencePrimary}
-                      onChange={(event) => {
-                        setPortfolioPreferencePrimary(event.target.value);
-                        setCountryPreferencePrimary(event.target.value);
-                      }}
-                    >
-                      <option value="">Select portfolio</option>
-                      {selectedCommitteePortfolios.map((portfolio) => (
-                        <option key={portfolio.id} value={portfolio.name}>{portfolio.name}</option>
-                      ))}
-                    </AppSelect>
-                    {requiredPortfolioPrefs >= 2 && (
-                      <AppSelect
-                        label={`${preferenceLabel} preference 2 *`}
-                        value={portfolioPreferenceSecondary}
-                        onChange={(event) => {
-                          setPortfolioPreferenceSecondary(event.target.value);
-                          setCountryPreferenceSecondary(event.target.value);
-                        }}
-                      >
-                        <option value="">Select portfolio</option>
-                        {selectedCommitteePortfolios
-                          .filter((portfolio) => portfolio.name !== portfolioPreferencePrimary)
-                          .map((portfolio) => (
-                            <option key={portfolio.id} value={portfolio.name}>{portfolio.name}</option>
-                          ))}
-                      </AppSelect>
-                    )}
-                    {requiredPortfolioPrefs >= 3 && (
-                      <AppSelect
-                        label={`${preferenceLabel} preference 3 *`}
-                        value={portfolioPreferenceTertiary}
-                        onChange={(event) => {
-                          setPortfolioPreferenceTertiary(event.target.value);
-                          setCountryPreferenceTertiary(event.target.value);
-                        }}
-                      >
-                        <option value="">Select portfolio</option>
-                        {selectedCommitteePortfolios
-                          .filter(
-                            (portfolio) =>
-                              portfolio.name !== portfolioPreferencePrimary &&
-                              portfolio.name !== portfolioPreferenceSecondary
-                          )
-                          .map((portfolio) => (
-                            <option key={portfolio.id} value={portfolio.name}>{portfolio.name}</option>
-                          ))}
-                      </AppSelect>
-                    )}
-                  </>
-                )}
               </div>
               )}
                 </>
@@ -1173,9 +1215,9 @@ export default function CheckoutPage() {
                 <button
                   type="button"
                   onClick={() => goForwardFrom(2)}
-                  disabled={!isPreferencesValid}
+                  disabled={!isCommitteePrefsValid}
                   className="btn btn-primary flex-[2] min-h-[44px]"
-                  style={{ opacity: isPreferencesValid ? 1 : 0.5 }}
+                  style={{ opacity: isCommitteePrefsValid ? 1 : 0.5 }}
                 >
                   Continue →
                 </button>
@@ -1183,17 +1225,96 @@ export default function CheckoutPage() {
             </div>
           )}
 
-          {step === 3 && !existingRegistration && !profileIncomplete && selectedCategory && (
+          {step === 3 && !existingRegistration && !profileIncomplete && selectedCategory && needsPortfolioStep && (
             <div className="card p-6 sm:p-8 rounded-2xl space-y-4">
-              <h2 className="text-xl font-bold" style={{ color: "var(--fg)" }}>3. Additional questions</h2>
-              {!hasCategoryQuestions ? (
-                <p
-                  className="text-sm rounded-xl p-4"
-                  style={{ color: "var(--fg-muted)", background: "var(--bg-subtle)", border: "1px solid var(--border)" }}
-                >
-                  No additional questions for this category. Continue to confirm your registration.
+              <h2 className="text-xl font-bold" style={{ color: "var(--fg)" }}>
+                {(flowSteps.findIndex((entry) => entry.id === 3) + 1) || 3}. Portfolio preferences
+              </h2>
+              <div className="rounded-xl p-3" style={{ background: "var(--bg-subtle)", border: "1px solid var(--border)" }}>
+                <p className="text-sm font-semibold" style={{ color: "var(--fg)" }}>
+                  For {selectedCommittee?.name || "your 1st committee preference"}
                 </p>
-              ) : null}
+                <p className="text-sm mt-1" style={{ color: "var(--fg-muted)" }}>
+                  Choose your preferred {preferenceLabel.toLowerCase()}s / portfolios for this committee.
+                </p>
+              </div>
+              <div className="space-y-4">
+                <AppSelect
+                  label={`${preferenceLabel} preference 1 *`}
+                  value={portfolioPreferencePrimary}
+                  onChange={(event) => {
+                    setPortfolioPreferencePrimary(event.target.value);
+                    setCountryPreferencePrimary(event.target.value);
+                  }}
+                >
+                  <option value="">Select portfolio</option>
+                  {selectedCommitteePortfolios.map((portfolio) => (
+                    <option key={portfolio.id} value={portfolio.name}>{portfolio.name}</option>
+                  ))}
+                </AppSelect>
+                {requiredPortfolioPrefs >= 2 && (
+                  <AppSelect
+                    label={`${preferenceLabel} preference 2 *`}
+                    value={portfolioPreferenceSecondary}
+                    onChange={(event) => {
+                      setPortfolioPreferenceSecondary(event.target.value);
+                      setCountryPreferenceSecondary(event.target.value);
+                    }}
+                  >
+                    <option value="">Select portfolio</option>
+                    {selectedCommitteePortfolios
+                      .filter((portfolio) => portfolio.name !== portfolioPreferencePrimary)
+                      .map((portfolio) => (
+                        <option key={portfolio.id} value={portfolio.name}>{portfolio.name}</option>
+                      ))}
+                  </AppSelect>
+                )}
+                {requiredPortfolioPrefs >= 3 && (
+                  <AppSelect
+                    label={`${preferenceLabel} preference 3 *`}
+                    value={portfolioPreferenceTertiary}
+                    onChange={(event) => {
+                      setPortfolioPreferenceTertiary(event.target.value);
+                      setCountryPreferenceTertiary(event.target.value);
+                    }}
+                  >
+                    <option value="">Select portfolio</option>
+                    {selectedCommitteePortfolios
+                      .filter(
+                        (portfolio) =>
+                          portfolio.name !== portfolioPreferencePrimary &&
+                          portfolio.name !== portfolioPreferenceSecondary
+                      )
+                      .map((portfolio) => (
+                        <option key={portfolio.id} value={portfolio.name}>{portfolio.name}</option>
+                      ))}
+                  </AppSelect>
+                )}
+              </div>
+              <div className="flex flex-col-reverse sm:flex-row gap-3">
+                <button type="button" onClick={() => goBackFrom(3)} className="btn btn-ghost flex-1 min-h-[44px]">← Back</button>
+                <button
+                  type="button"
+                  onClick={() => goForwardFrom(3)}
+                  disabled={!isPortfolioPrefsValid}
+                  className="btn btn-primary flex-[2] min-h-[44px]"
+                  style={{ opacity: isPortfolioPrefsValid ? 1 : 0.5 }}
+                >
+                  Continue →
+                </button>
+              </div>
+            </div>
+          )}
+
+          {step === 4 && !existingRegistration && !profileIncomplete && selectedCategory && needsQuestionsStep && (
+            <div className="card p-6 sm:p-8 rounded-2xl space-y-4">
+              <h2 className="text-xl font-bold" style={{ color: "var(--fg)" }}>
+                {(flowSteps.findIndex((entry) => entry.id === 4) + 1) || 4}. Additional questions
+              </h2>
+              <p className="text-sm" style={{ color: "var(--fg-muted)" }}>
+                Answer the organizer&apos;s questions for this category before you{" "}
+                {isAllotFirst || priceResult.amount <= 0 ? "submit your application" : "continue to payment"}.
+              </p>
               {selectedCategory.formFields.map((field) => (
                 <div key={field.id}>
                   <label className="block text-sm font-semibold mb-1.5" style={{ color: "var(--fg)" }}>
@@ -1292,10 +1413,10 @@ export default function CheckoutPage() {
                 </div>
               ))}
               <div className="flex flex-col-reverse sm:flex-row gap-3">
-                <button type="button" onClick={() => goBackFrom(3)} className="btn btn-ghost flex-1 min-h-[44px]">← Back</button>
+                <button type="button" onClick={() => goBackFrom(4)} className="btn btn-ghost flex-1 min-h-[44px]">← Back</button>
                 <button
                   type="button"
-                  onClick={() => goForwardFrom(3)}
+                  onClick={() => goForwardFrom(4)}
                   disabled={!isQuestionsValid}
                   className="btn btn-primary flex-[2] min-h-[44px]"
                   style={{ opacity: isQuestionsValid ? 1 : 0.5 }}
@@ -1306,17 +1427,24 @@ export default function CheckoutPage() {
             </div>
           )}
 
-          {step === 4 && !existingRegistration && !profileIncomplete && (
+          {step === 5 && !existingRegistration && !profileIncomplete && (
             <div className="card p-6 sm:p-8 rounded-2xl space-y-4">
               <h2 className="text-xl font-bold" style={{ color: "var(--fg)" }}>
-                {isAllotFirst || priceResult.amount <= 0 ? "4. Confirm application" : "4. Payment"}
+                {(flowSteps.findIndex((entry) => entry.id === 5) + 1) || 5}.{" "}
+                {isSecretariatDirectSubmit || isEbDirectSubmit || isAllotFirst || effectiveCheckoutAmount <= 0
+                  ? "Confirm application"
+                  : "Payment"}
               </h2>
               <p className="text-sm leading-relaxed" style={{ color: "var(--fg-muted)" }}>
-                {isAllotFirst
-                  ? "This conference uses allot-first mode. You can submit your application now and pay after you receive an allotment."
-                  : priceResult.amount <= 0
+                {isSecretariatDirectSubmit
+                  ? "Secretariat applications are submitted directly without payment."
+                  : isEbDirectSubmit
+                    ? "Executive Board applications are submitted directly without payment."
+                  : isAllotFirst
+                  ? "This conference uses Allot First. Submit your application now; payment is due after you receive an allotment."
+                  : effectiveCheckoutAmount <= 0
                     ? "Review your details and confirm your free registration."
-                    : "Review your details and complete payment to submit your application."}
+                    : "This conference uses Pay First. Review your details and complete payment to submit your application."}
               </p>
               <div className="rounded-xl p-4 space-y-1" style={{ background: "var(--bg-subtle)", border: "1px solid var(--border)" }}>
                 <p className="text-sm font-semibold" style={{ color: "var(--fg)" }}>Review your submission</p>
@@ -1325,6 +1453,13 @@ export default function CheckoutPage() {
                 <p className="text-sm" style={{ color: "var(--fg-muted)" }}>Category: {selectedCategory?.name || "N/A"}</p>
                 {!isOcCategory && (
                   <p className="text-sm" style={{ color: "var(--fg-muted)" }}>Committee: {selectedCommittee?.name || "N/A"}</p>
+                )}
+                {needsPortfolioStep && portfolioPreferencePrimary && (
+                  <p className="text-sm" style={{ color: "var(--fg-muted)" }}>
+                    {preferenceLabel}: {portfolioPreferencePrimary}
+                    {portfolioPreferenceSecondary ? `, ${portfolioPreferenceSecondary}` : ""}
+                    {portfolioPreferenceTertiary ? `, ${portfolioPreferenceTertiary}` : ""}
+                  </p>
                 )}
               </div>
               <div className="rounded-xl p-4 space-y-2" style={{ background: "var(--bg-subtle)", border: "1px solid var(--border)" }}>
@@ -1338,18 +1473,22 @@ export default function CheckoutPage() {
                 </div>
               </div>
               <div className="flex flex-col-reverse sm:flex-row gap-3">
-                <button type="button" onClick={() => goBackFrom(4)} className="btn btn-ghost flex-1 min-h-[44px]">← Back</button>
+                <button type="button" onClick={() => goBackFrom(5)} className="btn btn-ghost flex-1 min-h-[44px]">← Back</button>
                 <button
                   type="button"
                   onClick={() => void handlePay()}
-                  disabled={!isStep4Valid || loading || profileIncomplete}
+                  disabled={!isStep5Valid || loading || profileIncomplete}
                   className="btn btn-primary flex-[2] min-h-[44px]"
-                  style={{ opacity: isStep4Valid && !loading && !profileIncomplete ? 1 : 0.5 }}
+                  style={{ opacity: isStep5Valid && !loading && !profileIncomplete ? 1 : 0.5 }}
                 >
                   {loading
                     ? "Submitting..."
-                    : priceResult.amount <= 0 || isAllotFirst
-                      ? isAllotFirst
+                    : isSecretariatDirectSubmit || isEbDirectSubmit || effectiveCheckoutAmount <= 0 || isAllotFirst
+                      ? isSecretariatDirectSubmit
+                        ? "Submit application"
+                        : isEbDirectSubmit
+                          ? "Submit application"
+                        : isAllotFirst
                         ? "Submit application"
                         : "Confirm free registration"
                       : `Submit & pay (${resolvedFeeDisplay})`}
@@ -1358,7 +1497,7 @@ export default function CheckoutPage() {
             </div>
           )}
 
-          {step === 5 && submittedRegistration && (
+          {step === 6 && submittedRegistration && (
             <div className="card p-8 rounded-2xl space-y-5">
               <div className="text-center space-y-2">
                 <p className="text-4xl" aria-hidden>

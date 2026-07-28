@@ -305,6 +305,14 @@ html.dark .badge-purple { background: rgba(124,58,237,0.12); }
   border: none;
   outline: none;
   text-decoration: none;
+  touch-action: manipulation;
+  min-height: 44px;
+}
+
+@media (min-width: 640px) {
+  .btn.text-xs {
+    min-height: 0;
+  }
 }
 
 .btn:active { transform: scale(0.985); transition-duration: 0.08s; }

@@ -608,12 +608,15 @@ function normalizePublicTeam(blob: Record<string, unknown> | null): PublicConfer
       const row = entry as Record<string, unknown>;
       const name = typeof row.name === "string" ? row.name.trim() : "";
       if (!name) return null;
+      const teamType = row.teamType === "secretariat" ? ("secretariat" as const) : ("organizer" as const);
+      // OC/organizer team stays internal-only. Only secretariat is shown publicly.
+      if (teamType !== "secretariat") return null;
       return {
         id: typeof row.id === "string" ? row.id : `team-${name}`,
         name,
         email: "",
         role: typeof row.role === "string" ? row.role : "Team",
-        teamType: row.teamType === "secretariat" ? "secretariat" as const : "organizer" as const,
+        teamType,
         permissions: Array.isArray(row.permissions)
           ? (row.permissions as OrganizerTeamMember["permissions"])
           : (["view"] as OrganizerTeamMember["permissions"]),

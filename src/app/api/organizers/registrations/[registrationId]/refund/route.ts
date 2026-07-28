@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { RegistrationStatus } from "@/generated/prisma/enums";
-import { getRequestActor, requireEventOrganizerAccess, requireOrganizer } from "@/lib/server/auth";
+import {
+  assertEventMutableForOrganizer,
+  getRequestActor,
+  requireEventOrganizerAccess,
+  requireOrganizer,
+} from "@/lib/server/auth";
 import { prisma } from "@/lib/server/prisma";
 
 export async function POST(
@@ -34,6 +39,13 @@ export async function POST(
 
   if (!(await requireEventOrganizerAccess(actor, registration.eventId))) {
     return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+  }
+  const mutability = await assertEventMutableForOrganizer(registration.eventId);
+  if (!mutability.ok) {
+    return NextResponse.json(
+      { error: "Conference is closed and can no longer be modified." },
+      { status: 409 }
+    );
   }
 
   if (!registration.paid) {

@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@/generated/prisma/client";
 import { RegistrationStatus } from "@/generated/prisma/enums";
-import { getRequestActor, requireEventOrganizerAccess, requireOrganizer } from "@/lib/server/auth";
+import {
+  assertEventMutableForOrganizer,
+  getRequestActor,
+  requireEventOrganizerAccess,
+  requireOrganizer,
+} from "@/lib/server/auth";
 import {
   AllotmentValidationError,
   validateAllotmentAssignment,
@@ -56,6 +61,13 @@ export async function PATCH(
 
   if (!(await requireEventOrganizerAccess(actor, registration.eventId))) {
     return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+  }
+  const mutability = await assertEventMutableForOrganizer(registration.eventId);
+  if (!mutability.ok) {
+    return NextResponse.json(
+      { error: "Conference is closed and can no longer be modified." },
+      { status: 409 }
+    );
   }
 
   const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;

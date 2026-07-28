@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getRequestActor, requireEventOrganizerAccess, requireOrganizer } from "@/lib/server/auth";
+import {
+  assertEventMutableForOrganizer,
+  getRequestActor,
+  requireEventOrganizerAccess,
+  requireOrganizer,
+} from "@/lib/server/auth";
 import { prisma } from "@/lib/server/prisma";
 import { appendAwardToProfile } from "@/lib/server/sync-delegate-profile-from-organizer";
 
@@ -20,6 +25,13 @@ export async function POST(
 
   if (!(await requireEventOrganizerAccess(actor, eventId))) {
     return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+  }
+  const mutability = await assertEventMutableForOrganizer(eventId);
+  if (!mutability.ok) {
+    return NextResponse.json(
+      { error: "Conference is closed and can no longer be modified." },
+      { status: 409 }
+    );
   }
 
   const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;

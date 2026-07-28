@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getRequestActor, requireEventOrganizerAccess, requireOrganizer } from "@/lib/server/auth";
+import { reconcileDelegationLifecycleForEvent } from "@/lib/server/delegation-lifecycle";
 import { prisma } from "@/lib/server/prisma";
 import { toIsoString } from "@/lib/server/coerce-date";
 
@@ -21,6 +22,7 @@ export async function GET(
   if (!(await requireEventOrganizerAccess(actor, eventId))) {
     return NextResponse.json({ error: "You do not have access to this conference." }, { status: 403 });
   }
+  await reconcileDelegationLifecycleForEvent(eventId);
 
   const delegations = await prisma.delegation.findMany({
     where: { eventId },

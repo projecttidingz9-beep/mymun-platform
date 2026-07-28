@@ -1,4 +1,5 @@
 import type { User } from "@/lib/types";
+import { reconcileDelegationLifecycleForEvent } from "@/lib/server/delegation-lifecycle";
 import { expireOverdueAllotmentPayments } from "@/lib/server/expire-allotment-deadlines";
 import { prismaUserToClientUser } from "@/lib/server/map-db-user";
 import { prisma } from "@/lib/server/prisma";
@@ -23,6 +24,8 @@ export async function loadClientUserByEmail(email: string): Promise<User | null>
 
   // Allot-first: cancel seats that were not paid by the payment deadline.
   await expireOverdueAllotmentPayments({ userId: user.id });
+  const eventIds = [...new Set(user.registrations.map((registration) => registration.eventId))];
+  await Promise.all(eventIds.map((eventId) => reconcileDelegationLifecycleForEvent(eventId)));
 
   const refreshed = await prisma.user.findUnique({
     where: { id: user.id },

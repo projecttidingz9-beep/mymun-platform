@@ -98,7 +98,12 @@ export async function validateRegistrationRequest(body: Record<string, unknown>)
     }
     applicationType = category.applicationType || "delegate";
     if (category.requiresCommitteeSelection && committeePreferences.length === 0 && !committeeConfigId) {
-      throw new RegistrationValidationError("Committee preference is required for this category.");
+      const committeeCount = await prisma.committeeConfig.count({
+        where: { organizerConfig: { eventId } },
+      });
+      if (committeeCount > 0) {
+        throw new RegistrationValidationError("Committee preference is required for this category.");
+      }
     }
   }
 

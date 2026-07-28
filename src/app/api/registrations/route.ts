@@ -5,6 +5,7 @@ import { prisma } from "@/lib/server/prisma";
 import { getRequestActor } from "@/lib/server/auth";
 import { logger } from "@/lib/server/logger";
 import { normalizeDelegationCode } from "@/lib/delegation-code";
+import { reconcileDelegationLifecycleForEvent } from "@/lib/server/delegation-lifecycle";
 import { requireVerifiedEmail } from "@/lib/server/require-verified-email";
 import {
   createRegistrationAndPayment,
@@ -77,6 +78,7 @@ export async function POST(request: NextRequest) {
     const registrationId = String(body.registrationId || "").trim() || `reg-${randomUUID()}`;
 
     const validated = await validateRegistrationRequest(body);
+    await reconcileDelegationLifecycleForEvent(validated.eventId);
 
     const event = await prisma.event.findFirst({
       where: {
@@ -109,6 +111,9 @@ export async function POST(request: NextRequest) {
 
     const prefs = serializeRegistrationPreferences(body);
     const allotFirst = event.organizerConfig?.allocationMode === "ALLOT_FIRST";
+    const isSecretariatApplication = validated.applicationType === "secretariat";
+    const isEbApplication = validated.applicationType === "chair";
+    const effectiveAmount = isSecretariatApplication || isEbApplication ? 0 : validated.pricing.amount;
     let delegationLink:
       | { id: string; inviteToken: string; schoolName: string | null; isHead: boolean }
       | undefined;
@@ -187,9 +192,9 @@ export async function POST(request: NextRequest) {
       formAnswersJson: prefs.formAnswersJson,
       delegationId: delegationLink?.id,
       isDelegationHead: delegationLink?.isHead,
-      amount: validated.pricing.amount,
+      amount: effectiveAmount,
       currency: validated.pricing.currency,
-      deferPayment: allotFirst && validated.pricing.amount > 0,
+      deferPayment: !isSecretariatApplication && !isEbApplication && allotFirst && effectiveAmount > 0,
     });
 
     try {

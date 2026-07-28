@@ -2,7 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
 import { normalizeConferenceScheduleEntries } from "@/lib/conference-schedule";
 import type { RegistrationCategory } from "@/lib/types";
-import { getRequestActor, requireEventOrganizerAccess, requireOrganizer, resolveActorUserId } from "@/lib/server/auth";
+import {
+  assertEventMutableForOrganizer,
+  getRequestActor,
+  requireEventOrganizerAccess,
+  requireOrganizer,
+  resolveActorUserId,
+} from "@/lib/server/auth";
 import { getOrganizerPreviewConfig, mergeOrganizerStoredBlob } from "@/lib/server/organizer-config-store";
 import { logger } from "@/lib/server/logger";
 import { persistRegistrationCategories } from "@/lib/server/persist-registration-categories";
@@ -69,6 +75,13 @@ export async function PATCH(
   const actorUserId = await resolveActorUserId(actor);
   if (!(await requireEventOrganizerAccess(actor, eventId))) {
     return NextResponse.json({ error: "You do not have access to this conference." }, { status: 403 });
+  }
+  const mutability = await assertEventMutableForOrganizer(eventId);
+  if (!mutability.ok) {
+    return NextResponse.json(
+      { error: "Conference is closed and can no longer be modified." },
+      { status: 409 }
+    );
   }
 
   const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;

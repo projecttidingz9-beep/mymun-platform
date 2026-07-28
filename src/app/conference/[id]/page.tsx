@@ -1242,7 +1242,7 @@ function ConferenceDetailPageContent() {
                       {seats.length === 0 ? (
                         <p className="text-xs" style={{ color: "var(--fg-muted)" }}>Portfolios will be announced soon.</p>
                       ) : (
-                        <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-2">
+                        <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2">
                           {seats.map((seat, seatIndex) => {
                             const showStatus = seat.showStatus;
                             const available = seat.available;

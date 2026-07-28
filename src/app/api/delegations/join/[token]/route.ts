@@ -4,6 +4,7 @@ import { DelegationStatus } from "@/generated/prisma/enums";
 import { getRequestActor, resolveActorUserId } from "@/lib/server/auth";
 import { normalizeDelegationCode } from "@/lib/delegation-code";
 import { getDelegationInviteByToken } from "@/lib/server/delegation-invite";
+import { reconcileDelegationLifecycleForEvent } from "@/lib/server/delegation-lifecycle";
 import { logger } from "@/lib/server/logger";
 import { prisma } from "@/lib/server/prisma";
 import { consumeRateLimitBucket } from "@/lib/server/rate-limit-db";
@@ -74,7 +75,21 @@ export async function POST(
       maxMembers: true,
       ownerUserId: true,
       schoolName: true,
-      event: { select: { status: true, endDate: true } },
+      event: {
+        select: {
+          status: true,
+          endDate: true,
+          organizerConfig: {
+            select: {
+              registrationCategories: {
+                where: { applicationType: "delegation", isOpen: true },
+                select: { registrationDeadline: true },
+                take: 1,
+              },
+            },
+          },
+        },
+      },
     },
   });
 
@@ -88,6 +103,17 @@ export async function POST(
   if (delegation.event.status !== "PUBLISHED" || delegation.event.endDate.getTime() < Date.now()) {
     return NextResponse.json({ error: "This conference is not open for registration." }, { status: 409 });
   }
+  const delegationCategory = delegation.event.organizerConfig?.registrationCategories[0] ?? null;
+  if (!delegationCategory) {
+    return NextResponse.json({ error: "Delegation registration is closed." }, { status: 409 });
+  }
+  if (
+    delegationCategory.registrationDeadline &&
+    delegationCategory.registrationDeadline.getTime() < Date.now()
+  ) {
+    return NextResponse.json({ error: "Delegation registration deadline has passed." }, { status: 409 });
+  }
+  await reconcileDelegationLifecycleForEvent(delegation.eventId);
 
   if (delegation.ownerUserId === userId) {
     return NextResponse.json({ error: "You are already the delegation owner." }, { status: 409 });

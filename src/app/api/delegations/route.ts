@@ -2,6 +2,7 @@ import { Prisma } from "@/generated/prisma/client";
 import { NextRequest, NextResponse } from "next/server";
 import { getRequestActor, resolveActorUserId } from "@/lib/server/auth";
 import { generateDelegationCode } from "@/lib/server/delegation-code";
+import { reconcileDelegationLifecycleForEvent } from "@/lib/server/delegation-lifecycle";
 import { prisma } from "@/lib/server/prisma";
 import { requireVerifiedEmail } from "@/lib/server/require-verified-email";
 
@@ -15,6 +16,7 @@ export async function GET(request: NextRequest) {
   if (!userId || !eventId) {
     return NextResponse.json({ error: "eventId is required." }, { status: 400 });
   }
+  await reconcileDelegationLifecycleForEvent(eventId);
 
   const delegation = await prisma.delegation.findFirst({
     where: {
@@ -68,13 +70,14 @@ export async function POST(request: NextRequest) {
   try {
     const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
     const eventId = String(body.eventId || "").trim();
-    const schoolName = String(body.schoolName || "").trim();
+    const delegationName = String(body.delegationName || body.schoolName || "").trim();
+    const schoolName = String(body.schoolName || body.delegationName || "").trim();
     const maxMembersRaw = body.maxMembers;
     const registrationId =
       typeof body.registrationId === "string" ? body.registrationId.trim() : undefined;
 
-    if (!eventId || !schoolName) {
-      return NextResponse.json({ error: "eventId and schoolName are required." }, { status: 400 });
+    if (!eventId || !delegationName) {
+      return NextResponse.json({ error: "eventId and delegationName are required." }, { status: 400 });
     }
 
     const maxMembers =
@@ -94,7 +97,7 @@ export async function POST(request: NextRequest) {
           select: {
             registrationCategories: {
               where: { applicationType: "delegation", isOpen: true },
-              select: { maxDelegatesPerDelegation: true },
+            select: { maxDelegatesPerDelegation: true, registrationDeadline: true },
               take: 1,
             },
           },
@@ -113,8 +116,19 @@ export async function POST(request: NextRequest) {
         { status: 409 }
       );
     }
+    const delegationCategory = event.organizerConfig.registrationCategories[0]!;
+    if (
+      delegationCategory.registrationDeadline &&
+      delegationCategory.registrationDeadline.getTime() < Date.now()
+    ) {
+      return NextResponse.json(
+        { error: "Delegation registration deadline has passed for this conference." },
+        { status: 409 }
+      );
+    }
+    await reconcileDelegationLifecycleForEvent(eventId);
     const categoryMax =
-      event.organizerConfig?.registrationCategories[0]?.maxDelegatesPerDelegation ?? null;
+      delegationCategory.maxDelegatesPerDelegation ?? null;
     if (categoryMax !== null && maxMembers !== null && maxMembers > categoryMax) {
       return NextResponse.json(
         { error: `This conference allows at most ${categoryMax} students per delegation.` },
@@ -179,7 +193,7 @@ export async function POST(request: NextRequest) {
                 eventId,
                 inviteToken,
                 schoolName,
-                name: schoolName,
+                name: delegationName,
                 maxMembers: effectiveMaxMembers,
                 ownerUserId,
               },

@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { NotificationType } from "@/generated/prisma/client";
 import { RegistrationStatus } from "@/generated/prisma/enums";
-import { getRequestActor, requireEventOrganizerAccess, requireOrganizer } from "@/lib/server/auth";
+import {
+  assertEventMutableForOrganizer,
+  getRequestActor,
+  requireEventOrganizerAccess,
+  requireOrganizer,
+} from "@/lib/server/auth";
 import { ensurePendingPaymentIntent } from "@/lib/server/payments";
 import { moneyNumber } from "@/lib/server/decimal-money";
 import { logger } from "@/lib/server/logger";
@@ -35,6 +40,13 @@ export async function POST(
 
   if (!(await requireEventOrganizerAccess(actor, eventId))) {
     return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+  }
+  const mutability = await assertEventMutableForOrganizer(eventId);
+  if (!mutability.ok) {
+    return NextResponse.json(
+      { error: "Conference is closed and can no longer be modified." },
+      { status: 409 }
+    );
   }
 
   const body = (await request.json().catch(() => ({}))) as { registrationIds?: unknown };

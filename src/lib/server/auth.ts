@@ -127,3 +127,21 @@ export async function resolveActorUserId(actor: RequestActor | null): Promise<st
   });
   return user?.id ?? null;
 }
+
+export function isOrganizerWriteLockedStatus(status: string | null | undefined): boolean {
+  return status === "ARCHIVED" || status === "CANCELLED";
+}
+
+export async function assertEventMutableForOrganizer(
+  eventId: string
+): Promise<{ ok: true } | { ok: false; status: string | null | undefined }> {
+  const event = await prisma.event.findUnique({
+    where: { id: eventId },
+    select: { status: true },
+  });
+  if (!event) return { ok: false, status: null };
+  if (isOrganizerWriteLockedStatus(event.status)) {
+    return { ok: false, status: event.status };
+  }
+  return { ok: true };
+}

@@ -97,10 +97,10 @@ export default function ConfirmModal({
             />
           </div>
         )}
-        <div className="mt-6 flex justify-end gap-3">
+        <div className="mt-6 flex flex-col-reverse sm:flex-row sm:justify-end gap-3">
           <button
             type="button"
-            className="btn btn-ghost text-sm"
+            className="btn btn-ghost text-sm min-h-[44px] touch-manipulation w-full sm:w-auto"
             disabled={confirming}
             onClick={onClose}
           >
@@ -108,7 +108,11 @@ export default function ConfirmModal({
           </button>
           <button
             type="button"
-            className={danger ? "btn btn-danger text-sm" : "btn btn-primary text-sm"}
+            className={
+              danger
+                ? "btn btn-danger text-sm min-h-[44px] touch-manipulation w-full sm:w-auto"
+                : "btn btn-primary text-sm min-h-[44px] touch-manipulation w-full sm:w-auto"
+            }
             disabled={!typedOk || confirming}
             style={!typedOk || confirming ? { opacity: 0.5, cursor: "not-allowed" } : undefined}
             onClick={() => {
@@ -157,7 +161,7 @@ export function DestructiveConfirmButton({
     <>
       <button
         type="button"
-        className={className ?? "btn btn-danger-ghost text-xs"}
+        className={className ?? "btn btn-danger-ghost text-xs min-h-[44px] touch-manipulation"}
         disabled={disabled}
         onClick={() => setOpen(true)}
       >

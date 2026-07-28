@@ -26,7 +26,7 @@ export function roleLabelForApplicationType(
   chairRole?: string | null
 ): string {
   if (applicationType === "organizer") return "Organising Committee";
-  if (applicationType === "secretariat") return "Secretariat";
+  if (applicationType === "secretariat") return chairRole?.trim() || "Secretariat";
   if (applicationType === "chair") return chairRole?.trim() || "Executive Board";
   if (applicationType === "delegation") return "Delegation Head";
   if (applicationType === "press") return "Press Corps";

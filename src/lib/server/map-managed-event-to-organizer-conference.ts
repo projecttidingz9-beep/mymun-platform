@@ -26,6 +26,10 @@ function mapEventStatus(status: EventStatus): OrganizerConference["status"] {
   return "Draft";
 }
 
+function isWriteLockedEventStatus(status: EventStatus): boolean {
+  return status === "ARCHIVED" || status === "CANCELLED";
+}
+
 function mapRegistrationStatus(s: RegistrationStatus): OrganizerApplicant["status"] {
   switch (s) {
     case "ALLOTTED":
@@ -610,6 +614,7 @@ export async function mapManagedEventToOrganizerConference(eventId: string): Pro
         ? (blob.statusEmailTemplates as OrganizerConference["statusEmailTemplates"])
         : undefined,
     status: mapEventStatus(event.status),
+    isWriteLocked: isWriteLockedEventStatus(event.status),
     adminRejectionNote:
       typeof blob.adminRejectionNote === "string" && blob.adminRejectionNote.trim()
         ? blob.adminRejectionNote.trim()

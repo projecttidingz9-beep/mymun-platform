@@ -85,7 +85,7 @@ import ConfirmModal, { DestructiveConfirmButton } from "@/components/ConfirmModa
 const nextScheduleDayName = (entries: ConferenceScheduleEntry[]) =>
   `Day ${new Set(entries.map((entry) => entry.day)).size + 1}`;
 
-type RegistrationPreviewStep = 1 | 2 | 3 | 4;
+type RegistrationPreviewStep = 1 | 2 | 3 | 4 | 5;
 
 type QuestionFieldDraft = {
   label: string;
@@ -133,8 +133,8 @@ function registrationFlowPreviewMeta(category: RegistrationCategory, conference:
   const isDelegation = applicationType === "delegation";
   const isPress = applicationType === "press";
   const needsPreferences = !isOc;
-  const needsQuestions = true;
   const hasCategoryQuestions = category.formFields.length > 0;
+  const needsQuestions = hasCategoryQuestions;
   const needsPortfolio =
     needsPreferences && (applicationType === "delegate" || applicationType === "delegation");
   const committees = conference.committees || [];
@@ -146,6 +146,8 @@ function registrationFlowPreviewMeta(category: RegistrationCategory, conference:
   );
   const checkoutCommittees = isPress && pressCommittees.length > 0 ? pressCommittees : committees;
   const firstCommittee = checkoutCommittees[0];
+  const firstCommitteePortfolios = firstCommittee?.portfolios ?? [];
+  const needsPortfolioStep = needsPortfolio && checkoutCommittees.length > 0 && firstCommitteePortfolios.length > 0;
   const portfolioLabel = firstCommittee
     ? preferenceLabelForCommittee(firstCommittee.committeeType, firstCommittee.committeeFormat)
     : "Portfolio";
@@ -163,6 +165,7 @@ function registrationFlowPreviewMeta(category: RegistrationCategory, conference:
     needsQuestions,
     hasCategoryQuestions,
     needsPortfolio,
+    needsPortfolioStep,
     checkoutCommittees,
     firstCommittee,
     portfolioLabel,
@@ -747,6 +750,15 @@ export default function OrganizerDashboardPage() {
   const [assignmentCommittee, setAssignmentCommittee] = useState<Record<string, string>>({});
   const [releasingAllotments, setReleasingAllotments] = useState(false);
   const [releaseAllotmentsOpen, setReleaseAllotmentsOpen] = useState(false);
+  const [pendingConfirm, setPendingConfirm] = useState<{
+    title: string;
+    description?: string;
+    requireTypedText?: string;
+    confirmLabel?: string;
+    danger?: boolean;
+    onConfirm: () => void | Promise<void>;
+  } | null>(null);
+  const requestConfirm = (config: NonNullable<typeof pendingConfirm>) => setPendingConfirm(config);
   const [completingConferenceId, setCompletingConferenceId] = useState("");
   const [completedConferenceIds, setCompletedConferenceIds] = useState<Set<string>>(
     () => new Set()
@@ -756,6 +768,7 @@ export default function OrganizerDashboardPage() {
   const [applicationTypeTab, setApplicationTypeTab] = useState<
     "delegate" | "chair" | "organizer" | "secretariat" | "delegation"
   >("organizer");
+  const [secretariatRoleByApplicantId, setSecretariatRoleByApplicantId] = useState<Record<string, string>>({});
   const [autoAssigning, setAutoAssigning] = useState(false);
   const [autoAssignProgress, setAutoAssignProgress] = useState("");
   const [pricingCategoryTypeTab, setPricingCategoryTypeTab] =
@@ -767,6 +780,9 @@ export default function OrganizerDashboardPage() {
   const [chairAllotCommitteeId, setChairAllotCommitteeId] = useState("");
   const [chairAllotRole, setChairAllotRole] = useState("Chair");
   const [chairAllotCustomRole, setChairAllotCustomRole] = useState("");
+  const [manualEbApplicantId, setManualEbApplicantId] = useState("");
+  const [manualEbCommitteeId, setManualEbCommitteeId] = useState("");
+  const [manualEbRole, setManualEbRole] = useState("Chair");
   const [participantSearchQuery, setParticipantSearchQuery] = useState("");
   const debouncedParticipantSearch = useDebouncedValue(participantSearchQuery, 180);
   const [delegationSearchQuery, setDelegationSearchQuery] = useState("");
@@ -813,6 +829,16 @@ export default function OrganizerDashboardPage() {
     committeeId: "",
     participantId: "",
   });
+  const SECRETARIAT_ROLE_OPTIONS = [
+    "Secretary-General",
+    "Deputy Secretary-General",
+    "USG Delegate Affairs",
+    "USG Finance",
+    "Director-General",
+    "Director",
+    "Head of Hospitality",
+    "Head of Logistics",
+  ];
   const [committeeDraft, setCommitteeDraft] = useState({
     name: "",
     agenda: "",
@@ -873,7 +899,6 @@ export default function OrganizerDashboardPage() {
   const [pricingSaving, setPricingSaving] = useState(false);
   const [pricingSavedCategoriesJson, setPricingSavedCategoriesJson] = useState("");
   const [scheduleAddDayOpen, setScheduleAddDayOpen] = useState(false);
-  const [deleteConfirmStep, setDeleteConfirmStep] = useState<0 | 1>(0);
   const [commonDocumentDraft, setCommonDocumentDraft] = useState<DocumentDraft>({
     title: "",
     category: "other",
@@ -1237,9 +1262,15 @@ export default function OrganizerDashboardPage() {
       toast.show("Cannot delete this committee while applicants are allotted to it. Unassign them first.", "error");
       return;
     }
-    const confirmed = confirm(`Delete committee "${committee.name}"?`);
-    if (!confirmed) return;
-    removeOrganizerCommittee(conference.id, committee.id);
+    requestConfirm({
+      title: `Delete committee "${committee.name}"?`,
+      description: "This permanently removes the committee from the conference. Type DELETE to confirm.",
+      requireTypedText: "DELETE",
+      confirmLabel: "Delete committee",
+      onConfirm: () => {
+        removeOrganizerCommittee(conference.id, committee.id);
+      },
+    });
   };
 
   const syncAndIssuePass = async (conference: OrganizerConference, applicantId: string) => {
@@ -1358,6 +1389,14 @@ export default function OrganizerDashboardPage() {
     }
     return organizerConferences[0];
   }, [organizerConferences, selectedConferenceId]);
+  const selectedConferenceIsWriteLocked = Boolean(selectedConference?.isWriteLocked);
+  const selectedConferenceWriteLockMessage =
+    "This conference is closed. Editing, allotments, and payout actions are disabled.";
+  const ensureConferenceMutable = () => {
+    if (!selectedConferenceIsWriteLocked) return true;
+    toast.show(selectedConferenceWriteLockMessage, "error");
+    return false;
+  };
   const previewScheduleByDay = useMemo(
     () => groupConferenceScheduleByDay(previewScheduleDraft),
     [previewScheduleDraft]
@@ -1580,6 +1619,7 @@ export default function OrganizerDashboardPage() {
 
   const savePreviewSettings = async () => {
     if (!selectedConference || previewSettingsSaving) return;
+    if (!ensureConferenceMutable()) return;
     const incompleteRows = findIncompleteConferenceScheduleEntries(previewScheduleDraft);
     if (incompleteRows.length > 0) {
       setPreviewSaveStatus(
@@ -1692,28 +1732,31 @@ export default function OrganizerDashboardPage() {
 
   const deleteSelectedConference = async () => {
     if (!selectedConference || hasPaidRegistrations) return;
-    if (deleteConfirmStep === 0) {
-      setDeleteConfirmStep(1);
-      return;
-    }
-    try {
-      const response = await fetch(`/api/organizers/conferences/${selectedConference.id}`, {
-        method: "DELETE",
-        credentials: "include",
-      });
-      if (!response.ok && response.status !== 404) {
-        const payload = (await response.json().catch(() => ({}))) as { error?: string };
-        throw new Error(payload.error || "Unable to delete conference.");
-      }
-      removeOrganizerConference(selectedConference.id);
-      setSelectedConferenceId("");
-      setActiveSection("conferences");
-      setPreviewSaveStatus("Conference deleted.");
-    } catch (error) {
-      setPreviewSaveStatus(error instanceof Error ? error.message : "Unable to delete conference.");
-    } finally {
-      setDeleteConfirmStep(0);
-    }
+    if (!ensureConferenceMutable()) return;
+    requestConfirm({
+      title: `Delete "${selectedConference.title}"?`,
+      description: "This soft-deletes the conference and hides it from the marketplace. Type DELETE to confirm.",
+      requireTypedText: "DELETE",
+      confirmLabel: "Delete conference",
+      onConfirm: async () => {
+        try {
+          const response = await fetch(`/api/organizers/conferences/${selectedConference.id}`, {
+            method: "DELETE",
+            credentials: "include",
+          });
+          if (!response.ok && response.status !== 404) {
+            const payload = (await response.json().catch(() => ({}))) as { error?: string };
+            throw new Error(payload.error || "Unable to delete conference.");
+          }
+          removeOrganizerConference(selectedConference.id);
+          setSelectedConferenceId("");
+          setActiveSection("conferences");
+          setPreviewSaveStatus("Conference deleted.");
+        } catch (error) {
+          setPreviewSaveStatus(error instanceof Error ? error.message : "Unable to delete conference.");
+        }
+      },
+    });
   };
 
   useEffect(() => {
@@ -1727,6 +1770,7 @@ export default function OrganizerDashboardPage() {
 
   const savePortfolioMatrixVisibility = async () => {
     if (!selectedConference || portfolioMatrixVisibilitySaving) return;
+    if (!ensureConferenceMutable()) return;
     setPortfolioMatrixVisibilitySaving(true);
     try {
       await updateOrganizerConferenceConfigAsync(selectedConference.id, {
@@ -1787,10 +1831,6 @@ export default function OrganizerDashboardPage() {
   useEffect(() => {
     setPreviewScheduleDraft(parseConferenceScheduleEntries(selectedConference?.conferenceSchedule || []));
   }, [selectedConference?.id]);
-
-  useEffect(() => {
-    setDeleteConfirmStep(0);
-  }, [selectedConference?.id, activeSection]);
 
   useEffect(() => {
     if (!selectedConference) return;
@@ -1977,6 +2017,19 @@ export default function OrganizerDashboardPage() {
       alert("No pending applications to assign on this tab.");
       return;
     }
+    requestConfirm({
+      title: `Auto-assign ${pending.length} pending application(s)?`,
+      description: "This creates draft allotments from preference order. Students are not notified until you release allotments.",
+      confirmLabel: "Auto-assign now",
+      danger: false,
+      onConfirm: () => void runAutoAssign(pending),
+    });
+  };
+
+  const runAutoAssign = async (
+    pending: OrganizerConference["applicants"]
+  ) => {
+    if (!selectedConference || autoAssigning) return;
     setAutoAssigning(true);
     let assigned = 0;
     let failed = 0;
@@ -2182,6 +2235,7 @@ export default function OrganizerDashboardPage() {
     categoriesOverride?: OrganizerConference["registrationCategories"]
   ) => {
     if (!selectedConference || pricingSaving) return;
+    if (!ensureConferenceMutable()) return;
     const categoriesToSave = categoriesOverride ?? selectedConference.registrationCategories;
     const incompletePhases = findIncompletePricingPhases(categoriesToSave);
     if (incompletePhases.length > 0) {
@@ -2503,6 +2557,7 @@ export default function OrganizerDashboardPage() {
   };
   const saveBankingDetails = () => {
     if (!selectedConference) return;
+    if (!ensureConferenceMutable()) return;
     const nextBankingDetails: OrganizerBankingDetails = {
       ...selectedConferenceBankingDetails,
       updatedAt: new Date().toISOString(),
@@ -2605,6 +2660,7 @@ export default function OrganizerDashboardPage() {
 
   const saveStatusEmailTemplates = async () => {
     if (!selectedConference || !selectedConferenceEmailTemplates || templatesSaving) return;
+    if (!ensureConferenceMutable()) return;
     setTemplatesSaving(true);
     setTemplatesSaveStatus("");
     const result = await updateOrganizerConferenceConfigAsync(selectedConference.id, {
@@ -2667,13 +2723,19 @@ export default function OrganizerDashboardPage() {
   };
   const clearBankingDetails = () => {
     if (!selectedConference) return;
-    if (!confirm("Clear all banking details for this conference?")) return;
-    if (!confirm("Please confirm again: clear all banking details?")) return;
-    updateOrganizerConferenceConfig(selectedConference.id, {
-      bankingDetails: { verificationStatus: "Unverified", updatedAt: new Date().toISOString() },
+    requestConfirm({
+      title: "Clear all banking details?",
+      description: "Payment and payout details for this conference will be wiped. Type CLEAR to confirm.",
+      requireTypedText: "CLEAR",
+      confirmLabel: "Clear banking details",
+      onConfirm: () => {
+        updateOrganizerConferenceConfig(selectedConference.id, {
+          bankingDetails: { verificationStatus: "Unverified", updatedAt: new Date().toISOString() },
+        });
+        setBankingSaveStatus("Banking details cleared");
+        setTimeout(() => setBankingSaveStatus(""), 1500);
+      },
     });
-    setBankingSaveStatus("Banking details cleared");
-    setTimeout(() => setBankingSaveStatus(""), 1500);
   };
 
   const updateStatusEmailTemplateField = (
@@ -3054,13 +3116,14 @@ export default function OrganizerDashboardPage() {
                     new Date(selectedConference.endDate).getTime() > Date.now()
                   }
                   onClick={() => {
-                    if (
-                      !window.confirm(
-                        "Complete this conference? It will be archived and added to allotted participants' profiles."
-                      )
-                    ) {
-                      return;
-                    }
+                    requestConfirm({
+                      title: "Complete this conference?",
+                      description:
+                        "It will be archived and added to allotted participants' profiles. Type COMPLETE to confirm.",
+                      requireTypedText: "COMPLETE",
+                      confirmLabel: "Complete conference",
+                      danger: false,
+                      onConfirm: () => {
                     setCompletingConferenceId(selectedConference.id);
                     void fetch(
                       `/api/organizers/conferences/${encodeURIComponent(selectedConference.id)}/complete`,
@@ -3094,6 +3157,8 @@ export default function OrganizerDashboardPage() {
                         );
                       })
                       .finally(() => setCompletingConferenceId(""));
+                      },
+                    });
                   }}
                 >
                   {completedConferenceIds.has(selectedConference.id)
@@ -3195,6 +3260,19 @@ export default function OrganizerDashboardPage() {
                       <p className="app-subtitle mt-2">{ORGANIZER_SECTION_META[activeSection].subtitle}</p>
                     </div>
                   </header>
+                  {selectedConferenceIsWriteLocked && (
+                    <div
+                      className="card p-4 rounded-2xl mb-4 border border-rose-500/35 bg-rose-500/10"
+                      role="status"
+                    >
+                      <p className="text-sm font-semibold" style={{ color: "var(--fg)" }}>
+                        Conference is closed (read-only)
+                      </p>
+                      <p className="text-xs mt-1" style={{ color: "var(--fg-muted)" }}>
+                        {selectedConferenceWriteLockMessage}
+                      </p>
+                    </div>
+                  )}
 
                   {activeSection === "preview" &&
                     selectedConference.status === "Draft" &&
@@ -3236,8 +3314,19 @@ export default function OrganizerDashboardPage() {
                         {selectedConference.status === "Draft" ? (
                           <button
                             type="button"
-                            className="btn btn-primary text-xs"
-                            onClick={() => updateOrganizerConferenceStatus(selectedConference.id, "Published")}
+                            className="btn btn-primary text-xs min-h-[44px] touch-manipulation"
+                            disabled={selectedConferenceIsWriteLocked}
+                            onClick={() =>
+                              requestConfirm({
+                                title: "Publish this conference?",
+                                description:
+                                  "This submits the conference for marketplace review/publishing. Double-check committees, pricing, and documents first.",
+                                confirmLabel: "Publish conference",
+                                danger: false,
+                                onConfirm: () =>
+                                  updateOrganizerConferenceStatus(selectedConference.id, "Published"),
+                              })
+                            }
                           >
                             Publish Conference
                           </button>
@@ -3251,6 +3340,7 @@ export default function OrganizerDashboardPage() {
                           <button
                             type="button"
                             className="btn btn-ghost text-xs"
+                            disabled={selectedConferenceIsWriteLocked}
                             onClick={() => updateOrganizerConferenceStatus(selectedConference.id, "Review")}
                           >
                             Move to Review
@@ -3275,7 +3365,7 @@ export default function OrganizerDashboardPage() {
                       <h3 className="text-lg font-bold" style={{ color: "var(--fg)" }}>Conference Page Preview</h3>
                       <button
                         className="btn btn-primary text-xs"
-                        disabled={previewSettingsSaving}
+                        disabled={previewSettingsSaving || selectedConferenceIsWriteLocked}
                         onClick={savePreviewSettings}
                       >
                         {previewSettingsSaving ? "Saving…" : "Save Preview Settings"}
@@ -3297,11 +3387,11 @@ export default function OrganizerDashboardPage() {
                       )}
                       <button
                         type="button"
-                        className="btn btn-danger-ghost text-xs mt-3"
-                        disabled={hasPaidRegistrations}
+                        className="btn btn-danger-ghost text-xs mt-3 min-h-[44px] touch-manipulation"
+                        disabled={hasPaidRegistrations || selectedConferenceIsWriteLocked}
                         onClick={() => void deleteSelectedConference()}
                       >
-                        {deleteConfirmStep === 0 ? "Delete Conference" : "Confirm Delete Conference"}
+                        Delete Conference
                       </button>
                     </div>
                     <div className="grid lg:grid-cols-2 gap-6">
@@ -3419,7 +3509,7 @@ export default function OrganizerDashboardPage() {
                         <button
                           type="button"
                           className="btn btn-primary text-xs"
-                          disabled={previewSettingsSaving}
+                        disabled={previewSettingsSaving || selectedConferenceIsWriteLocked}
                           onClick={() => void savePreviewSettings()}
                         >
                           {previewSettingsSaving ? "Saving…" : "Save schedule"}
@@ -3669,28 +3759,42 @@ export default function OrganizerDashboardPage() {
                           <div className="flex flex-wrap gap-2">
                             <button
                               type="button"
-                              className="btn btn-primary text-xs"
-                              onClick={() => {
-                                if (!window.confirm("Set allocation mode to Pay first?")) return;
-                                if (!window.confirm("Please confirm again: lock conference to Pay first mode?")) return;
-                                updateOrganizerConferenceConfig(selectedConference.id, {
-                                  allocationMode: "PAY_FIRST",
-                                });
-                              }}
+                              className="btn btn-primary text-xs min-h-[44px] touch-manipulation"
+                              onClick={() =>
+                                requestConfirm({
+                                  title: "Lock allocation mode to Pay first?",
+                                  description:
+                                    "This cannot be changed later. Students must pay before their application is submitted. Type LOCK to confirm.",
+                                  requireTypedText: "LOCK",
+                                  confirmLabel: "Lock Pay first",
+                                  danger: false,
+                                  onConfirm: () =>
+                                    updateOrganizerConferenceConfig(selectedConference.id, {
+                                      allocationMode: "PAY_FIRST",
+                                    }),
+                                })
+                              }
                             >
                               Pay first
                             </button>
                             <button
                               type="button"
-                              className="btn btn-outline-blue text-xs"
-                              onClick={() => {
-                                if (!window.confirm("Set allocation mode to Allot first?")) return;
-                                if (!window.confirm("Please confirm again: lock conference to Allot first mode?")) return;
-                                updateOrganizerConferenceConfig(selectedConference.id, {
-                                  allocationMode: "ALLOT_FIRST",
-                                  paymentDeadlineDays: 7,
-                                });
-                              }}
+                              className="btn btn-outline-blue text-xs min-h-[44px] touch-manipulation"
+                              onClick={() =>
+                                requestConfirm({
+                                  title: "Lock allocation mode to Allot first?",
+                                  description:
+                                    "This cannot be changed later. Students apply first and pay after allotment. Type LOCK to confirm.",
+                                  requireTypedText: "LOCK",
+                                  confirmLabel: "Lock Allot first",
+                                  danger: false,
+                                  onConfirm: () =>
+                                    updateOrganizerConferenceConfig(selectedConference.id, {
+                                      allocationMode: "ALLOT_FIRST",
+                                      paymentDeadlineDays: 7,
+                                    }),
+                                })
+                              }
                             >
                               Allot first
                             </button>
@@ -3870,7 +3974,7 @@ export default function OrganizerDashboardPage() {
                         <button
                           type="button"
                           className="btn btn-primary text-xs"
-                          disabled={previewSettingsSaving}
+                          disabled={previewSettingsSaving || selectedConferenceIsWriteLocked}
                           onClick={savePreviewSettings}
                         >
                           {previewSettingsSaving ? "Saving…" : "Save tags & level"}
@@ -3912,7 +4016,7 @@ export default function OrganizerDashboardPage() {
                         <button
                           type="button"
                           className="btn btn-primary text-xs"
-                          disabled={previewSettingsSaving}
+                          disabled={previewSettingsSaving || selectedConferenceIsWriteLocked}
                           onClick={savePreviewSettings}
                         >
                           {previewSettingsSaving ? "Saving…" : "Save changes"}
@@ -3956,30 +4060,112 @@ export default function OrganizerDashboardPage() {
                       })}
                     </div>
                     {applicationTypeTab === "chair" && (
-                      <div className="grid md:grid-cols-2 gap-2 mb-3">
-                        <div className="rounded-xl p-3" style={{ background: "var(--bg-subtle)" }}>
-                          <p className="text-sm font-semibold" style={{ color: "var(--fg-muted)" }}>
-                            EB Draft (Not Released)
-                          </p>
-                          <p className="text-2xl font-black" style={{ color: "var(--warning-fg)" }}>
-                            {
-                              filteredApplications.filter(
-                                (entry) => entry.status === "Allotted" && entry.released === false
-                              ).length
-                            }
-                          </p>
+                      <div className="space-y-3 mb-3">
+                        <div className="grid md:grid-cols-2 gap-2">
+                          <div className="rounded-xl p-3" style={{ background: "var(--bg-subtle)" }}>
+                            <p className="text-sm font-semibold" style={{ color: "var(--fg-muted)" }}>
+                              EB Draft (Not Released)
+                            </p>
+                            <p className="text-2xl font-black" style={{ color: "var(--warning-fg)" }}>
+                              {
+                                filteredApplications.filter(
+                                  (entry) => entry.status === "Allotted" && entry.released === false
+                                ).length
+                              }
+                            </p>
+                          </div>
+                          <div className="rounded-xl p-3" style={{ background: "var(--bg-subtle)" }}>
+                            <p className="text-sm font-semibold" style={{ color: "var(--fg-muted)" }}>
+                              EB Released
+                            </p>
+                            <p className="text-2xl font-black" style={{ color: "var(--success-fg)" }}>
+                              {
+                                filteredApplications.filter(
+                                  (entry) => entry.status === "Allotted" && entry.released === true
+                                ).length
+                              }
+                            </p>
+                          </div>
                         </div>
-                        <div className="rounded-xl p-3" style={{ background: "var(--bg-subtle)" }}>
-                          <p className="text-sm font-semibold" style={{ color: "var(--fg-muted)" }}>
-                            EB Released
+                        <div className="rounded-xl p-3 space-y-2" style={{ background: "var(--bg-subtle)" }}>
+                          <p className="text-xs font-semibold" style={{ color: "var(--fg)" }}>
+                            Manually add EB member (registered Tidingz account)
                           </p>
-                          <p className="text-2xl font-black" style={{ color: "var(--success-fg)" }}>
-                            {
-                              filteredApplications.filter(
-                                (entry) => entry.status === "Allotted" && entry.released === true
-                              ).length
-                            }
-                          </p>
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                            <select
+                              className="input-base text-xs app-select-modern"
+                              value={manualEbApplicantId}
+                              onChange={(event) => setManualEbApplicantId(event.target.value)}
+                            >
+                              <option value="">Select participant account</option>
+                              {(selectedConference?.applicants || [])
+                                .filter((entry) => entry.userId || entry.userEmail)
+                                .map((entry) => (
+                                  <option key={entry.id} value={entry.id}>
+                                    {entry.name} ({entry.userEmail || "linked account"})
+                                  </option>
+                                ))}
+                            </select>
+                            <select
+                              className="input-base text-xs app-select-modern"
+                              value={manualEbCommitteeId}
+                              onChange={(event) => setManualEbCommitteeId(event.target.value)}
+                            >
+                              <option value="">Select committee</option>
+                              {(selectedConference?.committees || []).map((committee) => (
+                                <option key={committee.id} value={committee.id}>
+                                  {committee.name}
+                                </option>
+                              ))}
+                            </select>
+                            <select
+                              className="input-base text-xs app-select-modern"
+                              value={manualEbRole}
+                              onChange={(event) => setManualEbRole(event.target.value)}
+                            >
+                              {CHAIR_ROLE_PRESETS.map((role) => (
+                                <option key={role} value={role}>
+                                  {role}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          <button
+                            type="button"
+                            className="btn btn-primary text-xs min-h-[44px] touch-manipulation"
+                            disabled={!manualEbApplicantId || !manualEbCommitteeId}
+                            onClick={() => {
+                              if (!selectedConference || !manualEbApplicantId || !manualEbCommitteeId) return;
+                              const applicant = selectedConference.applicants.find(
+                                (entry) => entry.id === manualEbApplicantId
+                              );
+                              if (!applicant) return;
+                              requestConfirm({
+                                title: `Assign ${applicant.name} as ${manualEbRole}?`,
+                                description: "This links the participant to the selected committee in the EB section.",
+                                confirmLabel: "Assign EB member",
+                                danger: false,
+                                onConfirm: () => {
+                                  const result = allotChairWithRole({
+                                    conferenceId: selectedConference.id,
+                                    applicantId: manualEbApplicantId,
+                                    committeeId: manualEbCommitteeId,
+                                    role: manualEbRole,
+                                  });
+                                  if (!result.ok) {
+                                    toast.show(result.message, "error");
+                                    return;
+                                  }
+                                  toast.show("EB member assigned.", "success");
+                                  setManualEbApplicantId("");
+                                  setManualEbCommitteeId("");
+                                  setManualEbRole("Chair");
+                                },
+                              });
+                            }}
+                          >
+                            Assign EB member
+                          </button>
                         </div>
                       </div>
                     )}
@@ -3989,7 +4175,7 @@ export default function OrganizerDashboardPage() {
                           type="button"
                           className="btn btn-outline-blue text-xs"
                           onClick={() => void handleAutoAssign()}
-                          disabled={autoAssigning}
+                          disabled={autoAssigning || selectedConferenceIsWriteLocked}
                         >
                           {autoAssigning
                             ? `Auto-assigning… (${autoAssignProgress})`
@@ -4004,7 +4190,7 @@ export default function OrganizerDashboardPage() {
                           <button
                             type="button"
                             className="btn btn-primary text-xs"
-                            disabled={draftCount === 0 || releasingAllotments}
+                            disabled={draftCount === 0 || releasingAllotments || selectedConferenceIsWriteLocked}
                             onClick={() => setReleaseAllotmentsOpen(true)}
                           >
                             {releasingAllotments
@@ -4196,6 +4382,29 @@ export default function OrganizerDashboardPage() {
                                 )}
                               </div>
                               )}
+                              {applicationTypeTab === "secretariat" && (
+                                <div className="mt-3">
+                                  <label className="block text-xs font-semibold mb-1" style={{ color: "var(--fg-muted)" }}>
+                                    Secretariat role on acceptance
+                                  </label>
+                                  <select
+                                    className="input-base text-sm app-select-modern"
+                                    value={secretariatRoleByApplicantId[applicant.id] || "Secretary-General"}
+                                    onChange={(event) =>
+                                      setSecretariatRoleByApplicantId((prev) => ({
+                                        ...prev,
+                                        [applicant.id]: event.target.value,
+                                      }))
+                                    }
+                                  >
+                                    {SECRETARIAT_ROLE_OPTIONS.map((roleOption) => (
+                                      <option key={roleOption} value={roleOption}>
+                                        {roleOption}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+                              )}
 
                               <div className="flex gap-2 mt-3 flex-wrap">
                                 {isOcTab ? (
@@ -4214,18 +4423,21 @@ export default function OrganizerDashboardPage() {
                                           existingTeam.map((entry) => entry.email.trim().toLowerCase()).filter(Boolean)
                                         );
                                         const applicantEmail = (applicant.userEmail || "").trim();
+                                        const linkedUserId = applicant.userId || undefined;
+                                        const acceptedRole =
+                                          applicationTypeTab === "secretariat"
+                                            ? (secretariatRoleByApplicantId[applicant.id] || "Secretary-General").trim()
+                                            : "USG";
                                         if (applicantEmail && !existingEmails.has(applicantEmail.toLowerCase())) {
                                           updateOrganizerConferenceConfig(selectedConference.id, {
                                             organizerTeam: [
                                               ...existingTeam,
                                               {
                                                 id: `team-auto-${applicant.id}`,
+                                                userId: linkedUserId,
                                                 name: applicant.name,
                                                 email: applicantEmail,
-                                                role:
-                                                  applicationTypeTab === "secretariat"
-                                                    ? "Secretary-General"
-                                                    : "USG",
+                                                role: acceptedRole,
                                                 teamType: applicationTypeTab === "secretariat" ? "secretariat" : "organizer",
                                                 permissions:
                                                   applicationTypeTab === "secretariat"
@@ -4235,7 +4447,12 @@ export default function OrganizerDashboardPage() {
                                             ],
                                           });
                                         }
-                                        toast.show("Organiser application accepted.", "success");
+                                        toast.show(
+                                          applicationTypeTab === "secretariat"
+                                            ? `Secretariat application accepted as ${acceptedRole}.`
+                                            : "Organizing Committee application accepted.",
+                                          "success"
+                                        );
                                         applicantActionRef.current = null;
                                         setApplicantActionId(null);
                                       }}
@@ -4251,7 +4468,12 @@ export default function OrganizerDashboardPage() {
                                         applicantActionRef.current = applicant.id;
                                         setApplicantActionId(applicant.id);
                                         updateApplicantStatus(selectedConference.id, applicant.id, "Rejected");
-                                        toast.show("Organiser application rejected.", "info");
+                                        toast.show(
+                                          applicationTypeTab === "secretariat"
+                                            ? "Secretariat application rejected."
+                                            : "Organizing Committee application rejected.",
+                                          "info"
+                                        );
                                         applicantActionRef.current = null;
                                         setApplicantActionId(null);
                                       }}
@@ -4299,7 +4521,7 @@ export default function OrganizerDashboardPage() {
                                     className="btn btn-primary text-xs"
                                     disabled={selectedConference.committees.length === 0}
                                   >
-                                    {chairAssignment?.chair ? "Reassign EB Role…" : "Assign EB Role…"}
+                                    {chairAssignment?.chair ? "Reassign EB role…" : "Accept & assign EB role…"}
                                   </button>
                                 ) : (
                                 <button
@@ -4330,14 +4552,22 @@ export default function OrganizerDashboardPage() {
                                 <button
                                   onClick={() => {
                                     if (applicantActionRef.current === applicant.id) return;
-                                    applicantActionRef.current = applicant.id;
-                                    setApplicantActionId(applicant.id);
-                                    const result = unassignApplicant(selectedConference.id, applicant.id);
-                                    if (!result.ok) toast.show(result.message, "error");
-                                    applicantActionRef.current = null;
-                                    setApplicantActionId(null);
+                                    requestConfirm({
+                                      title: `Unassign ${applicant.name}?`,
+                                      description:
+                                        "This clears their committee/portfolio assignment. You can re-allot them later.",
+                                      confirmLabel: "Unassign",
+                                      onConfirm: () => {
+                                        applicantActionRef.current = applicant.id;
+                                        setApplicantActionId(applicant.id);
+                                        const result = unassignApplicant(selectedConference.id, applicant.id);
+                                        if (!result.ok) toast.show(result.message, "error");
+                                        applicantActionRef.current = null;
+                                        setApplicantActionId(null);
+                                      },
+                                    });
                                   }}
-                                  className="btn btn-ghost text-xs"
+                                  className="btn btn-ghost text-xs min-h-[44px] touch-manipulation"
                                   disabled={applicantActionId === applicant.id}
                                 >
                                   {applicantActionId === applicant.id ? "Saving…" : "Unassign"}
@@ -4345,14 +4575,23 @@ export default function OrganizerDashboardPage() {
                                 <button
                                   onClick={() => {
                                     if (applicantActionRef.current === applicant.id) return;
-                                    applicantActionRef.current = applicant.id;
-                                    setApplicantActionId(applicant.id);
-                                    updateApplicantStatus(selectedConference.id, applicant.id, "Rejected");
-                                    toast.show("Applicant rejected.", "info");
-                                    applicantActionRef.current = null;
-                                    setApplicantActionId(null);
+                                    requestConfirm({
+                                      title: `Reject ${applicant.name}?`,
+                                      description:
+                                        "This marks the applicant as rejected. Type REJECT to confirm.",
+                                      requireTypedText: "REJECT",
+                                      confirmLabel: "Reject applicant",
+                                      onConfirm: () => {
+                                        applicantActionRef.current = applicant.id;
+                                        setApplicantActionId(applicant.id);
+                                        updateApplicantStatus(selectedConference.id, applicant.id, "Rejected");
+                                        toast.show("Applicant rejected.", "info");
+                                        applicantActionRef.current = null;
+                                        setApplicantActionId(null);
+                                      },
+                                    });
                                   }}
-                                  className="btn btn-ghost text-xs"
+                                  className="btn btn-ghost text-xs min-h-[44px] touch-manipulation"
                                   disabled={applicantActionId === applicant.id}
                                 >
                                   {applicantActionId === applicant.id ? "Saving…" : "Reject"}
@@ -4464,7 +4703,7 @@ export default function OrganizerDashboardPage() {
                           </button>
                           <button
                             type="button"
-                            className="btn btn-primary text-sm"
+                            className="btn btn-primary text-sm min-h-[44px] touch-manipulation"
                             disabled={!chairAllotCommitteeId}
                             onClick={() => {
                               const resolvedRole =
@@ -4476,20 +4715,15 @@ export default function OrganizerDashboardPage() {
                               const targetCommittee = selectedConference.committees.find(
                                 (committee) => committee.id === chairAllotCommitteeId
                               );
-                              if (
-                                !window.confirm(
-                                  `Assign this EB applicant to ${targetCommittee?.name || "the selected committee"} as ${resolvedRole}?`
-                                )
-                              ) {
-                                return;
-                              }
-                              if (
-                                !window.confirm(
-                                  "Please confirm again. This will update the draft chair allotment."
-                                )
-                              ) {
-                                return;
-                              }
+                              requestConfirm({
+                                title: `Assign as ${resolvedRole}?`,
+                                description: `Assign this EB applicant to ${
+                                  targetCommittee?.name || "the selected committee"
+                                } as ${resolvedRole}. Type ALLOT to confirm.`,
+                                requireTypedText: "ALLOT",
+                                confirmLabel: "Confirm allotment",
+                                danger: false,
+                                onConfirm: () => {
                               const result = allotChairWithRole({
                                 conferenceId: selectedConference.id,
                                 applicantId: chairAllotApplicantId,
@@ -4506,6 +4740,8 @@ export default function OrganizerDashboardPage() {
                               setChairAllotCommitteeId("");
                               setChairAllotRole("Chair");
                               setChairAllotCustomRole("");
+                                },
+                              });
                             }}
                           >
                             Confirm Allotment
@@ -4596,7 +4832,7 @@ export default function OrganizerDashboardPage() {
                     ) : (
                       <div className="space-y-2">
                         <div
-                          className="grid md:grid-cols-[1.2fr_1fr_1fr_1fr_120px_120px] gap-2 px-3 py-2 rounded-lg text-xs font-semibold"
+                          className="hidden md:grid md:grid-cols-[1.2fr_1fr_1fr_1fr_120px_120px] gap-2 px-3 py-2 rounded-lg text-xs font-semibold"
                           style={{ background: "var(--bg-subtle)", color: "var(--fg-muted)" }}
                         >
                           <span>Participant</span>
@@ -4609,20 +4845,32 @@ export default function OrganizerDashboardPage() {
                         {participantAllocationRows.map((applicant) => (
                           <div
                             key={applicant.id}
-                            className="grid md:grid-cols-[1.2fr_1fr_1fr_1fr_120px_120px] gap-2 px-3 py-2 rounded-lg text-sm"
+                            className="grid grid-cols-1 md:grid-cols-[1.2fr_1fr_1fr_1fr_120px_120px] gap-2 px-3 py-3 rounded-lg text-sm"
                             style={{ background: "var(--bg-subtle)", border: "1px solid var(--border)" }}
                           >
                             <div>
                               <p className="font-semibold" style={{ color: "var(--fg)" }}>{applicant.name}</p>
                               <p style={{ color: "var(--fg-muted)" }}>{applicant.school || "N/A"}</p>
                             </div>
-                            <span style={{ color: "var(--fg-muted)" }}>{applicant.categoryName || "N/A"}</span>
-                            <span style={{ color: "var(--fg-muted)" }}>{applicant.assignedCommitteeName || "Not allotted"}</span>
-                            <span style={{ color: "var(--fg-muted)" }}>{applicant.assignedPortfolioName || "Not allotted"}</span>
-                            <span style={{ color: "var(--fg-muted)" }}>{applicant.status}</span>
+                            <div>
+                              <p className="md:hidden text-[11px] font-semibold uppercase tracking-wide mb-0.5" style={{ color: "var(--fg-muted)" }}>Category</p>
+                              <span style={{ color: "var(--fg-muted)" }}>{applicant.categoryName || "N/A"}</span>
+                            </div>
+                            <div>
+                              <p className="md:hidden text-[11px] font-semibold uppercase tracking-wide mb-0.5" style={{ color: "var(--fg-muted)" }}>Committee</p>
+                              <span style={{ color: "var(--fg-muted)" }}>{applicant.assignedCommitteeName || "Not allotted"}</span>
+                            </div>
+                            <div>
+                              <p className="md:hidden text-[11px] font-semibold uppercase tracking-wide mb-0.5" style={{ color: "var(--fg-muted)" }}>Country/Member</p>
+                              <span style={{ color: "var(--fg-muted)" }}>{applicant.assignedPortfolioName || "Not allotted"}</span>
+                            </div>
+                            <div>
+                              <p className="md:hidden text-[11px] font-semibold uppercase tracking-wide mb-0.5" style={{ color: "var(--fg-muted)" }}>Status</p>
+                              <span style={{ color: "var(--fg-muted)" }}>{applicant.status}</span>
+                            </div>
                             <button
                               type="button"
-                              className="btn btn-ghost text-xs"
+                              className="btn btn-ghost text-xs min-h-[44px] touch-manipulation w-full md:w-auto"
                               onClick={() => {
                                 setSelectedApplicantId(applicant.id);
                                 setApplicantProfileDrawerOpen(true);
@@ -5596,11 +5844,20 @@ export default function OrganizerDashboardPage() {
                                     {!row.paid && selectedConference && row.paymentProvider !== "CASHFREE" && (
                                       <button
                                         type="button"
-                                        className="btn btn-primary text-xs"
+                                        className="btn btn-primary text-xs min-h-[44px] touch-manipulation"
                                         disabled={payingRegistrationId === row.registrationId}
                                         onClick={() => {
                                           if (!row.registrationId) return;
-                                          setPayingRegistrationId(row.registrationId);
+                                          const registrationId = row.registrationId;
+                                          requestConfirm({
+                                            title: `Mark ${row.name} as paid?`,
+                                            description:
+                                              "This records an offline/manual payment for this registration. Type PAID to confirm.",
+                                            requireTypedText: "PAID",
+                                            confirmLabel: "Mark as paid",
+                                            danger: false,
+                                            onConfirm: () => {
+                                          setPayingRegistrationId(registrationId);
                                           setPaymentActionStatus("");
                                           void (async () => {
                                             try {
@@ -5613,13 +5870,15 @@ export default function OrganizerDashboardPage() {
                                               setTimeout(() => setPaymentActionStatus(""), 2500);
                                             }
                                           })();
+                                            },
+                                          });
                                         }}
                                       >
                                         {payingRegistrationId === row.registrationId ? "Saving..." : "Mark as paid"}
                                       </button>
                                     )}
                                     <button
-                                      className="btn btn-ghost text-xs"
+                                      className="btn btn-ghost text-xs min-h-[44px] touch-manipulation"
                                       disabled={
                                         !row.paid ||
                                         row.refundStatus === "Refunded" ||
@@ -5627,13 +5886,14 @@ export default function OrganizerDashboardPage() {
                                       }
                                       onClick={() => {
                                         if (!row.registrationId || !selectedConference || refundingRegistrationId) return;
-                                        void (async () => {
-                                          const confirmed = confirm(
-                                            `Refund registration for ${row.name}? This cannot be undone.`
-                                          );
-                                          if (!confirmed) return;
-                                          const registrationId = row.registrationId;
-                                          if (!registrationId) return;
+                                        const registrationId = row.registrationId;
+                                        requestConfirm({
+                                          title: `Refund ${row.name}?`,
+                                          description:
+                                            "This cannot be undone. Type REFUND to process the refund.",
+                                          requireTypedText: "REFUND",
+                                          confirmLabel: "Process refund",
+                                          onConfirm: async () => {
                                           setRefundingRegistrationId(registrationId);
                                           try {
                                             const res = await fetch(
@@ -5654,7 +5914,8 @@ export default function OrganizerDashboardPage() {
                                           } finally {
                                             setRefundingRegistrationId(null);
                                           }
-                                        })();
+                                          },
+                                        });
                                       }}
                                     >
                                       {refundingRegistrationId === row.registrationId ? "Refunding…" : "Refund"}
@@ -6103,7 +6364,11 @@ export default function OrganizerDashboardPage() {
                             </div>
                           )}
                           <div className="flex justify-end">
-                            <button className="btn btn-primary text-xs" onClick={saveBankingDetails}>
+                            <button
+                              className="btn btn-primary text-xs"
+                              onClick={saveBankingDetails}
+                              disabled={selectedConferenceIsWriteLocked}
+                            >
                               Save Banking Details
                             </button>
                           </div>
@@ -6176,15 +6441,15 @@ export default function OrganizerDashboardPage() {
                       </p>
                       <button
                         type="button"
-                        className="btn btn-ghost text-xs mb-3"
+                        className="btn btn-ghost text-xs mb-3 min-h-[44px] touch-manipulation"
                         onClick={() => {
-                          if (
-                            !window.confirm(
-                              `Import accepted ${teamTypeTab === "secretariat" ? "secretariat" : "organizer"} applications into the team list?`
-                            )
-                          ) {
-                            return;
-                          }
+                          requestConfirm({
+                            title: `Import accepted ${teamTypeTab === "secretariat" ? "secretariat" : "organizer"} applications?`,
+                            description:
+                              "Matching accepted applications will be added to the team list. Existing emails are skipped.",
+                            confirmLabel: "Import into team",
+                            danger: false,
+                            onConfirm: () => {
                           const categoryTypeById = new Map(
                             selectedConference.registrationCategories.map((category) => [
                               category.id,
@@ -6233,6 +6498,8 @@ export default function OrganizerDashboardPage() {
                           });
                           toast.show(`Imported ${imported.length} team member(s).`, "success");
                           void syncOrganizerConferenceById(selectedConference.id);
+                            },
+                          });
                         }}
                       >
                         Import accepted {teamTypeTab === "secretariat" ? "secretariat" : "organizer"} applications
@@ -6258,13 +6525,18 @@ export default function OrganizerDashboardPage() {
                             toast.show("Name and email are required for team members.", "error");
                             return;
                           }
+                          const normalizedTeamEmail = teamDraft.email.trim().toLowerCase();
+                          const linkedApplicant = selectedConference.applicants.find(
+                            (entry) => (entry.userEmail || "").trim().toLowerCase() === normalizedTeamEmail
+                          );
                           updateOrganizerConferenceConfig(selectedConference.id, {
                             organizerTeam: [
                               ...(selectedConference.organizerTeam || []),
                               {
                                 id: `team-${Date.now()}`,
+                                userId: linkedApplicant?.userId,
                                 name: teamDraft.name.trim(),
-                                email: teamDraft.email.trim(),
+                                email: normalizedTeamEmail,
                                 role: teamDraft.role,
                                 teamType: teamTypeTab,
                                 permissions:
@@ -6288,7 +6560,9 @@ export default function OrganizerDashboardPage() {
                           toast.show(
                             teamTypeTab === "secretariat"
                               ? "Secretariat member added."
-                              : "Organizing team member added.",
+                              : linkedApplicant?.userId
+                                ? "Organizing Committee member added and linked to existing Tidingz account."
+                                : "Organizing Committee member added.",
                             "success"
                           );
                           void syncOrganizerConferenceById(selectedConference.id);
@@ -6480,7 +6754,7 @@ export default function OrganizerDashboardPage() {
                       <button
                         type="button"
                         className="btn btn-primary text-sm shrink-0"
-                        disabled={pricingSaving || !selectedConference}
+                        disabled={pricingSaving || !selectedConference || selectedConferenceIsWriteLocked}
                         onClick={() => void savePricingCategories()}
                       >
                         {pricingSaving ? "Saving…" : "Save categories & pricing"}
@@ -6602,24 +6876,45 @@ export default function OrganizerDashboardPage() {
                               </label>
                             </div>
                             {category.applicationType === "delegation" && (
-                              <div className="mt-2">
-                                <label className="text-xs font-semibold" style={{ color: "var(--fg-muted)" }}>
-                                  Max delegates in one delegation
-                                </label>
-                                <input
-                                  className="input-base text-xs mt-1"
-                                  type="number"
-                                  min={1}
-                                  value={category.maxDelegatesPerDelegation ?? ""}
-                                  onChange={(event) => {
-                                    const parsed = Number(event.target.value);
-                                    updateRegistrationCategoryConfig(selectedConference.id, category.id, {
-                                      maxDelegatesPerDelegation:
-                                        Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : undefined,
-                                    });
-                                  }}
-                                  placeholder="e.g. 10"
-                                />
+                              <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                <div>
+                                  <label className="text-xs font-semibold" style={{ color: "var(--fg-muted)" }}>
+                                    Min delegates in one delegation
+                                  </label>
+                                  <input
+                                    className="input-base text-xs mt-1"
+                                    type="number"
+                                    min={1}
+                                    value={category.minDelegatesPerDelegation ?? ""}
+                                    onChange={(event) => {
+                                      const parsed = Number(event.target.value);
+                                      updateRegistrationCategoryConfig(selectedConference.id, category.id, {
+                                        minDelegatesPerDelegation:
+                                          Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : undefined,
+                                      });
+                                    }}
+                                    placeholder="e.g. 3"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="text-xs font-semibold" style={{ color: "var(--fg-muted)" }}>
+                                    Max delegates in one delegation
+                                  </label>
+                                  <input
+                                    className="input-base text-xs mt-1"
+                                    type="number"
+                                    min={1}
+                                    value={category.maxDelegatesPerDelegation ?? ""}
+                                    onChange={(event) => {
+                                      const parsed = Number(event.target.value);
+                                      updateRegistrationCategoryConfig(selectedConference.id, category.id, {
+                                        maxDelegatesPerDelegation:
+                                          Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : undefined,
+                                      });
+                                    }}
+                                    placeholder="e.g. 10"
+                                  />
+                                </div>
                               </div>
                             )}
                             <div className="rounded-lg p-3 mt-2 space-y-2" style={{ background: "var(--bg)" }}>
@@ -6737,27 +7032,46 @@ export default function OrganizerDashboardPage() {
                                           Complete the phase name, start date, and end date before saving.
                                         </p>
                                       )}
-                                      <div className="flex justify-end mt-2">
+                                      <div className="flex flex-wrap justify-end gap-2 mt-2">
                                         {phaseStatus !== "Ended" && (
                                           <button
-                                            className="btn btn-ghost text-xs mr-2"
-                                            onClick={() => void endCategoryPricingPhase(selectedConference.id, category, phase.id)}
+                                            className="btn btn-ghost text-xs min-h-[44px] touch-manipulation"
+                                            onClick={() =>
+                                              requestConfirm({
+                                                title: "End this pricing phase?",
+                                                description:
+                                                  "Students will see it as Ended. Prefer this over deleting so history remains visible.",
+                                                confirmLabel: "End phase",
+                                                danger: false,
+                                                onConfirm: () =>
+                                                  void endCategoryPricingPhase(
+                                                    selectedConference.id,
+                                                    category,
+                                                    phase.id
+                                                  ),
+                                              })
+                                            }
                                           >
                                             End Phase
                                           </button>
                                         )}
                                         <button
-                                          className="btn btn-danger-ghost text-xs"
-                                          onClick={() => {
-                                            if (
-                                              !window.confirm(
-                                                "Remove this phase permanently? Prefer End Phase so students still see it as Ended."
-                                              )
-                                            ) {
-                                              return;
-                                            }
-                                            void removeCategoryPricingPhase(selectedConference.id, category, phase.id);
-                                          }}
+                                          className="btn btn-danger-ghost text-xs min-h-[44px] touch-manipulation"
+                                          onClick={() =>
+                                            requestConfirm({
+                                              title: "Remove this phase permanently?",
+                                              description:
+                                                "Prefer End Phase so students still see it as Ended. Type REMOVE to delete it forever.",
+                                              requireTypedText: "REMOVE",
+                                              confirmLabel: "Remove phase",
+                                              onConfirm: () =>
+                                                void removeCategoryPricingPhase(
+                                                  selectedConference.id,
+                                                  category,
+                                                  phase.id
+                                                ),
+                                            })
+                                          }
                                         >
                                           Remove Phase
                                         </button>
@@ -6781,15 +7095,20 @@ export default function OrganizerDashboardPage() {
                                   { step: 1, label: "Category", skipped: false },
                                   {
                                     step: 2,
-                                    label: "Preferences",
-                                    skipped: false,
+                                    label: "Committees",
+                                    skipped: !preview.needsPreferences,
                                   },
                                   {
                                     step: 3,
-                                    label: "Questions",
-                                    skipped: false,
+                                    label: "Portfolios",
+                                    skipped: !preview.needsPortfolioStep,
                                   },
-                                  { step: 4, label: preview.isAllotFirst ? "Confirm" : "Payment", skipped: false },
+                                  {
+                                    step: 4,
+                                    label: "Questions",
+                                    skipped: !preview.needsQuestions,
+                                  },
+                                  { step: 5, label: preview.isAllotFirst ? "Confirm" : "Payment", skipped: false },
                                 ];
                                 const firstCommitteePortfolios = preview.firstCommittee?.portfolios ?? [];
                                 return (
@@ -6800,7 +7119,8 @@ export default function OrganizerDashboardPage() {
                                           Student registration preview
                                         </p>
                                         <p className="text-xs mt-1" style={{ color: "var(--fg-muted)" }}>
-                                          This is what a {categoryLabel.toLowerCase()} sees at checkout when they click Continue.
+                                          Checkout order: committees → portfolios → questions →{" "}
+                                          {preview.isAllotFirst ? "confirm" : "payment"}.
                                         </p>
                                       </div>
                                       <span className="badge badge-gray text-[10px]">
@@ -6898,7 +7218,7 @@ export default function OrganizerDashboardPage() {
                                       {registrationPreviewStep === 2 && (
                                         <>
                                           <h4 className="text-sm font-bold" style={{ color: "var(--fg)" }}>
-                                            2. Preferences
+                                            2. Committee preferences
                                           </h4>
                                           {preview.isOc ? (
                                             <p className="text-xs" style={{ color: "var(--fg-muted)" }}>
@@ -6907,17 +7227,16 @@ export default function OrganizerDashboardPage() {
                                             </p>
                                           ) : preview.checkoutCommittees.length === 0 ? (
                                             <p className="text-xs" style={{ color: "var(--fg-muted)" }}>
-                                              No committees are configured yet. Add committees in the Committees section
-                                              before students can register.
+                                              No committees are configured yet. Students can continue without preferences
+                                              until you add committees.
                                             </p>
                                           ) : (
                                             <>
                                               <p className="text-xs" style={{ color: "var(--fg-muted)" }}>
-                                                {preview.applicationType === "chair"
-                                                  ? "Students choose 3 committee preferences."
-                                                  : preview.needsPortfolio
-                                                    ? `Students choose 3 committee preferences and 3 ${preview.portfolioLabel.toLowerCase()} preferences for their 1st choice.`
-                                                    : "Students choose 3 committee preferences."}
+                                                Students choose committee preferences first
+                                                {preview.needsPortfolioStep
+                                                  ? `. Portfolio / ${preview.portfolioLabel.toLowerCase()} preferences come on the next step.`
+                                                  : "."}
                                               </p>
                                               {(["1st", "2nd", "3rd"] as const).map((rank) => (
                                                 <label key={rank} className="block text-xs" style={{ color: "var(--fg-muted)" }}>
@@ -6932,39 +7251,6 @@ export default function OrganizerDashboardPage() {
                                                   </select>
                                                 </label>
                                               ))}
-                                              {preview.needsPortfolio && firstCommitteePortfolios.length > 0 && (
-                                                <>
-                                                  <p className="text-xs font-semibold pt-1" style={{ color: "var(--fg)" }}>
-                                                    {preview.portfolioLabel} preferences (1st choice committee)
-                                                  </p>
-                                                  {(["1st", "2nd", "3rd"] as const).map((rank) => (
-                                                    <label
-                                                      key={`${rank}-portfolio`}
-                                                      className="block text-xs"
-                                                      style={{ color: "var(--fg-muted)" }}
-                                                    >
-                                                      {rank} {preview.portfolioLabel.toLowerCase()} preference
-                                                      <select
-                                                        className="input-base text-xs mt-1 w-full"
-                                                        disabled
-                                                        defaultValue=""
-                                                      >
-                                                        <option value="">Select {preview.portfolioLabel.toLowerCase()}</option>
-                                                        {firstCommitteePortfolios.map((portfolio) => (
-                                                          <option key={portfolio.id} value={portfolio.name}>
-                                                            {portfolio.name}
-                                                          </option>
-                                                        ))}
-                                                      </select>
-                                                    </label>
-                                                  ))}
-                                                </>
-                                              )}
-                                              {preview.firstCommittee && (
-                                                <p className="text-[11px]" style={{ color: "var(--fg-muted)" }}>
-                                                  Committee-specific questions are disabled and not shown to students.
-                                                </p>
-                                              )}
                                             </>
                                           )}
                                           <button type="button" className="btn btn-primary text-xs w-full" disabled>
@@ -6975,12 +7261,56 @@ export default function OrganizerDashboardPage() {
                                       {registrationPreviewStep === 3 && (
                                         <>
                                           <h4 className="text-sm font-bold" style={{ color: "var(--fg)" }}>
-                                            3. Additional questions
+                                            3. Portfolio preferences
+                                          </h4>
+                                          {!preview.needsPortfolioStep ? (
+                                            <p className="text-xs" style={{ color: "var(--fg-muted)" }}>
+                                              Portfolio preferences are skipped for this category (or no portfolios are
+                                              configured on the first committee).
+                                            </p>
+                                          ) : (
+                                            <>
+                                              <p className="text-xs" style={{ color: "var(--fg-muted)" }}>
+                                                After committees, students choose {preview.portfolioLabel.toLowerCase()}{" "}
+                                                preferences for their 1st committee choice.
+                                              </p>
+                                              {(["1st", "2nd", "3rd"] as const).map((rank) => (
+                                                <label
+                                                  key={`${rank}-portfolio`}
+                                                  className="block text-xs"
+                                                  style={{ color: "var(--fg-muted)" }}
+                                                >
+                                                  {rank} {preview.portfolioLabel.toLowerCase()} preference
+                                                  <select
+                                                    className="input-base text-xs mt-1 w-full"
+                                                    disabled
+                                                    defaultValue=""
+                                                  >
+                                                    <option value="">Select {preview.portfolioLabel.toLowerCase()}</option>
+                                                    {firstCommitteePortfolios.map((portfolio) => (
+                                                      <option key={portfolio.id} value={portfolio.name}>
+                                                        {portfolio.name}
+                                                      </option>
+                                                    ))}
+                                                  </select>
+                                                </label>
+                                              ))}
+                                            </>
+                                          )}
+                                          <button type="button" className="btn btn-primary text-xs w-full" disabled>
+                                            Continue →
+                                          </button>
+                                        </>
+                                      )}
+                                      {registrationPreviewStep === 4 && (
+                                        <>
+                                          <h4 className="text-sm font-bold" style={{ color: "var(--fg)" }}>
+                                            4. Additional questions
                                           </h4>
                                           {!preview.hasCategoryQuestions ? (
                                             <p className="text-xs" style={{ color: "var(--fg-muted)" }}>
-                                              No questions yet — use the Application Questions editor below to add some.
-                                              Students still see this step with an empty-state message.
+                                              No questions for this category — this step is skipped at checkout. Add
+                                              questions below if you want students to answer them before payment/submit.
                                             </p>
                                           ) : (
                                             <>
@@ -7014,10 +7344,10 @@ export default function OrganizerDashboardPage() {
                                           </button>
                                         </>
                                       )}
-                                      {registrationPreviewStep === 4 && (
+                                      {registrationPreviewStep === 5 && (
                                         <>
                                           <h4 className="text-sm font-bold" style={{ color: "var(--fg)" }}>
-                                            4. {preview.isAllotFirst || preview.priceResult.amount <= 0
+                                            5. {preview.isAllotFirst || preview.priceResult.amount <= 0
                                               ? "Confirm application"
                                               : "Payment"}
                                           </h4>
@@ -7448,7 +7778,11 @@ export default function OrganizerDashboardPage() {
                           <button
                             type="button"
                             className="btn btn-primary text-xs"
-                            disabled={templatesSaving || !hasTemplatesUnsavedChanges}
+                            disabled={
+                              templatesSaving ||
+                              !hasTemplatesUnsavedChanges ||
+                              selectedConferenceIsWriteLocked
+                            }
                             onClick={() => void saveStatusEmailTemplates()}
                           >
                             {templatesSaving ? "Saving..." : "Save Templates"}
@@ -8028,13 +8362,13 @@ export default function OrganizerDashboardPage() {
           (selectedConference?.applicants || []).filter(
             (entry) => entry.status === "Allotted" && entry.released === false
           ).length
-        } student(s) of their committee/portfolio assignment. Draft allotments stay private until you confirm.`}
+        } student(s) of their committee/portfolio assignment. Type RELEASE to confirm. Draft allotments stay private until you confirm.`}
+        requireTypedText="RELEASE"
         confirmLabel="Release allotments"
         danger={false}
         onClose={() => setReleaseAllotmentsOpen(false)}
         onConfirm={() => {
           if (!selectedConference) return;
-          if (!window.confirm("Confirm release of all draft allotments now?")) return;
           void (async () => {
             setReleasingAllotments(true);
             try {
@@ -8048,6 +8382,20 @@ export default function OrganizerDashboardPage() {
               setReleasingAllotments(false);
             }
           })();
+        }}
+      />
+      <ConfirmModal
+        open={Boolean(pendingConfirm)}
+        title={pendingConfirm?.title || ""}
+        description={pendingConfirm?.description}
+        requireTypedText={pendingConfirm?.requireTypedText}
+        confirmLabel={pendingConfirm?.confirmLabel}
+        danger={pendingConfirm?.danger !== false}
+        onClose={() => setPendingConfirm(null)}
+        onConfirm={async () => {
+          const action = pendingConfirm?.onConfirm;
+          setPendingConfirm(null);
+          if (action) await action();
         }}
       />
       <Footer />

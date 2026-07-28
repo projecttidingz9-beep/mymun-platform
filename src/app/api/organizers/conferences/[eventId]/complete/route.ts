@@ -2,11 +2,41 @@ import { NextRequest, NextResponse } from "next/server";
 import { NotificationType } from "@/generated/prisma/client";
 import { RegistrationStatus } from "@/generated/prisma/enums";
 import { getRequestActor, requireEventOrganizerAccess, requireOrganizer } from "@/lib/server/auth";
+import { decodeOrganizerStoredBlobRecord } from "@/lib/server/organizer-blob-decode";
 import { prisma } from "@/lib/server/prisma";
 import {
+  appendAwardToProfile,
   roleLabelForApplicationType,
   upsertParticipationInProfile,
 } from "@/lib/server/sync-delegate-profile-from-organizer";
+
+type ProfileAwardLike = {
+  conferenceName?: unknown;
+  title?: unknown;
+  category?: unknown;
+};
+
+function normalizeAwardSignature(conferenceName: string, title: string, category?: string): string {
+  return `${conferenceName.trim().toLowerCase()}::${title.trim().toLowerCase()}::${(category || "")
+    .trim()
+    .toLowerCase()}`;
+}
+
+function readAwardSignaturesFromProfile(delegateProfile: unknown): Set<string> {
+  if (!delegateProfile || typeof delegateProfile !== "object") return new Set<string>();
+  const profile = delegateProfile as Record<string, unknown>;
+  if (!Array.isArray(profile.munAwards)) return new Set<string>();
+  const signatures = new Set<string>();
+  for (const entry of profile.munAwards as ProfileAwardLike[]) {
+    const conferenceName =
+      typeof entry?.conferenceName === "string" ? entry.conferenceName.trim() : "";
+    const title = typeof entry?.title === "string" ? entry.title.trim() : "";
+    const category = typeof entry?.category === "string" ? entry.category.trim() : "";
+    if (!conferenceName || !title) continue;
+    signatures.add(normalizeAwardSignature(conferenceName, title, category));
+  }
+  return signatures;
+}
 
 export async function POST(
   request: NextRequest,
@@ -32,6 +62,7 @@ export async function POST(
       status: true,
       organizerConfig: {
         select: {
+          description: true,
           registrationCategories: {
             select: { categoryKey: true, applicationType: true },
           },
@@ -41,15 +72,24 @@ export async function POST(
         where: {
           deletedAt: null,
           status: RegistrationStatus.ALLOTTED,
-          released: true,
         },
         select: {
           id: true,
           userId: true,
           categoryId: true,
+          released: true,
           committeeName: true,
           portfolioName: true,
-          user: { select: { delegateProfile: true } },
+          user: { select: { email: true, delegateProfile: true } },
+        },
+      },
+      conferenceAward: {
+        select: {
+          id: true,
+          category: true,
+          prizeTitle: true,
+          recipientRegistrationId: true,
+          recipientUserId: true,
         },
       },
     },
@@ -74,7 +114,82 @@ export async function POST(
       category.applicationType,
     ])
   );
+  const organizerBlob = decodeOrganizerStoredBlobRecord(event.organizerConfig?.description);
+  const secretariatRoleByUserId = new Map<string, string>();
+  const secretariatRoleByEmail = new Map<string, string>();
+  const chairRoleByRegistrationId = new Map<string, string>();
+  const chairRoleByEmail = new Map<string, string>();
+  if (Array.isArray(organizerBlob?.organizerTeam)) {
+    for (const entry of organizerBlob.organizerTeam as Array<Record<string, unknown>>) {
+      if (!entry || typeof entry !== "object") continue;
+      const teamType = entry.teamType === "secretariat" ? "secretariat" : "organizer";
+      if (teamType !== "secretariat") continue;
+      const role = typeof entry.role === "string" ? entry.role.trim() : "";
+      if (!role) continue;
+      const userId = typeof entry.userId === "string" ? entry.userId.trim() : "";
+      const email =
+        typeof entry.email === "string" ? entry.email.trim().toLowerCase() : "";
+      if (userId) secretariatRoleByUserId.set(userId, role);
+      if (email) secretariatRoleByEmail.set(email, role);
+    }
+  }
+  if (Array.isArray(organizerBlob?.committees)) {
+    for (const committee of organizerBlob.committees as Array<Record<string, unknown>>) {
+      if (!committee || typeof committee !== "object" || !Array.isArray(committee.chairs)) continue;
+      for (const chair of committee.chairs as Array<Record<string, unknown>>) {
+        if (!chair || typeof chair !== "object") continue;
+        const role = typeof chair.role === "string" ? chair.role.trim() : "";
+        if (!role) continue;
+        const registrationId = typeof chair.id === "string" ? chair.id.trim() : "";
+        const email =
+          typeof chair.email === "string" ? chair.email.trim().toLowerCase() : "";
+        if (registrationId) chairRoleByRegistrationId.set(registrationId, role);
+        if (email) chairRoleByEmail.set(email, role);
+      }
+    }
+  }
   const year = event.startDate.getFullYear();
+  const shouldSyncRegistration = (registration: (typeof event.registrations)[number]) => {
+    const applicationType = registration.categoryId
+      ? applicationTypeByCategory.get(registration.categoryId) || "delegate"
+      : "delegate";
+    if (applicationType === "organizer" || applicationType === "secretariat") return true;
+    return registration.released === true;
+  };
+  const registrationsForSync = event.registrations.filter(shouldSyncRegistration);
+  const awardsByRegistrationId = new Map<
+    string,
+    Array<{
+      id: string;
+      category: string;
+      prizeTitle: string | null;
+    }>
+  >();
+  const awardsByUserId = new Map<
+    string,
+    Array<{
+      id: string;
+      category: string;
+      prizeTitle: string | null;
+    }>
+  >();
+  for (const award of event.conferenceAward) {
+    const payload = {
+      id: award.id,
+      category: award.category,
+      prizeTitle: award.prizeTitle,
+    };
+    if (award.recipientRegistrationId) {
+      const list = awardsByRegistrationId.get(award.recipientRegistrationId) ?? [];
+      list.push(payload);
+      awardsByRegistrationId.set(award.recipientRegistrationId, list);
+    }
+    if (award.recipientUserId) {
+      const list = awardsByUserId.get(award.recipientUserId) ?? [];
+      list.push(payload);
+      awardsByUserId.set(award.recipientUserId, list);
+    }
+  }
 
   const completed = await prisma.$transaction(
     async (tx) => {
@@ -84,31 +199,67 @@ export async function POST(
       });
       if (claimed.count === 0) return false;
 
-      for (const registration of event.registrations) {
+      for (const registration of registrationsForSync) {
         const applicationType = registration.categoryId
           ? applicationTypeByCategory.get(registration.categoryId) || "delegate"
           : "delegate";
-        const nextProfile = upsertParticipationInProfile(
+        let nextProfile = upsertParticipationInProfile(
           registration.user.delegateProfile,
           {
             id: `part-sync-${event.id}`,
             conferenceName: event.title,
             committee: registration.committeeName ?? undefined,
-            role: roleLabelForApplicationType(applicationType),
+            role: roleLabelForApplicationType(
+              applicationType,
+              applicationType === "secretariat"
+                ? secretariatRoleByUserId.get(registration.userId) ||
+                    secretariatRoleByEmail.get(registration.user.email.trim().toLowerCase()) ||
+                    null
+                : applicationType === "chair"
+                  ? chairRoleByRegistrationId.get(registration.id) ||
+                      chairRoleByEmail.get(registration.user.email.trim().toLowerCase()) ||
+                      null
+                  : null
+            ),
             year,
             countryRepresented: registration.portfolioName ?? undefined,
           },
           event.id
         );
+        const existingAwardSignatures = readAwardSignaturesFromProfile(nextProfile);
+        const registrationAwards = awardsByRegistrationId.get(registration.id) ?? [];
+        const userAwards = awardsByUserId.get(registration.userId) ?? [];
+        const dedupedAwards = [...registrationAwards, ...userAwards].filter(
+          (award, index, all) =>
+            all.findIndex((candidate) => candidate.id === award.id) === index
+        );
+        for (const award of dedupedAwards) {
+          const title = (award.prizeTitle || award.category || "").trim();
+          if (!title) continue;
+          const category = award.category.trim() || undefined;
+          const signature = normalizeAwardSignature(event.title, title, category);
+          if (existingAwardSignatures.has(signature)) continue;
+          const appended = appendAwardToProfile(nextProfile, {
+            id: `award-sync-${event.id}-${award.id}`,
+            title,
+            conferenceName: event.title,
+            year,
+            category,
+            committee: undefined,
+            logoUrl: undefined,
+          });
+          nextProfile = appended.profile;
+          existingAwardSignatures.add(signature);
+        }
         await tx.user.update({
           where: { id: registration.userId },
           data: { delegateProfile: nextProfile },
         });
       }
 
-      if (event.registrations.length > 0) {
+      if (registrationsForSync.length > 0) {
         await tx.notification.createMany({
-          data: event.registrations.map((registration) => ({
+          data: registrationsForSync.map((registration) => ({
             userId: registration.userId,
             eventId: event.id,
             registrationId: registration.id,
@@ -129,6 +280,6 @@ export async function POST(
 
   return NextResponse.json({
     ok: true,
-    syncedParticipationCount: event.registrations.length,
+    syncedParticipationCount: registrationsForSync.length,
   });
 }
