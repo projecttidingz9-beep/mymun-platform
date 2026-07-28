@@ -83,7 +83,7 @@ export async function POST(
           user: { select: { email: true, delegateProfile: true } },
         },
       },
-      conferenceAward: {
+      awards: {
         select: {
           id: true,
           category: true,
@@ -173,7 +173,7 @@ export async function POST(
       prizeTitle: string | null;
     }>
   >();
-  for (const award of event.conferenceAward) {
+  for (const award of event.awards) {
     const payload = {
       id: award.id,
       category: award.category,
