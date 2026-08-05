@@ -476,11 +476,23 @@ export async function mapManagedEventToOrganizerConference(eventId: string): Pro
     const extra = applicantExtras[reg.id];
     if (!extra) return base;
 
+    // Prefer relational Registration.status — blob extras are only for soft UI state
+    // (assignment history, Invited marker). Never let a stale extras.status rewind
+    // Allotted/Rejected back to Pending after a successful organizer action.
+    const invitedOnly =
+      extra.status === "Invited" && base.status === "Pending" ? ("Invited" as const) : undefined;
+
     return {
       ...base,
       ...extra,
-      status: (extra.status as OrganizerApplicant["status"]) ?? base.status,
+      status: invitedOnly ?? base.status,
+      assignmentStatus: invitedOnly ?? base.assignmentStatus,
       assignmentHistory: extra.assignmentHistory ?? base.assignmentHistory,
+      released: base.released,
+      releasedAt: base.releasedAt,
+      paid: base.paid,
+      paymentIntentStatus: base.paymentIntentStatus,
+      registrationId: base.registrationId,
     };
   });
 

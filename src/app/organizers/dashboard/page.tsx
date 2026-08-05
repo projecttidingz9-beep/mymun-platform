@@ -4069,7 +4069,7 @@ export default function OrganizerDashboardPage() {
                             <p className="text-2xl font-black" style={{ color: "var(--warning-fg)" }}>
                               {
                                 filteredApplications.filter(
-                                  (entry) => entry.status === "Allotted" && entry.released === false
+                                  (entry) => entry.status === "Allotted" && entry.released !== true
                                 ).length
                               }
                             </p>
@@ -4184,7 +4184,7 @@ export default function OrganizerDashboardPage() {
                       )}
                       {(() => {
                         const draftCount = (selectedConference?.applicants || []).filter(
-                          (entry) => entry.status === "Allotted" && entry.released === false
+                          (entry) => entry.status === "Allotted" && entry.released !== true
                         ).length;
                         return (
                           <button
@@ -4256,10 +4256,12 @@ export default function OrganizerDashboardPage() {
                           const selectedCommittee = selectedConference.committees.find((committee) => committee.id === selectedCommitteeId);
                           const selectedPortfolioId = assignmentPortfolio[applicant.id] || applicant.assignedPortfolioId || "";
                           const isDraftAllotment =
-                            applicant.status === "Allotted" && applicant.released === false;
+                            applicant.status === "Allotted" && applicant.released !== true;
                           const statusLabel =
                             isOcTab && applicant.status === "Allotted"
-                              ? "Accepted"
+                              ? isDraftAllotment
+                                ? "Accepted (draft)"
+                                : "Accepted"
                               : isDraftAllotment
                                 ? "Allotted (draft)"
                                 : applicant.status;
@@ -4417,44 +4419,67 @@ export default function OrganizerDashboardPage() {
                                         if (applicantActionRef.current === applicant.id) return;
                                         applicantActionRef.current = applicant.id;
                                         setApplicantActionId(applicant.id);
-                                        updateApplicantStatus(selectedConference.id, applicant.id, "Allotted");
-                                        const existingTeam = selectedConference.organizerTeam || [];
-                                        const existingEmails = new Set(
-                                          existingTeam.map((entry) => entry.email.trim().toLowerCase()).filter(Boolean)
-                                        );
-                                        const applicantEmail = (applicant.userEmail || "").trim();
-                                        const linkedUserId = applicant.userId || undefined;
-                                        const acceptedRole =
-                                          applicationTypeTab === "secretariat"
-                                            ? (secretariatRoleByApplicantId[applicant.id] || "Secretary-General").trim()
-                                            : "USG";
-                                        if (applicantEmail && !existingEmails.has(applicantEmail.toLowerCase())) {
-                                          updateOrganizerConferenceConfig(selectedConference.id, {
-                                            organizerTeam: [
-                                              ...existingTeam,
-                                              {
-                                                id: `team-auto-${applicant.id}`,
-                                                userId: linkedUserId,
-                                                name: applicant.name,
-                                                email: applicantEmail,
-                                                role: acceptedRole,
-                                                teamType: applicationTypeTab === "secretariat" ? "secretariat" : "organizer",
-                                                permissions:
-                                                  applicationTypeTab === "secretariat"
-                                                    ? []
-                                                    : [...DEFAULT_ORGANIZER_PERMISSIONS],
-                                              },
-                                            ],
-                                          });
-                                        }
-                                        toast.show(
-                                          applicationTypeTab === "secretariat"
-                                            ? `Secretariat application accepted as ${acceptedRole}.`
-                                            : "Organizing Committee application accepted.",
-                                          "success"
-                                        );
-                                        applicantActionRef.current = null;
-                                        setApplicantActionId(null);
+                                        void (async () => {
+                                          await updateApplicantStatus(
+                                            selectedConference.id,
+                                            applicant.id,
+                                            "Allotted"
+                                          );
+                                          const latestConference = organizerConferences.find(
+                                            (entry) => entry.id === selectedConference.id
+                                          );
+                                          const existingTeam =
+                                            latestConference?.organizerTeam ||
+                                            selectedConference.organizerTeam ||
+                                            [];
+                                          const existingEmails = new Set(
+                                            existingTeam
+                                              .map((entry) => entry.email.trim().toLowerCase())
+                                              .filter(Boolean)
+                                          );
+                                          const applicantEmail = (applicant.userEmail || "").trim();
+                                          const linkedUserId = applicant.userId || undefined;
+                                          const acceptedRole =
+                                            applicationTypeTab === "secretariat"
+                                              ? (
+                                                  secretariatRoleByApplicantId[applicant.id] ||
+                                                  "Secretary-General"
+                                                ).trim()
+                                              : "USG";
+                                          if (
+                                            applicantEmail &&
+                                            !existingEmails.has(applicantEmail.toLowerCase())
+                                          ) {
+                                            updateOrganizerConferenceConfig(selectedConference.id, {
+                                              organizerTeam: [
+                                                ...existingTeam,
+                                                {
+                                                  id: `team-auto-${applicant.id}`,
+                                                  userId: linkedUserId,
+                                                  name: applicant.name,
+                                                  email: applicantEmail,
+                                                  role: acceptedRole,
+                                                  teamType:
+                                                    applicationTypeTab === "secretariat"
+                                                      ? "secretariat"
+                                                      : "organizer",
+                                                  permissions:
+                                                    applicationTypeTab === "secretariat"
+                                                      ? []
+                                                      : [...DEFAULT_ORGANIZER_PERMISSIONS],
+                                                },
+                                              ],
+                                            });
+                                          }
+                                          toast.show(
+                                            applicationTypeTab === "secretariat"
+                                              ? `Secretariat application accepted as ${acceptedRole}.`
+                                              : "Organizing Committee application accepted.",
+                                            "success"
+                                          );
+                                          applicantActionRef.current = null;
+                                          setApplicantActionId(null);
+                                        })();
                                       }}
                                     >
                                       {applicantActionId === applicant.id ? "Saving…" : "Accept"}
@@ -4467,15 +4492,21 @@ export default function OrganizerDashboardPage() {
                                         if (applicantActionRef.current === applicant.id) return;
                                         applicantActionRef.current = applicant.id;
                                         setApplicantActionId(applicant.id);
-                                        updateApplicantStatus(selectedConference.id, applicant.id, "Rejected");
-                                        toast.show(
-                                          applicationTypeTab === "secretariat"
-                                            ? "Secretariat application rejected."
-                                            : "Organizing Committee application rejected.",
-                                          "info"
-                                        );
-                                        applicantActionRef.current = null;
-                                        setApplicantActionId(null);
+                                        void (async () => {
+                                          await updateApplicantStatus(
+                                            selectedConference.id,
+                                            applicant.id,
+                                            "Rejected"
+                                          );
+                                          toast.show(
+                                            applicationTypeTab === "secretariat"
+                                              ? "Secretariat application rejected."
+                                              : "Organizing Committee application rejected.",
+                                            "info"
+                                          );
+                                          applicantActionRef.current = null;
+                                          setApplicantActionId(null);
+                                        })();
                                       }}
                                     >
                                       {applicantActionId === applicant.id ? "Saving…" : "Reject"}
@@ -8360,7 +8391,7 @@ export default function OrganizerDashboardPage() {
         title="Release all draft allotments?"
         description={`This will notify ${
           (selectedConference?.applicants || []).filter(
-            (entry) => entry.status === "Allotted" && entry.released === false
+            (entry) => entry.status === "Allotted" && entry.released !== true
           ).length
         } student(s) of their committee/portfolio assignment. Type RELEASE to confirm. Draft allotments stay private until you confirm.`}
         requireTypedText="RELEASE"

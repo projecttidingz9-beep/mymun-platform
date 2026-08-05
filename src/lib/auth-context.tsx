@@ -455,6 +455,9 @@ const normalizeOrganizerConference = (raw: unknown): OrganizerConference | null 
           userId: applicant.userId ? String(applicant.userId) : undefined,
           userEmail: applicant.userEmail ? String(applicant.userEmail) : undefined,
           status: (applicant.status as OrganizerApplicant["status"]) ?? "Pending",
+          released:
+            typeof applicant.released === "boolean" ? applicant.released : undefined,
+          releasedAt: applicant.releasedAt ? String(applicant.releasedAt) : undefined,
         };
       })
     : [];
@@ -1007,7 +1010,11 @@ interface AuthContextType {
   removeConferenceReview: (conferenceId: string, reviewId: string, userId: string) => void;
   addConferenceAward: (conferenceId: string, award: Omit<OrganizerAwardConfig, "id">) => void;
   removeConferenceAward: (conferenceId: string, awardId: string) => void;
-  updateApplicantStatus: (conferenceId: string, applicantId: string, status: OrganizerApplicant["status"]) => void;
+  updateApplicantStatus: (
+    conferenceId: string,
+    applicantId: string,
+    status: OrganizerApplicant["status"]
+  ) => Promise<void>;
   toggleApplicantPayment: (conferenceId: string, applicantId: string) => void;
   addAnnouncement: (conferenceId: string, title: string, message: string) => void;
   assignApplicant: (payload: {
@@ -1110,7 +1117,7 @@ const AuthContext = createContext<AuthContextType>({
   removeConferenceReview: () => {},
   addConferenceAward: () => {},
   removeConferenceAward: () => {},
-  updateApplicantStatus: () => {},
+  updateApplicantStatus: async () => {},
   toggleApplicantPayment: () => {},
   addAnnouncement: () => {},
   assignApplicant: () => ({
@@ -1847,7 +1854,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     persistOrganizerConferences(next, conferenceId);
   };
 
-  const updateApplicantStatus: AuthContextType["updateApplicantStatus"] = (conferenceId, applicantId, status) => {
+  const updateApplicantStatus: AuthContextType["updateApplicantStatus"] = async (
+    conferenceId,
+    applicantId,
+    status
+  ) => {
     const current = organizerConferences;
     const priorApplicant = current
       .find((c) => c.id === conferenceId)
@@ -1857,25 +1868,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return {
         ...conference,
         applicants: conference.applicants.map((applicant) =>
-          applicant.id === applicantId ? { ...applicant, status } : applicant
+          applicant.id === applicantId
+            ? {
+                ...applicant,
+                status,
+                assignmentStatus: status,
+                ...(status === "Allotted"
+                  ? { released: false, releasedAt: undefined }
+                  : status === "Rejected" || status === "Pending"
+                    ? { released: undefined, releasedAt: undefined }
+                    : {}),
+              }
+            : applicant
         ),
       };
     });
     persistOrganizerConferences(next);
     const targetConference = next.find((conference) => conference.id === conferenceId);
     const targetApplicant = targetConference?.applicants.find((applicant) => applicant.id === applicantId);
-    void (async () => {
-      const registrationId = priorApplicant?.registrationId || targetApplicant?.registrationId;
-      if (registrationId) {
-        await fetch(`/api/organizers/registrations/${registrationId}`, {
-          method: "PATCH",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ organizerStatus: status }),
-        });
+    const registrationId = priorApplicant?.registrationId || targetApplicant?.registrationId;
+    if (registrationId) {
+      const response = await fetch(`/api/organizers/registrations/${registrationId}`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ organizerStatus: status }),
+      });
+      if (!response.ok) {
+        console.warn("[updateApplicantStatus] registration patch failed", await response.text().catch(() => ""));
       }
-      await refetchMyEvents({ id: user?.id, email: user?.email });
-    })();
+    }
+    await refetchMyEvents({ id: user?.id, email: user?.email });
     if (targetConference && targetApplicant) {
       triggerStatusEmail({ conference: targetConference, applicant: targetApplicant, status });
       if (status === "Rejected") {
@@ -1969,11 +1992,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
     if (!result.ok) return { ok: false, message: result.message ?? "Allotment failed." };
 
-    persistOrganizerConferences(next, conferenceId);
+    // Persist locally without syncing so a concurrent my-events refetch cannot
+    // overwrite this allotment before the registration PATCH lands.
+    persistOrganizerConferences(next);
 
     void (async () => {
       if (priorApplicant?.registrationId) {
-        await fetch(`/api/organizers/registrations/${priorApplicant.registrationId}`, {
+        const response = await fetch(`/api/organizers/registrations/${priorApplicant.registrationId}`, {
           method: "PATCH",
           credentials: "include",
           headers: { "Content-Type": "application/json" },
@@ -1985,10 +2010,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             allottedAt: new Date().toISOString(),
           }),
         });
+        if (!response.ok) {
+          console.warn("[assignApplicant] registration patch failed", await response.text().catch(() => ""));
+        }
       }
-
-      // Draft allotment only — do not notify the delegate or update their visible registration
-      // until the organizer explicitly releases the batch via releaseAllotments.
+      await refetchMyEvents({ id: user?.id, email: user?.email });
     })();
 
     return { ok: true, message: "Draft allotment saved. Release when ready." };
@@ -2047,11 +2073,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       };
     });
 
-    persistOrganizerConferences(withChairs, conferenceId);
+    // Persist chairs locally first; sync after registration PATCH so refetch can't
+    // wipe draft allotment status with stale Pending rows.
+    persistOrganizerConferences(withChairs);
 
     void (async () => {
       if (applicant.registrationId) {
-        await fetch(`/api/organizers/registrations/${applicant.registrationId}`, {
+        const response = await fetch(`/api/organizers/registrations/${applicant.registrationId}`, {
           method: "PATCH",
           credentials: "include",
           headers: { "Content-Type": "application/json" },
@@ -2063,9 +2091,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             allottedAt: new Date().toISOString(),
           }),
         });
+        if (!response.ok) {
+          console.warn("[allotChairWithRole] registration patch failed", await response.text().catch(() => ""));
+        }
       }
-
-      // Draft allotment only — notifications and delegate-visible status wait for releaseAllotments.
+      await syncOrganizerConferenceById(conferenceId, { skipPricingValidation: true, syncStatus: false });
     })();
 
     return { ok: true, message: "Draft EB assignment saved. Release when ready." };
@@ -2121,10 +2151,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }),
       };
     });
-    persistOrganizerConferences(next, conferenceId);
+    persistOrganizerConferences(next);
     void (async () => {
       if (applicant.registrationId) {
-        await fetch(`/api/organizers/registrations/${applicant.registrationId}`, {
+        const response = await fetch(`/api/organizers/registrations/${applicant.registrationId}`, {
           method: "PATCH",
           credentials: "include",
           headers: { "Content-Type": "application/json" },
@@ -2132,9 +2162,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             organizerStatus: "Pending",
             committeeName: null,
             portfolioName: null,
+            portfolioId: null,
           }),
         });
+        if (!response.ok) {
+          console.warn("[unassignApplicant] registration patch failed", await response.text().catch(() => ""));
+        }
       }
+      await refetchMyEvents({ id: user?.id, email: user?.email });
     })();
     updateUserRegistrationAssignment(applicant.registrationId, {
       organizerStatus: "Pending",
@@ -2239,7 +2274,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             applicants: conference.applicants.map((applicant) => {
               const matches =
                 applicant.status === "Allotted" &&
-                applicant.released === false &&
+                applicant.released !== true &&
                 (releasedIds.size === 0 ||
                   releasedIds.has(applicant.registrationId || applicant.id));
               if (!matches) return applicant;

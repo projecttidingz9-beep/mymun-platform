@@ -96,6 +96,9 @@ export function allotApplicantOnConference(
           assignedPortfolioId: portfolioId,
           assignedPortfolioName: portfolioName,
           assignedAt: new Date().toISOString(),
+          // Draft until organizer clicks Release allotments.
+          released: false,
+          releasedAt: undefined,
           assignmentHistory: [
             ...(item.assignmentHistory ?? []),
             {

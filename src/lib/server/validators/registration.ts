@@ -18,13 +18,16 @@ export const registrationSyncBodySchema = z.object({
   organizerStatus: organizerStatusSchema.optional(),
 });
 
+const optionalNullableName = z.union([z.string().trim().max(200), z.null()]).optional();
+const optionalNullableId = z.union([z.string().trim().max(120), z.null()]).optional();
+
 export const organizerRegistrationPatchSchema = z
   .object({
     organizerStatus: organizerStatusSchema.optional(),
     status: organizerStatusSchema.optional(),
-    committeeName: z.string().trim().max(200).optional(),
-    portfolioName: z.string().trim().max(200).optional(),
-    portfolioId: z.string().trim().max(120).optional(),
+    committeeName: optionalNullableName,
+    portfolioName: optionalNullableName,
+    portfolioId: optionalNullableId,
     allottedAt: z.string().trim().optional(),
     paid: z.boolean().optional(),
   })
