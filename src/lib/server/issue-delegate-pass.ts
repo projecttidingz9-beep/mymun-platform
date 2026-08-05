@@ -77,6 +77,10 @@ export async function issueDelegatePassForRegistration(
     return { issued: false, alreadyIssued: false, skipReason: "not_allotted" };
   }
 
+  if (!registration.released) {
+    return { issued: false, alreadyIssued: false, skipReason: "allotment_not_released" };
+  }
+
   const existingPass = registration.pass;
   if (existingPass?.status === PassStatus.ISSUED && !existingPass.deletedAt) {
     if (options.immediateRelease) {

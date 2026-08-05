@@ -41,10 +41,12 @@ export async function POST(request: NextRequest) {
     }
 
     const eligible =
-      registration.paid && registration.status === RegistrationStatus.ALLOTTED;
+      registration.paid &&
+      registration.status === RegistrationStatus.ALLOTTED &&
+      registration.released === true;
     if (!eligible) {
       return NextResponse.json(
-        { error: "Registration is not eligible for pass issuance." },
+        { error: "Registration is not eligible for pass issuance until allotment is released." },
         { status: 400 }
       );
     }

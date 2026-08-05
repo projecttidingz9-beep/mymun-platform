@@ -133,10 +133,11 @@ function parseAgendasJson(raw: string | null | undefined): string[] {
 }
 
 function allotmentCountsByCommitteeName(
-  registrations: Array<{ committeeName: string | null }> | undefined
+  registrations: Array<{ committeeName: string | null; released?: boolean }> | undefined
 ): Map<string, number> {
   const map = new Map<string, number>();
   for (const reg of registrations ?? []) {
+    if (reg.released !== true) continue;
     const name = reg.committeeName?.trim();
     if (!name) continue;
     map.set(name, (map.get(name) ?? 0) + 1);
@@ -146,10 +147,13 @@ function allotmentCountsByCommitteeName(
 
 /** Portfolio name -> taken, keyed by "committeeName::portfolioName" (case-insensitive). */
 function takenPortfolioKeys(
-  registrations: Array<{ committeeName: string | null; portfolioName: string | null }> | undefined
+  registrations:
+    | Array<{ committeeName: string | null; portfolioName: string | null; released?: boolean }>
+    | undefined
 ): Set<string> {
   const set = new Set<string>();
   for (const reg of registrations ?? []) {
+    if (reg.released !== true) continue;
     const committee = reg.committeeName?.trim().toLowerCase();
     const portfolio = reg.portfolioName?.trim().toLowerCase();
     if (!committee || !portfolio) continue;
@@ -259,6 +263,11 @@ export function mapPublishedEventToConference(event: EventWithListing): Conferen
 
   const allotmentByName = allotmentCountsByCommitteeName(event.registrations);
   const takenPortfolios = takenPortfolioKeys(event.registrations);
+  const draftAllotmentIds = new Set(
+    (event.registrations ?? [])
+      .filter((reg) => reg.released !== true && typeof (reg as { id?: string }).id === "string")
+      .map((reg) => String((reg as { id: string }).id))
+  );
   const publicCommittees = committees.filter(
     (cm) => cm.visibility === "PUBLIC" || cm.visibility == null
   );
@@ -332,7 +341,9 @@ export function mapPublishedEventToConference(event: EventWithListing): Conferen
           email: chair.email ? String(chair.email) : undefined,
           role: chair.role ? String(chair.role) : undefined,
         }));
-      const chairs = dbChairs.length > 0 ? dbChairs : blobChairs;
+      const chairs = (dbChairs.length > 0 ? dbChairs : blobChairs).filter(
+        (chair) => !draftAllotmentIds.has(chair.id)
+      );
       const noPortfolio = (cm as { noPortfolio?: boolean }).noPortfolio === true;
       const portfolios = noPortfolio
         ? []
@@ -564,7 +575,7 @@ export function mapPublishedEventToPublicDetail(
       event.organizerConfig?.allocationMode === "ALLOT_FIRST"
         ? event.organizerConfig.allocationMode
         : undefined,
-    organizerTeam: normalizePublicTeam(blob),
+    organizerTeam: normalizePublicTeam(blob, draftAllotmentIds),
     hiddenSections: Array.isArray(blob?.hiddenSections)
       ? (blob!.hiddenSections as unknown[]).map((entry) => String(entry)).filter(Boolean)
       : undefined,
@@ -600,7 +611,10 @@ function computePublicPricingPhaseSummary(blob: Record<string, unknown> | null):
   };
 }
 
-function normalizePublicTeam(blob: Record<string, unknown> | null): PublicConferenceDetail["organizerTeam"] {
+function normalizePublicTeam(
+  blob: Record<string, unknown> | null,
+  draftAllotmentIds?: Set<string>
+): PublicConferenceDetail["organizerTeam"] {
   if (!blob || !Array.isArray(blob.organizerTeam)) return undefined;
   const members = blob.organizerTeam
     .map((entry) => {
@@ -611,8 +625,15 @@ function normalizePublicTeam(blob: Record<string, unknown> | null): PublicConfer
       const teamType = row.teamType === "secretariat" ? ("secretariat" as const) : ("organizer" as const);
       // OC/organizer team stays internal-only. Only secretariat is shown publicly.
       if (teamType !== "secretariat") return null;
+      const id = typeof row.id === "string" ? row.id : `team-${name}`;
+      if (draftAllotmentIds && draftAllotmentIds.size > 0) {
+        if (draftAllotmentIds.has(id)) return null;
+        for (const draftId of draftAllotmentIds) {
+          if (id === `team-auto-${draftId}` || id.endsWith(draftId)) return null;
+        }
+      }
       return {
-        id: typeof row.id === "string" ? row.id : `team-${name}`,
+        id,
         name,
         email: "",
         role: typeof row.role === "string" ? row.role : "Team",

@@ -65,7 +65,8 @@ export async function GET(request: NextRequest) {
           registration.categoryName,
           blobByEventId.get(registration.eventId)
         );
-        const isAllotted = registration.status === RegistrationStatus.ALLOTTED;
+        const isAllotted =
+          registration.status === RegistrationStatus.ALLOTTED && registration.released === true;
         const { acknowledged: docsAcknowledged, pendingCount: pendingDocumentCount } =
           await registrationDocumentsAcknowledged({
             registrationId: registration.id,

@@ -1029,7 +1029,7 @@ interface AuthContextType {
     committeeId: string;
     role: string;
   }) => { ok: boolean; message: string };
-  commitOrganizerConferences: (next: OrganizerConference[], syncConferenceId: string) => void;
+  commitOrganizerConferences: (next: OrganizerConference[], syncConferenceId?: string) => void;
   moveApplicant: (payload: {
     conferenceId: string;
     applicantId: string;
@@ -1900,7 +1900,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     await refetchMyEvents({ id: user?.id, email: user?.email });
     if (targetConference && targetApplicant) {
-      triggerStatusEmail({ conference: targetConference, applicant: targetApplicant, status });
+      // Draft Allotted stays private until Release — only Reject emails immediately.
+      if (status !== "Allotted") {
+        triggerStatusEmail({ conference: targetConference, applicant: targetApplicant, status });
+      }
       if (status === "Rejected") {
         addNotification({
           id: `ntf-${Date.now()}`,

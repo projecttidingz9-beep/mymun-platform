@@ -62,6 +62,8 @@ export async function POST(
         committeeName: null,
         portfolioName: null,
         portfolioId: null,
+        released: false,
+        releasedAt: null,
       },
     });
 

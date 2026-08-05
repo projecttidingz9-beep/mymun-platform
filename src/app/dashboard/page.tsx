@@ -1,6 +1,6 @@
 "use client";
 
-import { ChangeEvent, Suspense, useEffect, useState } from "react";
+import { ChangeEvent, Suspense, useEffect, useState, type ReactNode } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
@@ -9,7 +9,7 @@ import Footer from "@/components/Footer";
 import DemoAccountBanner from "@/components/DemoAccountBanner";
 import AppRouteSkeleton from "@/components/AppRouteSkeleton";
 import SignInGate from "@/components/SignInGate";
-import ConfirmModal, { DestructiveConfirmButton } from "@/components/ConfirmModal";
+import ConfirmModal, { ConfirmPreviewDetails, DestructiveConfirmButton } from "@/components/ConfirmModal";
 import { useToast } from "@/components/Toast";
 import { ensureServerSession } from "@/lib/client/session";
 import { isDemoAccount } from "@/lib/demo-account";
@@ -202,12 +202,12 @@ function DashboardPageContent() {
   const [invoicePreviewRegistrationId, setInvoicePreviewRegistrationId] = useState<string | null>(null);
   const [verifyRedirectNotice, setVerifyRedirectNotice] = useState<{ tone: "success" | "error"; message: string } | null>(null);
   const [withdrawingRegistrationId, setWithdrawingRegistrationId] = useState<string | null>(null);
-  const [withdrawConfirmId, setWithdrawConfirmId] = useState<string | null>(null);
   const [payingRegistrationId, setPayingRegistrationId] = useState<string | null>(null);
   const [rejectingAllotmentId, setRejectingAllotmentId] = useState<string | null>(null);
   const [pendingConfirm, setPendingConfirm] = useState<{
     title: string;
     description?: string;
+    preview?: ReactNode;
     requireTypedText?: string;
     confirmLabel?: string;
     danger?: boolean;
@@ -687,10 +687,22 @@ function DashboardPageContent() {
     }
     requestConfirm({
       title: "Permanently delete your account?",
-      description:
-        "This cannot be undone. All profile data will be removed. Type DELETE to confirm.",
+      description: "Review the account details below, then type DELETE to confirm.",
+      preview: (
+        <ConfirmPreviewDetails
+          rows={[
+            { label: "Email", value: user?.email || "—" },
+            { label: "Name", value: user?.name || "—" },
+            {
+              label: "Registrations",
+              value: String(user?.registrations?.length ?? 0),
+            },
+          ]}
+          note="This cannot be undone. All profile data will be removed."
+        />
+      ),
       requireTypedText: "DELETE",
-      confirmLabel: "Delete my account",
+      confirmLabel: "Confirm delete account",
       onConfirm: async () => {
     setDeleteLoading(true);
     try {
@@ -746,9 +758,17 @@ function DashboardPageContent() {
   const onLogoutAllDevices = async () => {
     requestConfirm({
       title: "Sign out all devices?",
-      description:
-        "You will be signed out everywhere, including this browser. Continue only if you suspect unauthorized access.",
-      confirmLabel: "Sign out everywhere",
+      description: "Review this security action, then confirm.",
+      preview: (
+        <ConfirmPreviewDetails
+          rows={[
+            { label: "Account", value: user?.email || "—" },
+            { label: "Action", value: "Sign out everywhere" },
+          ]}
+          note="You will be signed out of this browser as well."
+        />
+      ),
+      confirmLabel: "Confirm sign out everywhere",
       onConfirm: async () => {
     setLogoutAllNotice("");
     setLogoutAllLoading(true);
@@ -806,25 +826,56 @@ function DashboardPageContent() {
     }
   };
 
-  const onWithdrawRegistration = async (registrationId: string) => {
-    setWithdrawNotice("");
-    setWithdrawingRegistrationId(registrationId);
-    try {
-      const response = await fetch(`/api/registrations/${registrationId}`, {
-        method: "DELETE",
-        credentials: "include",
-      });
-      const payload = (await response.json().catch(() => ({}))) as { error?: string };
-      if (!response.ok) {
-        setWithdrawNotice(payload.error || "Could not withdraw registration.");
-        return;
-      }
-      setWithdrawNotice("Registration withdrawn.");
-      setWithdrawConfirmId(null);
-      addRegistration({ id: registrationId } as Registration);
-    } finally {
-      setWithdrawingRegistrationId(null);
-    }
+  const onWithdrawRegistration = (registration: Registration) => {
+    requestConfirm({
+      title: "Withdraw this registration?",
+      description: "Review the application below, then confirm withdrawal.",
+      preview: (
+        <ConfirmPreviewDetails
+          rows={[
+            { label: "Conference", value: registration.conferenceTitle || "—" },
+            {
+              label: "Status",
+              value: registration.organizerStatus || registration.status || "—",
+            },
+            {
+              label: "Committee",
+              value:
+                registration.assignedCommitteeName ||
+                registration.committeeName ||
+                "Not assigned",
+            },
+            {
+              label: "Amount",
+              value: formatMoney(registration.amount || 0, "INR"),
+            },
+          ]}
+          note="You can re-apply later if registration is still open. This cannot undo organizer decisions already made."
+        />
+      ),
+      confirmLabel: "Confirm withdraw",
+      onConfirm: async () => {
+        setWithdrawNotice("");
+        setWithdrawingRegistrationId(registration.id);
+        try {
+          const response = await fetch(`/api/registrations/${registration.id}`, {
+            method: "DELETE",
+            credentials: "include",
+          });
+          const payload = (await response.json().catch(() => ({}))) as { error?: string };
+          if (!response.ok) {
+            setWithdrawNotice(payload.error || "Could not withdraw registration.");
+            toast.show(payload.error || "Could not withdraw registration.", "error");
+            return;
+          }
+          setWithdrawNotice("Registration withdrawn.");
+          toast.show("Registration withdrawn.", "info");
+          addRegistration({ id: registration.id } as Registration);
+        } finally {
+          setWithdrawingRegistrationId(null);
+        }
+      },
+    });
   };
 
   const onPayRegistration = async (registration: Registration) => {
@@ -847,10 +898,25 @@ function DashboardPageContent() {
     if (registration.paid || !registration.allotmentReleased || rejectingAllotmentId === registration.id) return;
     requestConfirm({
       title: "Reject this allotment?",
-      description:
-        "The seat will be released and you will not be assigned to that committee. Type REJECT to confirm.",
+      description: "Review the allotment below, then type REJECT to decline the seat.",
+      preview: (
+        <ConfirmPreviewDetails
+          rows={[
+            { label: "Conference", value: registration.conferenceTitle || "—" },
+            {
+              label: "Committee",
+              value: registration.assignedCommitteeName || registration.committeeName || "—",
+            },
+            {
+              label: "Portfolio",
+              value: registration.assignedPortfolioName || registration.portfolioName || "—",
+            },
+          ]}
+          note="The seat will be released and you will not be assigned to that committee."
+        />
+      ),
       requireTypedText: "REJECT",
-      confirmLabel: "Reject allotment",
+      confirmLabel: "Confirm reject allotment",
       onConfirm: async () => {
     setRejectingAllotmentId(registration.id);
     try {
@@ -1175,26 +1241,15 @@ function DashboardPageContent() {
                               </span>
                             )}
                             {!reg.paid && reg.organizerStatus !== "Rejected" && !reg.allotmentReleased && (
-                              withdrawConfirmId === reg.id ? (
-                                <button
-                                  type="button"
-                                  className="btn btn-danger-ghost text-xs"
-                                  style={{ padding: "6px 14px", borderRadius: "8px" }}
-                                  disabled={withdrawingRegistrationId === reg.id}
-                                  onClick={() => void onWithdrawRegistration(reg.id)}
-                                >
-                                  {withdrawingRegistrationId === reg.id ? "Withdrawing…" : "Confirm withdraw"}
-                                </button>
-                              ) : (
-                                <button
-                                  type="button"
-                                  className="btn btn-ghost text-xs"
-                                  style={{ padding: "6px 14px", borderRadius: "8px", color: "#b91c1c" }}
-                                  onClick={() => setWithdrawConfirmId(reg.id)}
-                                >
-                                  Withdraw
-                                </button>
-                              )
+                              <button
+                                type="button"
+                                className="btn btn-ghost text-xs min-h-[44px] touch-manipulation"
+                                style={{ padding: "6px 14px", borderRadius: "8px", color: "#b91c1c" }}
+                                disabled={withdrawingRegistrationId === reg.id}
+                                onClick={() => onWithdrawRegistration(reg)}
+                              >
+                                {withdrawingRegistrationId === reg.id ? "Withdrawing…" : "Withdraw"}
+                              </button>
                             )}
                             <Link
                               href={`/conference/${reg.conferenceId}`}
@@ -1653,7 +1708,18 @@ function DashboardPageContent() {
                             <DestructiveConfirmButton
                               label="Remove"
                               confirmTitle="Remove this participation?"
-                              confirmDescription="This participation entry and its certificate will be removed from your profile."
+                              confirmDescription="Review the entry below, then confirm removal."
+                              preview={
+                                <ConfirmPreviewDetails
+                                  rows={[
+                                    { label: "Conference", value: entry.conferenceName || "—" },
+                                    { label: "Committee", value: entry.committee || "—" },
+                                    { label: "Role", value: entry.role || "—" },
+                                  ]}
+                                  note="This participation entry and its certificate will be removed from your profile."
+                                />
+                              }
+                              confirmLabel="Confirm remove"
                               onConfirm={() => removeParticipation(entry.id)}
                             />
                           </div>
@@ -1675,7 +1741,23 @@ function DashboardPageContent() {
                                 <DestructiveConfirmButton
                                   label="Remove Certificate"
                                   confirmTitle="Remove this certificate?"
-                                  confirmDescription="The uploaded certificate will be removed from this participation entry."
+                                  confirmDescription="Review the file below, then confirm removal."
+                                  preview={
+                                    <ConfirmPreviewDetails
+                                      rows={[
+                                        {
+                                          label: "Conference",
+                                          value: entry.conferenceName || "—",
+                                        },
+                                        {
+                                          label: "File",
+                                          value: entry.certificateFileName || "Uploaded certificate",
+                                        },
+                                      ]}
+                                      note="The uploaded certificate will be removed from this participation entry."
+                                    />
+                                  }
+                                  confirmLabel="Confirm remove certificate"
                                   onConfirm={() =>
                                     updateParticipation(entry.id, {
                                       certificateUrl: undefined,
@@ -1734,7 +1816,18 @@ function DashboardPageContent() {
                             <DestructiveConfirmButton
                               label="Remove"
                               confirmTitle="Remove this award?"
-                              confirmDescription="This award entry will be removed from your profile."
+                              confirmDescription="Review the award below, then confirm removal."
+                              preview={
+                                <ConfirmPreviewDetails
+                                  rows={[
+                                    { label: "Award", value: entry.title || "—" },
+                                    { label: "Conference", value: entry.conferenceName || "—" },
+                                    { label: "Category", value: entry.category || "—" },
+                                  ]}
+                                  note="This award entry will be removed from your profile."
+                                />
+                              }
+                              confirmLabel="Confirm remove"
                               onConfirm={() => removeAward(entry.id)}
                             />
                           </div>
@@ -2257,13 +2350,13 @@ function DashboardPageContent() {
         open={Boolean(pendingConfirm)}
         title={pendingConfirm?.title || ""}
         description={pendingConfirm?.description}
+        preview={pendingConfirm?.preview}
         requireTypedText={pendingConfirm?.requireTypedText}
         confirmLabel={pendingConfirm?.confirmLabel}
         danger={pendingConfirm?.danger !== false}
         onClose={() => setPendingConfirm(null)}
         onConfirm={async () => {
           const action = pendingConfirm?.onConfirm;
-          setPendingConfirm(null);
           if (action) await action();
         }}
       />

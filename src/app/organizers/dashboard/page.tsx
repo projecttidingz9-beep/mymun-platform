@@ -1,6 +1,6 @@
 "use client";
 
-import { ChangeEvent, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { ChangeEvent, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import Image from "next/image";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
@@ -80,7 +80,7 @@ import {
   preferenceLabelForCommittee,
   type CommitteeFormatKey,
 } from "@/lib/india-committee-presets";
-import ConfirmModal, { DestructiveConfirmButton } from "@/components/ConfirmModal";
+import ConfirmModal, { ConfirmPreviewDetails, DestructiveConfirmButton } from "@/components/ConfirmModal";
 
 const nextScheduleDayName = (entries: ConferenceScheduleEntry[]) =>
   `Day ${new Set(entries.map((entry) => entry.day)).size + 1}`;
@@ -750,15 +750,39 @@ export default function OrganizerDashboardPage() {
   const [assignmentCommittee, setAssignmentCommittee] = useState<Record<string, string>>({});
   const [releasingAllotments, setReleasingAllotments] = useState(false);
   const [releaseAllotmentsOpen, setReleaseAllotmentsOpen] = useState(false);
+  const [releasePreviewSelectedIds, setReleasePreviewSelectedIds] = useState<string[]>([]);
   const [pendingConfirm, setPendingConfirm] = useState<{
     title: string;
     description?: string;
+    preview?: ReactNode;
     requireTypedText?: string;
     confirmLabel?: string;
     danger?: boolean;
     onConfirm: () => void | Promise<void>;
   } | null>(null);
   const requestConfirm = (config: NonNullable<typeof pendingConfirm>) => setPendingConfirm(config);
+  const applicantConfirmPreview = (
+    applicant: OrganizerApplicant,
+    extras?: Array<{ label: string; value: string }>,
+    note?: string
+  ) => (
+    <ConfirmPreviewDetails
+      rows={[
+        { label: "Applicant", value: applicant.name },
+        { label: "Email", value: applicant.userEmail || "—" },
+        { label: "Category", value: applicant.categoryName || "—" },
+        { label: "Current status", value: applicant.status },
+        ...(applicant.assignedCommitteeName
+          ? [{ label: "Committee", value: applicant.assignedCommitteeName }]
+          : []),
+        ...(applicant.assignedPortfolioName
+          ? [{ label: "Portfolio", value: applicant.assignedPortfolioName }]
+          : []),
+        ...(extras || []),
+      ]}
+      note={note}
+    />
+  );
   const [completingConferenceId, setCompletingConferenceId] = useState("");
   const [completedConferenceIds, setCompletedConferenceIds] = useState<Set<string>>(
     () => new Set()
@@ -1264,9 +1288,22 @@ export default function OrganizerDashboardPage() {
     }
     requestConfirm({
       title: `Delete committee "${committee.name}"?`,
-      description: "This permanently removes the committee from the conference. Type DELETE to confirm.",
+      description: "Review the committee below, then type DELETE to permanently remove it.",
+      preview: (
+        <ConfirmPreviewDetails
+          rows={[
+            { label: "Committee", value: committee.name },
+            { label: "Seats", value: String(committee.seatCount) },
+            {
+              label: "Portfolios",
+              value: String(committee.portfolios?.length ?? 0),
+            },
+          ]}
+          note="Applicants already allotted to this committee must be unassigned first."
+        />
+      ),
       requireTypedText: "DELETE",
-      confirmLabel: "Delete committee",
+      confirmLabel: "Confirm delete committee",
       onConfirm: () => {
         removeOrganizerCommittee(conference.id, committee.id);
       },
@@ -1735,9 +1772,26 @@ export default function OrganizerDashboardPage() {
     if (!ensureConferenceMutable()) return;
     requestConfirm({
       title: `Delete "${selectedConference.title}"?`,
-      description: "This soft-deletes the conference and hides it from the marketplace. Type DELETE to confirm.",
+      description: "Review the conference below, then type DELETE to soft-delete it.",
+      preview: (
+        <ConfirmPreviewDetails
+          rows={[
+            { label: "Conference", value: selectedConference.title },
+            {
+              label: "Location",
+              value: `${selectedConference.city}, ${selectedConference.country}`,
+            },
+            {
+              label: "Applicants",
+              value: String(selectedConference.applicants.length),
+            },
+            { label: "Status", value: selectedConference.status },
+          ]}
+          note="This hides the conference from the marketplace."
+        />
+      ),
       requireTypedText: "DELETE",
-      confirmLabel: "Delete conference",
+      confirmLabel: "Confirm delete conference",
       onConfirm: async () => {
         try {
           const response = await fetch(`/api/organizers/conferences/${selectedConference.id}`, {
@@ -2019,8 +2073,42 @@ export default function OrganizerDashboardPage() {
     }
     requestConfirm({
       title: `Auto-assign ${pending.length} pending application(s)?`,
-      description: "This creates draft allotments from preference order. Students are not notified until you release allotments.",
-      confirmLabel: "Auto-assign now",
+      description:
+        "Review the applicants below. This creates draft allotments from preference order. Students are not notified until you release allotments.",
+      preview: (
+        <div className="space-y-2">
+          <p className="text-xs font-semibold" style={{ color: "var(--fg-muted)" }}>
+            Pending applicants to auto-assign
+          </p>
+          <div className="max-h-64 overflow-y-auto space-y-2">
+            {pending.slice(0, 40).map((applicant) => (
+              <div
+                key={applicant.id}
+                className="rounded-xl p-3"
+                style={{ background: "var(--bg-subtle)", border: "1px solid var(--border)" }}
+              >
+                <p className="text-sm font-semibold" style={{ color: "var(--fg)" }}>
+                  {applicant.name}
+                </p>
+                <p className="text-xs mt-0.5" style={{ color: "var(--fg-muted)" }}>
+                  {applicant.userEmail || "No email"}
+                  {applicant.committeePreferences?.length
+                    ? ` · Prefs: ${applicant.committeePreferences.slice(0, 3).join(", ")}`
+                    : applicant.committeePreference
+                      ? ` · Pref: ${applicant.committeePreference}`
+                      : ""}
+                </p>
+              </div>
+            ))}
+          </div>
+          {pending.length > 40 ? (
+            <p className="text-xs" style={{ color: "var(--fg-muted)" }}>
+              +{pending.length - 40} more pending applicants
+            </p>
+          ) : null}
+        </div>
+      ),
+      confirmLabel: `Confirm auto-assign (${pending.length})`,
       danger: false,
       onConfirm: () => void runAutoAssign(pending),
     });
@@ -2138,8 +2226,10 @@ export default function OrganizerDashboardPage() {
       }
 
       if (assigned > 0) {
-        commitOrganizerConferences(workingConferences, selectedConference.id);
-        const patchResponses = await Promise.all(
+        // Local draft only — do not sync/refetch before registration PATCHes land,
+        // and do not email students until Release allotments.
+        commitOrganizerConferences(workingConferences);
+        await Promise.all(
           patchQueue.map((job) =>
             fetch(`/api/organizers/registrations/${job.registrationId}`, {
               method: "PATCH",
@@ -2155,47 +2245,12 @@ export default function OrganizerDashboardPage() {
             })
           )
         );
-        const syncedConference = workingConferences.find((entry) => entry.id === selectedConference.id);
-        if (syncedConference) {
-          const templates =
-            syncedConference.statusEmailTemplates ||
-            buildDefaultStatusEmailTemplates(syncedConference.title);
-          const allottedTemplate = templates.allotted;
-          await Promise.all(
-            patchQueue.map(async (job, index) => {
-              if (!patchResponses[index]?.ok) return;
-              const applicant = syncedConference.applicants.find(
-                (entry) => entry.registrationId === job.registrationId
-              );
-              const recipientEmail = applicant?.userEmail;
-              if (!recipientEmail || !allottedTemplate?.subject?.trim() || !allottedTemplate?.body?.trim()) {
-                return;
-              }
-              await fetch("/api/organizers/send-status-email", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                credentials: "include",
-                body: JSON.stringify({
-                  eventId: syncedConference.id,
-                  to: recipientEmail,
-                  templateKey: "allotted",
-                  subjectTemplate: allottedTemplate.subject,
-                  bodyTemplate: allottedTemplate.body,
-                  context: {
-                    applicantName: applicant?.name ?? "Delegate",
-                    conferenceTitle: syncedConference.title,
-                    status: "Allotted",
-                    assignedCommittee: job.committeeName,
-                    assignedPortfolio: job.portfolioName ?? "",
-                  },
-                }),
-              });
-            })
-          );
-        }
+        await refetchMyEvents({ id: user?.id, email: user?.email });
       }
 
-      alert(`Auto-assign complete: ${assigned} allotted, ${failed} skipped or failed.`);
+      alert(
+        `Auto-assign complete: ${assigned} draft allotment(s), ${failed} skipped. Release allotments when ready to notify students.`
+      );
     } finally {
       setAutoAssigning(false);
       setAutoAssignProgress("");
@@ -2723,11 +2778,33 @@ export default function OrganizerDashboardPage() {
   };
   const clearBankingDetails = () => {
     if (!selectedConference) return;
+    const banking = selectedConferenceBankingDetails;
     requestConfirm({
       title: "Clear all banking details?",
-      description: "Payment and payout details for this conference will be wiped. Type CLEAR to confirm.",
+      description: "Review the details that will be wiped, then type CLEAR to confirm.",
+      preview: (
+        <ConfirmPreviewDetails
+          rows={[
+            { label: "Conference", value: selectedConference.title },
+            { label: "Account holder", value: banking.accountHolderName || "—" },
+            { label: "Bank", value: banking.bankName || "—" },
+            {
+              label: "Account",
+              value: banking.accountNumber
+                ? `••••${banking.accountNumber.slice(-4)}`
+                : "—",
+            },
+            { label: "UPI", value: banking.upiId || "—" },
+            {
+              label: "Verification",
+              value: banking.verificationStatus || "Unverified",
+            },
+          ]}
+          note="Payment and payout details for this conference will be wiped."
+        />
+      ),
       requireTypedText: "CLEAR",
-      confirmLabel: "Clear banking details",
+      confirmLabel: "Confirm clear banking",
       onConfirm: () => {
         updateOrganizerConferenceConfig(selectedConference.id, {
           bankingDetails: { verificationStatus: "Unverified", updatedAt: new Date().toISOString() },
@@ -3119,9 +3196,28 @@ export default function OrganizerDashboardPage() {
                     requestConfirm({
                       title: "Complete this conference?",
                       description:
-                        "It will be archived and added to allotted participants' profiles. Type COMPLETE to confirm.",
+                        "Review the conference below, then type COMPLETE to archive it and sync transcripts.",
+                      preview: (
+                        <ConfirmPreviewDetails
+                          rows={[
+                            { label: "Conference", value: selectedConference.title },
+                            {
+                              label: "Dates",
+                              value: `${selectedConference.startDate} → ${selectedConference.endDate}`,
+                            },
+                            {
+                              label: "Allotted applicants",
+                              value: String(
+                                selectedConference.applicants.filter((a) => a.status === "Allotted")
+                                  .length
+                              ),
+                            },
+                          ]}
+                          note="Released allotted participants are added to their Tidingz transcripts."
+                        />
+                      ),
                       requireTypedText: "COMPLETE",
-                      confirmLabel: "Complete conference",
+                      confirmLabel: "Confirm complete",
                       danger: false,
                       onConfirm: () => {
                     setCompletingConferenceId(selectedConference.id);
@@ -3320,8 +3416,34 @@ export default function OrganizerDashboardPage() {
                               requestConfirm({
                                 title: "Publish this conference?",
                                 description:
-                                  "This submits the conference for marketplace review/publishing. Double-check committees, pricing, and documents first.",
-                                confirmLabel: "Publish conference",
+                                  "Review the conference summary, then confirm to submit for marketplace review.",
+                                preview: (
+                                  <ConfirmPreviewDetails
+                                    rows={[
+                                      { label: "Conference", value: selectedConference.title },
+                                      {
+                                        label: "Location",
+                                        value: `${selectedConference.city}, ${selectedConference.country}`,
+                                      },
+                                      {
+                                        label: "Committees",
+                                        value: String(selectedConference.committees.length),
+                                      },
+                                      {
+                                        label: "Categories",
+                                        value: String(
+                                          selectedConference.registrationCategories.length
+                                        ),
+                                      },
+                                      {
+                                        label: "Dates",
+                                        value: `${selectedConference.startDate} → ${selectedConference.endDate}`,
+                                      },
+                                    ]}
+                                    note="Double-check committees, pricing, and documents before publishing."
+                                  />
+                                ),
+                                confirmLabel: "Confirm publish",
                                 danger: false,
                                 onConfirm: () =>
                                   updateOrganizerConferenceStatus(selectedConference.id, "Published"),
@@ -3414,8 +3536,17 @@ export default function OrganizerDashboardPage() {
                             <DestructiveConfirmButton
                               label="Remove logo"
                               confirmTitle="Remove conference logo?"
-                              confirmDescription="The logo will be cleared from the public MUN page after you save preview settings."
-                              confirmLabel="Remove logo"
+                              confirmDescription="Review below, then confirm. Takes effect after you save preview settings."
+                              preview={
+                                <ConfirmPreviewDetails
+                                  rows={[
+                                    { label: "Conference", value: selectedConference.title },
+                                    { label: "Asset", value: "Logo image" },
+                                  ]}
+                                  note="The logo will be cleared from the public MUN page after you save."
+                                />
+                              }
+                              confirmLabel="Confirm remove logo"
                               onConfirm={() => setPreviewDraft((prev) => ({ ...prev, logoImageUrl: "" }))}
                             />
                           )}
@@ -3427,8 +3558,17 @@ export default function OrganizerDashboardPage() {
                             <DestructiveConfirmButton
                               label="Remove banner"
                               confirmTitle="Remove conference banner?"
-                              confirmDescription="The banner will be cleared from the public MUN page after you save preview settings."
-                              confirmLabel="Remove banner"
+                              confirmDescription="Review below, then confirm. Takes effect after you save preview settings."
+                              preview={
+                                <ConfirmPreviewDetails
+                                  rows={[
+                                    { label: "Conference", value: selectedConference.title },
+                                    { label: "Asset", value: "Banner image" },
+                                  ]}
+                                  note="The banner will be cleared from the public MUN page after you save."
+                                />
+                              }
+                              confirmLabel="Confirm remove banner"
                               onConfirm={() => setPreviewDraft((prev) => ({ ...prev, bannerImageUrl: "" }))}
                             />
                           )}
@@ -3764,9 +3904,22 @@ export default function OrganizerDashboardPage() {
                                 requestConfirm({
                                   title: "Lock allocation mode to Pay first?",
                                   description:
-                                    "This cannot be changed later. Students must pay before their application is submitted. Type LOCK to confirm.",
+                                    "Review the lock below, then type LOCK. This cannot be changed later.",
+                                  preview: (
+                                    <ConfirmPreviewDetails
+                                      rows={[
+                                        { label: "Conference", value: selectedConference.title },
+                                        { label: "Mode", value: "Pay first" },
+                                        {
+                                          label: "Effect",
+                                          value: "Students must pay before application is submitted",
+                                        },
+                                      ]}
+                                      note="Once locked, allocation mode is permanent for this conference."
+                                    />
+                                  ),
                                   requireTypedText: "LOCK",
-                                  confirmLabel: "Lock Pay first",
+                                  confirmLabel: "Confirm lock Pay first",
                                   danger: false,
                                   onConfirm: () =>
                                     updateOrganizerConferenceConfig(selectedConference.id, {
@@ -3784,9 +3937,26 @@ export default function OrganizerDashboardPage() {
                                 requestConfirm({
                                   title: "Lock allocation mode to Allot first?",
                                   description:
-                                    "This cannot be changed later. Students apply first and pay after allotment. Type LOCK to confirm.",
+                                    "Review the lock below, then type LOCK. This cannot be changed later.",
+                                  preview: (
+                                    <ConfirmPreviewDetails
+                                      rows={[
+                                        { label: "Conference", value: selectedConference.title },
+                                        { label: "Mode", value: "Allot first" },
+                                        {
+                                          label: "Payment window",
+                                          value: "7 days after allotment",
+                                        },
+                                        {
+                                          label: "Effect",
+                                          value: "Students apply first and pay after allotment",
+                                        },
+                                      ]}
+                                      note="Once locked, allocation mode is permanent for this conference."
+                                    />
+                                  ),
                                   requireTypedText: "LOCK",
-                                  confirmLabel: "Lock Allot first",
+                                  confirmLabel: "Confirm lock Allot first",
                                   danger: false,
                                   onConfirm: () =>
                                     updateOrganizerConferenceConfig(selectedConference.id, {
@@ -4142,8 +4312,28 @@ export default function OrganizerDashboardPage() {
                               if (!applicant) return;
                               requestConfirm({
                                 title: `Assign ${applicant.name} as ${manualEbRole}?`,
-                                description: "This links the participant to the selected committee in the EB section.",
-                                confirmLabel: "Assign EB member",
+                                description:
+                                  "Review the EB assignment below, then confirm. This stays draft until Release allotments.",
+                                preview: (
+                                  <ConfirmPreviewDetails
+                                    rows={[
+                                      { label: "Applicant", value: applicant.name },
+                                      {
+                                        label: "Email",
+                                        value: applicant.userEmail || "—",
+                                      },
+                                      {
+                                        label: "Committee",
+                                        value:
+                                          selectedConference.committees.find(
+                                            (c) => c.id === manualEbCommitteeId
+                                          )?.name || "—",
+                                      },
+                                      { label: "EB role", value: manualEbRole },
+                                    ]}
+                                  />
+                                ),
+                                confirmLabel: "Confirm EB assign",
                                 danger: false,
                                 onConfirm: () => {
                                   const result = allotChairWithRole({
@@ -4183,15 +4373,23 @@ export default function OrganizerDashboardPage() {
                         </button>
                       )}
                       {(() => {
-                        const draftCount = (selectedConference?.applicants || []).filter(
+                        const draftApplicants = (selectedConference?.applicants || []).filter(
                           (entry) => entry.status === "Allotted" && entry.released !== true
-                        ).length;
+                        );
+                        const draftCount = draftApplicants.length;
                         return (
                           <button
                             type="button"
                             className="btn btn-primary text-xs"
                             disabled={draftCount === 0 || releasingAllotments || selectedConferenceIsWriteLocked}
-                            onClick={() => setReleaseAllotmentsOpen(true)}
+                            onClick={() => {
+                              setReleasePreviewSelectedIds(
+                                draftApplicants
+                                  .map((entry) => entry.registrationId || entry.id)
+                                  .filter(Boolean)
+                              );
+                              setReleaseAllotmentsOpen(true);
+                            }}
                           >
                             {releasingAllotments
                               ? "Releasing…"
@@ -4417,69 +4615,89 @@ export default function OrganizerDashboardPage() {
                                       disabled={applicant.status === "Allotted" || applicantActionId === applicant.id}
                                       onClick={() => {
                                         if (applicantActionRef.current === applicant.id) return;
-                                        applicantActionRef.current = applicant.id;
-                                        setApplicantActionId(applicant.id);
-                                        void (async () => {
-                                          await updateApplicantStatus(
-                                            selectedConference.id,
-                                            applicant.id,
-                                            "Allotted"
-                                          );
-                                          const latestConference = organizerConferences.find(
-                                            (entry) => entry.id === selectedConference.id
-                                          );
-                                          const existingTeam =
-                                            latestConference?.organizerTeam ||
-                                            selectedConference.organizerTeam ||
-                                            [];
-                                          const existingEmails = new Set(
-                                            existingTeam
-                                              .map((entry) => entry.email.trim().toLowerCase())
-                                              .filter(Boolean)
-                                          );
-                                          const applicantEmail = (applicant.userEmail || "").trim();
-                                          const linkedUserId = applicant.userId || undefined;
-                                          const acceptedRole =
+                                        const acceptedRole =
+                                          applicationTypeTab === "secretariat"
+                                            ? (
+                                                secretariatRoleByApplicantId[applicant.id] ||
+                                                "Secretary-General"
+                                              ).trim()
+                                            : "USG";
+                                        requestConfirm({
+                                          title:
                                             applicationTypeTab === "secretariat"
-                                              ? (
-                                                  secretariatRoleByApplicantId[applicant.id] ||
-                                                  "Secretary-General"
-                                                ).trim()
-                                              : "USG";
-                                          if (
-                                            applicantEmail &&
-                                            !existingEmails.has(applicantEmail.toLowerCase())
-                                          ) {
-                                            updateOrganizerConferenceConfig(selectedConference.id, {
-                                              organizerTeam: [
-                                                ...existingTeam,
-                                                {
-                                                  id: `team-auto-${applicant.id}`,
-                                                  userId: linkedUserId,
-                                                  name: applicant.name,
-                                                  email: applicantEmail,
-                                                  role: acceptedRole,
-                                                  teamType:
-                                                    applicationTypeTab === "secretariat"
-                                                      ? "secretariat"
-                                                      : "organizer",
-                                                  permissions:
-                                                    applicationTypeTab === "secretariat"
-                                                      ? []
-                                                      : [...DEFAULT_ORGANIZER_PERMISSIONS],
-                                                },
-                                              ],
-                                            });
-                                          }
-                                          toast.show(
+                                              ? `Accept ${applicant.name} to Secretariat?`
+                                              : `Accept ${applicant.name} to Organizing Committee?`,
+                                          description:
+                                            "Review the details below, then confirm. This saves as a draft until you release allotments.",
+                                          preview: applicantConfirmPreview(
+                                            applicant,
                                             applicationTypeTab === "secretariat"
-                                              ? `Secretariat application accepted as ${acceptedRole}.`
-                                              : "Organizing Committee application accepted.",
-                                            "success"
-                                          );
-                                          applicantActionRef.current = null;
-                                          setApplicantActionId(null);
-                                        })();
+                                              ? [{ label: "Assigned role", value: acceptedRole }]
+                                              : [{ label: "Team role", value: acceptedRole }],
+                                            "The student stays private until you click Release allotments."
+                                          ),
+                                          confirmLabel: "Confirm accept",
+                                          danger: false,
+                                          onConfirm: async () => {
+                                            applicantActionRef.current = applicant.id;
+                                            setApplicantActionId(applicant.id);
+                                            try {
+                                              await updateApplicantStatus(
+                                                selectedConference.id,
+                                                applicant.id,
+                                                "Allotted"
+                                              );
+                                              const latestConference = organizerConferences.find(
+                                                (entry) => entry.id === selectedConference.id
+                                              );
+                                              const existingTeam =
+                                                latestConference?.organizerTeam ||
+                                                selectedConference.organizerTeam ||
+                                                [];
+                                              const existingEmails = new Set(
+                                                existingTeam
+                                                  .map((entry) => entry.email.trim().toLowerCase())
+                                                  .filter(Boolean)
+                                              );
+                                              const applicantEmail = (applicant.userEmail || "").trim();
+                                              const linkedUserId = applicant.userId || undefined;
+                                              if (
+                                                applicantEmail &&
+                                                !existingEmails.has(applicantEmail.toLowerCase())
+                                              ) {
+                                                updateOrganizerConferenceConfig(selectedConference.id, {
+                                                  organizerTeam: [
+                                                    ...existingTeam,
+                                                    {
+                                                      id: `team-auto-${applicant.id}`,
+                                                      userId: linkedUserId,
+                                                      name: applicant.name,
+                                                      email: applicantEmail,
+                                                      role: acceptedRole,
+                                                      teamType:
+                                                        applicationTypeTab === "secretariat"
+                                                          ? "secretariat"
+                                                          : "organizer",
+                                                      permissions:
+                                                        applicationTypeTab === "secretariat"
+                                                          ? []
+                                                          : [...DEFAULT_ORGANIZER_PERMISSIONS],
+                                                    },
+                                                  ],
+                                                });
+                                              }
+                                              toast.show(
+                                                applicationTypeTab === "secretariat"
+                                                  ? `Secretariat application accepted as ${acceptedRole}.`
+                                                  : "Organizing Committee application accepted.",
+                                                "success"
+                                              );
+                                            } finally {
+                                              applicantActionRef.current = null;
+                                              setApplicantActionId(null);
+                                            }
+                                          },
+                                        });
                                       }}
                                     >
                                       {applicantActionId === applicant.id ? "Saving…" : "Accept"}
@@ -4490,23 +4708,38 @@ export default function OrganizerDashboardPage() {
                                       disabled={applicant.status === "Rejected" || applicantActionId === applicant.id}
                                       onClick={() => {
                                         if (applicantActionRef.current === applicant.id) return;
-                                        applicantActionRef.current = applicant.id;
-                                        setApplicantActionId(applicant.id);
-                                        void (async () => {
-                                          await updateApplicantStatus(
-                                            selectedConference.id,
-                                            applicant.id,
-                                            "Rejected"
-                                          );
-                                          toast.show(
-                                            applicationTypeTab === "secretariat"
-                                              ? "Secretariat application rejected."
-                                              : "Organizing Committee application rejected.",
-                                            "info"
-                                          );
-                                          applicantActionRef.current = null;
-                                          setApplicantActionId(null);
-                                        })();
+                                        requestConfirm({
+                                          title: `Reject ${applicant.name}?`,
+                                          description:
+                                            "Review the applicant below, then confirm rejection.",
+                                          preview: applicantConfirmPreview(
+                                            applicant,
+                                            undefined,
+                                            "Rejected applicants can be contacted later if a seat opens."
+                                          ),
+                                          confirmLabel: "Confirm reject",
+                                          requireTypedText: "REJECT",
+                                          onConfirm: async () => {
+                                            applicantActionRef.current = applicant.id;
+                                            setApplicantActionId(applicant.id);
+                                            try {
+                                              await updateApplicantStatus(
+                                                selectedConference.id,
+                                                applicant.id,
+                                                "Rejected"
+                                              );
+                                              toast.show(
+                                                applicationTypeTab === "secretariat"
+                                                  ? "Secretariat application rejected."
+                                                  : "Organizing Committee application rejected.",
+                                                "info"
+                                              );
+                                            } finally {
+                                              applicantActionRef.current = null;
+                                              setApplicantActionId(null);
+                                            }
+                                          },
+                                        });
                                       }}
                                     >
                                       {applicantActionId === applicant.id ? "Saving…" : "Reject"}
@@ -4559,18 +4792,48 @@ export default function OrganizerDashboardPage() {
                                   onClick={() => {
                                     if (!selectedCommitteeId) return;
                                     if (applicantActionRef.current === applicant.id) return;
-                                    applicantActionRef.current = applicant.id;
-                                    setApplicantActionId(applicant.id);
-                                    const result = assignApplicant({
-                                      conferenceId: selectedConference.id,
-                                      applicantId: applicant.id,
-                                      committeeId: selectedCommitteeId,
-                                      portfolioId: selectedPortfolioId || undefined,
+                                    const committeeName =
+                                      selectedCommittee?.name ||
+                                      selectedConference.committees.find(
+                                        (entry) => entry.id === selectedCommitteeId
+                                      )?.name ||
+                                      "Selected committee";
+                                    const portfolioName =
+                                      selectedCommittee?.portfolios?.find(
+                                        (entry) => entry.id === selectedPortfolioId
+                                      )?.name || "";
+                                    requestConfirm({
+                                      title: `Allot ${applicant.name} (draft)?`,
+                                      description:
+                                        "Review this draft allotment. The student stays private until you release allotments.",
+                                      preview: applicantConfirmPreview(
+                                        applicant,
+                                        [
+                                          { label: "Assign committee", value: committeeName },
+                                          {
+                                            label: "Assign portfolio",
+                                            value: portfolioName || "No portfolio",
+                                          },
+                                        ],
+                                        "This does not notify the student yet."
+                                      ),
+                                      confirmLabel: "Confirm draft allotment",
+                                      danger: false,
+                                      onConfirm: () => {
+                                        applicantActionRef.current = applicant.id;
+                                        setApplicantActionId(applicant.id);
+                                        const result = assignApplicant({
+                                          conferenceId: selectedConference.id,
+                                          applicantId: applicant.id,
+                                          committeeId: selectedCommitteeId,
+                                          portfolioId: selectedPortfolioId || undefined,
+                                        });
+                                        if (!result.ok) toast.show(result.message, "error");
+                                        else toast.show("Draft allotment saved. Release when ready.", "success");
+                                        applicantActionRef.current = null;
+                                        setApplicantActionId(null);
+                                      },
                                     });
-                                    if (!result.ok) toast.show(result.message, "error");
-                                    else toast.show("Draft allotment saved. Release when ready.", "success");
-                                    applicantActionRef.current = null;
-                                    setApplicantActionId(null);
                                   }}
                                   className="btn btn-primary text-xs"
                                   disabled={!selectedCommitteeId || applicantActionId === applicant.id}
@@ -4586,8 +4849,13 @@ export default function OrganizerDashboardPage() {
                                     requestConfirm({
                                       title: `Unassign ${applicant.name}?`,
                                       description:
-                                        "This clears their committee/portfolio assignment. You can re-allot them later.",
-                                      confirmLabel: "Unassign",
+                                        "Review the current assignment below, then confirm clearing it.",
+                                      preview: applicantConfirmPreview(
+                                        applicant,
+                                        undefined,
+                                        "You can re-allot them later."
+                                      ),
+                                      confirmLabel: "Confirm unassign",
                                       onConfirm: () => {
                                         applicantActionRef.current = applicant.id;
                                         setApplicantActionId(applicant.id);
@@ -4609,9 +4877,10 @@ export default function OrganizerDashboardPage() {
                                     requestConfirm({
                                       title: `Reject ${applicant.name}?`,
                                       description:
-                                        "This marks the applicant as rejected. Type REJECT to confirm.",
+                                        "Review the applicant below, then type REJECT to confirm.",
+                                      preview: applicantConfirmPreview(applicant),
                                       requireTypedText: "REJECT",
-                                      confirmLabel: "Reject applicant",
+                                      confirmLabel: "Confirm reject",
                                       onConfirm: () => {
                                         applicantActionRef.current = applicant.id;
                                         setApplicantActionId(applicant.id);
@@ -4748,9 +5017,26 @@ export default function OrganizerDashboardPage() {
                               );
                               requestConfirm({
                                 title: `Assign as ${resolvedRole}?`,
-                                description: `Assign this EB applicant to ${
-                                  targetCommittee?.name || "the selected committee"
-                                } as ${resolvedRole}. Type ALLOT to confirm.`,
+                                description: `Review this EB allotment, then type ALLOT to confirm.`,
+                                preview: (
+                                  <ConfirmPreviewDetails
+                                    rows={[
+                                      {
+                                        label: "Applicant",
+                                        value:
+                                          selectedConference.applicants.find(
+                                            (a) => a.id === chairAllotApplicantId
+                                          )?.name || "—",
+                                      },
+                                      {
+                                        label: "Committee",
+                                        value: targetCommittee?.name || "—",
+                                      },
+                                      { label: "EB role", value: resolvedRole },
+                                    ]}
+                                    note="Draft only until you release allotments."
+                                  />
+                                ),
                                 requireTypedText: "ALLOT",
                                 confirmLabel: "Confirm allotment",
                                 danger: false,
@@ -5883,9 +6169,29 @@ export default function OrganizerDashboardPage() {
                                           requestConfirm({
                                             title: `Mark ${row.name} as paid?`,
                                             description:
-                                              "This records an offline/manual payment for this registration. Type PAID to confirm.",
+                                              "Review the payment below, then type PAID to confirm the offline payment.",
+                                            preview: (
+                                              <ConfirmPreviewDetails
+                                                rows={[
+                                                  { label: "Applicant", value: row.name },
+                                                  {
+                                                    label: "Amount",
+                                                    value: formatMoney(
+                                                      row.amount,
+                                                      selectedConference.currency || "INR"
+                                                    ),
+                                                  },
+                                                  { label: "Category", value: row.category },
+                                                  {
+                                                    label: "Status",
+                                                    value: row.applicantStatus,
+                                                  },
+                                                ]}
+                                                note="Cashfree online payments cannot be marked paid manually."
+                                              />
+                                            ),
                                             requireTypedText: "PAID",
-                                            confirmLabel: "Mark as paid",
+                                            confirmLabel: "Confirm mark paid",
                                             danger: false,
                                             onConfirm: () => {
                                           setPayingRegistrationId(registrationId);
@@ -5921,9 +6227,29 @@ export default function OrganizerDashboardPage() {
                                         requestConfirm({
                                           title: `Refund ${row.name}?`,
                                           description:
-                                            "This cannot be undone. Type REFUND to process the refund.",
+                                            "Review the refund below, then type REFUND to process it.",
+                                          preview: (
+                                            <ConfirmPreviewDetails
+                                              rows={[
+                                                { label: "Applicant", value: row.name },
+                                                {
+                                                  label: "Amount",
+                                                  value: formatMoney(
+                                                    row.amount,
+                                                    selectedConference.currency || "INR"
+                                                  ),
+                                                },
+                                                { label: "Category", value: row.category },
+                                                {
+                                                  label: "Status",
+                                                  value: row.applicantStatus,
+                                                },
+                                              ]}
+                                              note="This rejects the registration and cannot be undone."
+                                            />
+                                          ),
                                           requireTypedText: "REFUND",
-                                          confirmLabel: "Process refund",
+                                          confirmLabel: "Confirm refund",
                                           onConfirm: async () => {
                                           setRefundingRegistrationId(registrationId);
                                           try {
@@ -6089,8 +6415,19 @@ export default function OrganizerDashboardPage() {
                                 <DestructiveConfirmButton
                                   label="Remove"
                                   confirmTitle={`Remove "${doc.title}"?`}
-                                  confirmDescription="This document will no longer be visible on the public conference page."
+                                  confirmDescription="Review the document below, then type REMOVE to confirm."
+                                  preview={
+                                    <ConfirmPreviewDetails
+                                      rows={[
+                                        { label: "Document", value: doc.title },
+                                        { label: "Category", value: doc.category || "—" },
+                                        { label: "Scope", value: "Conference-wide" },
+                                      ]}
+                                      note="This document will no longer be visible on the public conference page."
+                                    />
+                                  }
                                   requireTypedText="REMOVE"
+                                  confirmLabel="Confirm remove document"
                                   onConfirm={() => void removeCommonDocument(doc.id)}
                                 />
                               </div>
@@ -6185,8 +6522,19 @@ export default function OrganizerDashboardPage() {
                                       <DestructiveConfirmButton
                                         label="Remove"
                                         confirmTitle={`Remove "${doc.title}"?`}
-                                        confirmDescription={`This document will no longer be visible under ${committee.name} on the public conference page.`}
+                                        confirmDescription="Review the document below, then type REMOVE to confirm."
+                                        preview={
+                                          <ConfirmPreviewDetails
+                                            rows={[
+                                              { label: "Document", value: doc.title },
+                                              { label: "Committee", value: committee.name },
+                                              { label: "Category", value: doc.category || "—" },
+                                            ]}
+                                            note={`This document will no longer be visible under ${committee.name} on the public conference page.`}
+                                          />
+                                        }
                                         requireTypedText="REMOVE"
+                                        confirmLabel="Confirm remove document"
                                         onConfirm={() => void removeCommitteeDocument(committee.id, doc.id)}
                                       />
                                     </div>
@@ -6244,8 +6592,21 @@ export default function OrganizerDashboardPage() {
                                 <DestructiveConfirmButton
                                   label="Remove"
                                   confirmTitle={`Remove previous edition "${edition.title}"?`}
-                                  confirmDescription="This edition will no longer appear on the public conference page."
+                                  confirmDescription="Review below, then type REMOVE to confirm."
+                                  preview={
+                                    <ConfirmPreviewDetails
+                                      rows={[
+                                        { label: "Edition", value: edition.title },
+                                        {
+                                          label: "Year",
+                                          value: edition.year ? String(edition.year) : "—",
+                                        },
+                                      ]}
+                                      note="This edition will no longer appear on the public conference page."
+                                    />
+                                  }
                                   requireTypedText="REMOVE"
+                                  confirmLabel="Confirm remove edition"
                                   onConfirm={() => {
                                     updateOrganizerConferenceConfig(selectedConference.id, {
                                       previousEditions: (selectedConference.previousEditions || []).filter((entry) => entry.id !== edition.id),
@@ -6474,13 +6835,6 @@ export default function OrganizerDashboardPage() {
                         type="button"
                         className="btn btn-ghost text-xs mb-3 min-h-[44px] touch-manipulation"
                         onClick={() => {
-                          requestConfirm({
-                            title: `Import accepted ${teamTypeTab === "secretariat" ? "secretariat" : "organizer"} applications?`,
-                            description:
-                              "Matching accepted applications will be added to the team list. Existing emails are skipped.",
-                            confirmLabel: "Import into team",
-                            danger: false,
-                            onConfirm: () => {
                           const categoryTypeById = new Map(
                             selectedConference.registrationCategories.map((category) => [
                               category.id,
@@ -6492,7 +6846,7 @@ export default function OrganizerDashboardPage() {
                           const existingEmails = new Set(
                             current.map((entry) => entry.email.trim().toLowerCase()).filter(Boolean)
                           );
-                          const imported = (selectedConference.applicants || [])
+                          const importCandidates = (selectedConference.applicants || [])
                             .filter((applicant) => applicant.status === "Allotted")
                             .filter((applicant) => {
                               const type = applicant.categoryId
@@ -6503,8 +6857,58 @@ export default function OrganizerDashboardPage() {
                             .filter((applicant) => {
                               const email = (applicant.userEmail || "").trim().toLowerCase();
                               return email && !existingEmails.has(email);
-                            })
-                            .map((applicant) => ({
+                            });
+                          requestConfirm({
+                            title: `Import accepted ${teamTypeTab === "secretariat" ? "secretariat" : "organizer"} applications?`,
+                            description:
+                              "Review who will be added. Existing emails are skipped.",
+                            preview: (
+                              <div className="space-y-2">
+                                <ConfirmPreviewDetails
+                                  rows={[
+                                    { label: "Conference", value: selectedConference.title },
+                                    {
+                                      label: "Team type",
+                                      value:
+                                        teamTypeTab === "secretariat"
+                                          ? "Secretariat"
+                                          : "Organizing Committee",
+                                    },
+                                    {
+                                      label: "New members",
+                                      value: String(importCandidates.length),
+                                    },
+                                  ]}
+                                />
+                                {importCandidates.length > 0 ? (
+                                  <div className="max-h-48 overflow-y-auto space-y-1">
+                                    {importCandidates.slice(0, 30).map((applicant) => (
+                                      <p
+                                        key={applicant.id}
+                                        className="text-xs"
+                                        style={{ color: "var(--fg)" }}
+                                      >
+                                        {applicant.name}
+                                        {applicant.userEmail ? ` · ${applicant.userEmail}` : ""}
+                                      </p>
+                                    ))}
+                                    {importCandidates.length > 30 ? (
+                                      <p className="text-xs" style={{ color: "var(--fg-muted)" }}>
+                                        +{importCandidates.length - 30} more
+                                      </p>
+                                    ) : null}
+                                  </div>
+                                ) : (
+                                  <p className="text-xs" style={{ color: "var(--fg-muted)" }}>
+                                    No new accepted applications to import.
+                                  </p>
+                                )}
+                              </div>
+                            ),
+                            confirmLabel: "Confirm import into team",
+                            danger: false,
+                            onConfirm: () => {
+                          const imported = importCandidates.map((applicant) => ({
                               id: `team-import-${applicant.id}`,
                               name: applicant.name,
                               email: applicant.userEmail || "",
@@ -6620,11 +7024,29 @@ export default function OrganizerDashboardPage() {
                             <DestructiveConfirmButton
                               label="Remove"
                               confirmTitle={`Remove team member ${member.name}?`}
-                              confirmDescription={
-                                member.teamType === "secretariat"
-                                  ? "Their secretariat information will be removed from the conference page."
-                                  : "They will immediately lose access to this conference's dashboard."
+                              confirmDescription="Review the member below, then confirm removal."
+                              preview={
+                                <ConfirmPreviewDetails
+                                  rows={[
+                                    { label: "Name", value: member.name },
+                                    { label: "Email", value: member.email || "—" },
+                                    { label: "Role", value: member.role || "—" },
+                                    {
+                                      label: "Team",
+                                      value:
+                                        member.teamType === "secretariat"
+                                          ? "Secretariat"
+                                          : "Organizing Committee",
+                                    },
+                                  ]}
+                                  note={
+                                    member.teamType === "secretariat"
+                                      ? "Their secretariat information will be removed from the conference page."
+                                      : "They will immediately lose access to this conference's dashboard."
+                                  }
+                                />
                               }
+                              confirmLabel="Confirm remove member"
                               onConfirm={() => {
                                 updateOrganizerConferenceConfig(selectedConference.id, {
                                   organizerTeam: (selectedConference.organizerTeam || []).filter((entry) => entry.id !== member.id),
@@ -6760,7 +7182,24 @@ export default function OrganizerDashboardPage() {
                             <DestructiveConfirmButton
                               label="Remove"
                               confirmTitle="Remove this award?"
-                              confirmDescription={`"${award.category}" will be permanently removed.`}
+                              confirmDescription="Review the award below, then confirm removal."
+                              preview={
+                                <ConfirmPreviewDetails
+                                  rows={[
+                                    { label: "Award", value: award.category },
+                                    {
+                                      label: "Committee",
+                                      value: award.committeeName || "Conference-wide",
+                                    },
+                                    {
+                                      label: "Winner",
+                                      value: award.participantName || "Unassigned",
+                                    },
+                                  ]}
+                                  note={`"${award.category}" will be permanently removed.`}
+                                />
+                              }
+                              confirmLabel="Confirm remove award"
                               onConfirm={() => removeConferenceAward(selectedConference.id, award.id)}
                             />
                           </div>
@@ -6877,8 +7316,32 @@ export default function OrganizerDashboardPage() {
                                 <DestructiveConfirmButton
                                   label="Delete category"
                                   confirmTitle={`Delete ${categoryLabel}?`}
-                                  confirmDescription="This removes the category, its pricing phases, and its custom questions. Students will no longer be able to register under this category. This cannot be undone."
+                                  confirmDescription="Review the category below, then type DELETE to permanently remove it."
+                                  preview={
+                                    <ConfirmPreviewDetails
+                                      rows={[
+                                        { label: "Category", value: categoryLabel },
+                                        {
+                                          label: "Base price",
+                                          value: formatMoney(
+                                            categoryType === "chair" ? 0 : category.basePrice,
+                                            selectedConference.currency || "INR"
+                                          ),
+                                        },
+                                        {
+                                          label: "Form fields",
+                                          value: String(category.formFields.length),
+                                        },
+                                        {
+                                          label: "Pricing phases",
+                                          value: String(category.pricingPhases.length),
+                                        },
+                                      ]}
+                                      note="This removes the category, its pricing phases, and its custom questions. Students will no longer be able to register under this category."
+                                    />
+                                  }
                                   requireTypedText="DELETE"
+                                  confirmLabel="Confirm delete category"
                                   onConfirm={() => removeRegistrationCategory(selectedConference.id, category.id)}
                                 />
                               </div>
@@ -7071,8 +7534,35 @@ export default function OrganizerDashboardPage() {
                                               requestConfirm({
                                                 title: "End this pricing phase?",
                                                 description:
-                                                  "Students will see it as Ended. Prefer this over deleting so history remains visible.",
-                                                confirmLabel: "End phase",
+                                                  "Review the phase below, then confirm. Students will see it as Ended.",
+                                                preview: (
+                                                  <ConfirmPreviewDetails
+                                                    rows={[
+                                                      {
+                                                        label: "Category",
+                                                        value: categoryLabel,
+                                                      },
+                                                      {
+                                                        label: "Phase",
+                                                        value: phase.name || "Untitled phase",
+                                                      },
+                                                      {
+                                                        label: "Dates",
+                                                        value: `${phase.startDate || "—"} → ${phase.endDate || "—"}`,
+                                                      },
+                                                      {
+                                                        label: "Price",
+                                                        value: formatMoney(
+                                                          phase.basePrice,
+                                                          selectedConference.currency || "INR"
+                                                        ),
+                                                      },
+                                                      { label: "Status", value: String(phaseStatus) },
+                                                    ]}
+                                                    note="Prefer ending over deleting so history remains visible."
+                                                  />
+                                                ),
+                                                confirmLabel: "Confirm end phase",
                                                 danger: false,
                                                 onConfirm: () =>
                                                   void endCategoryPricingPhase(
@@ -7092,9 +7582,35 @@ export default function OrganizerDashboardPage() {
                                             requestConfirm({
                                               title: "Remove this phase permanently?",
                                               description:
-                                                "Prefer End Phase so students still see it as Ended. Type REMOVE to delete it forever.",
+                                                "Review the phase below, then type REMOVE to delete it forever.",
+                                              preview: (
+                                                <ConfirmPreviewDetails
+                                                  rows={[
+                                                      {
+                                                        label: "Category",
+                                                        value: categoryLabel,
+                                                      },
+                                                    {
+                                                      label: "Phase",
+                                                      value: phase.name || "Untitled phase",
+                                                    },
+                                                    {
+                                                      label: "Dates",
+                                                      value: `${phase.startDate || "—"} → ${phase.endDate || "—"}`,
+                                                    },
+                                                    {
+                                                      label: "Price",
+                                                      value: formatMoney(
+                                                        phase.basePrice,
+                                                        selectedConference.currency || "INR"
+                                                      ),
+                                                    },
+                                                  ]}
+                                                  note="Prefer End Phase so students still see it as Ended."
+                                                />
+                                              ),
                                               requireTypedText: "REMOVE",
-                                              confirmLabel: "Remove phase",
+                                              confirmLabel: "Confirm remove phase",
                                               onConfirm: () =>
                                                 void removeCategoryPricingPhase(
                                                   selectedConference.id,
@@ -8386,46 +8902,235 @@ export default function OrganizerDashboardPage() {
           </div>
         </div>
       )}
-      <ConfirmModal
-        open={releaseAllotmentsOpen}
-        title="Release all draft allotments?"
-        description={`This will notify ${
-          (selectedConference?.applicants || []).filter(
-            (entry) => entry.status === "Allotted" && entry.released !== true
-          ).length
-        } student(s) of their committee/portfolio assignment. Type RELEASE to confirm. Draft allotments stay private until you confirm.`}
-        requireTypedText="RELEASE"
-        confirmLabel="Release allotments"
-        danger={false}
-        onClose={() => setReleaseAllotmentsOpen(false)}
-        onConfirm={() => {
-          if (!selectedConference) return;
-          void (async () => {
-            setReleasingAllotments(true);
-            try {
-              const result = await releaseAllotments(selectedConference.id);
-              if (!result.ok) {
-                toast.show(result.message, "error");
-                return;
-              }
-              toast.show(result.message, "success");
-            } finally {
-              setReleasingAllotments(false);
-            }
-          })();
-        }}
-      />
+      {releaseAllotmentsOpen && selectedConference && (() => {
+        const draftApplicants = (selectedConference.applicants || []).filter(
+          (entry) => entry.status === "Allotted" && entry.released !== true
+        );
+        const selectedSet = new Set(releasePreviewSelectedIds);
+        const selectedDrafts = draftApplicants.filter((entry) =>
+          selectedSet.has(entry.registrationId || entry.id)
+        );
+        const allSelected =
+          draftApplicants.length > 0 && selectedDrafts.length === draftApplicants.length;
+        const categoryTypeById = new Map(
+          selectedConference.registrationCategories.map((category) => [
+            category.id,
+            category.applicationType || "delegate",
+          ])
+        );
+        const typeLabel = (applicant: (typeof draftApplicants)[number]) => {
+          const type = applicant.categoryId
+            ? categoryTypeById.get(applicant.categoryId) || "delegate"
+            : "delegate";
+          if (type === "chair") return "EB";
+          if (type === "organizer") return "OC";
+          if (type === "secretariat") return "Secretariat";
+          if (type === "delegation") return "Delegation";
+          return "Delegate";
+        };
+
+        return (
+          <div
+            className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center p-4"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="release-allotments-preview-title"
+          >
+            <button
+              type="button"
+              className="absolute inset-0"
+              style={{ background: "rgba(0,0,0,0.65)" }}
+              aria-label="Close dialog"
+              disabled={releasingAllotments}
+              onClick={() => {
+                if (!releasingAllotments) setReleaseAllotmentsOpen(false);
+              }}
+            />
+            <div className="relative w-full max-w-2xl max-h-[90vh] overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] shadow-xl flex flex-col">
+              <div className="p-5 sm:p-6 border-b border-[var(--border)]">
+                <h2
+                  id="release-allotments-preview-title"
+                  className="text-lg font-bold"
+                  style={{ color: "var(--fg)" }}
+                >
+                  Preview draft allotments
+                </h2>
+                <p className="text-sm mt-2" style={{ color: "var(--fg-muted)" }}>
+                  Review who will be notified. Uncheck anyone you want to keep as draft, then confirm.
+                </p>
+              </div>
+
+              <div className="px-5 sm:px-6 py-3 flex items-center justify-between gap-3 border-b border-[var(--border)]">
+                <p className="text-xs font-semibold" style={{ color: "var(--fg-muted)" }}>
+                  {selectedDrafts.length} of {draftApplicants.length} selected
+                </p>
+                <button
+                  type="button"
+                  className="btn btn-ghost text-xs min-h-[40px] touch-manipulation"
+                  disabled={releasingAllotments || draftApplicants.length === 0}
+                  onClick={() => {
+                    if (allSelected) {
+                      setReleasePreviewSelectedIds([]);
+                      return;
+                    }
+                    setReleasePreviewSelectedIds(
+                      draftApplicants
+                        .map((entry) => entry.registrationId || entry.id)
+                        .filter(Boolean)
+                    );
+                  }}
+                >
+                  {allSelected ? "Unselect all" : "Select all"}
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto px-5 sm:px-6 py-3 space-y-2">
+                {draftApplicants.length === 0 ? (
+                  <p className="text-sm py-6 text-center" style={{ color: "var(--fg-muted)" }}>
+                    No draft allotments left to release.
+                  </p>
+                ) : (
+                  draftApplicants.map((applicant) => {
+                    const rowId = applicant.registrationId || applicant.id;
+                    const checked = selectedSet.has(rowId);
+                    return (
+                      <label
+                        key={rowId}
+                        className="flex items-start gap-3 rounded-xl p-3 cursor-pointer"
+                        style={{
+                          background: "var(--bg-subtle)",
+                          border: `1px solid ${checked ? "var(--blue)" : "var(--border)"}`,
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          className="mt-1"
+                          checked={checked}
+                          disabled={releasingAllotments}
+                          onChange={(event) => {
+                            setReleasePreviewSelectedIds((prev) => {
+                              if (event.target.checked) {
+                                return prev.includes(rowId) ? prev : [...prev, rowId];
+                              }
+                              return prev.filter((id) => id !== rowId);
+                            });
+                          }}
+                        />
+                        <span className="min-w-0 flex-1">
+                          <span className="flex flex-wrap items-center gap-2">
+                            <span className="text-sm font-semibold" style={{ color: "var(--fg)" }}>
+                              {applicant.name}
+                            </span>
+                            <span className="badge badge-gray text-[10px]">{typeLabel(applicant)}</span>
+                          </span>
+                          <span className="block text-xs mt-0.5" style={{ color: "var(--fg-muted)" }}>
+                            {applicant.userEmail || "No email"}
+                          </span>
+                          <span className="block text-xs mt-1" style={{ color: "var(--fg)" }}>
+                            {applicant.assignedCommitteeName || "No committee"}
+                            {applicant.assignedPortfolioName
+                              ? ` · ${applicant.assignedPortfolioName}`
+                              : ""}
+                          </span>
+                        </span>
+                      </label>
+                    );
+                  })
+                )}
+              </div>
+
+              <div className="p-5 sm:p-6 border-t border-[var(--border)] flex flex-col-reverse sm:flex-row sm:justify-end gap-3">
+                <button
+                  type="button"
+                  className="btn btn-ghost text-sm min-h-[44px] touch-manipulation w-full sm:w-auto"
+                  disabled={releasingAllotments}
+                  onClick={() => setReleaseAllotmentsOpen(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary text-sm min-h-[44px] touch-manipulation w-full sm:w-auto"
+                  disabled={releasingAllotments || selectedDrafts.length === 0}
+                  style={
+                    releasingAllotments || selectedDrafts.length === 0
+                      ? { opacity: 0.5, cursor: "not-allowed" }
+                      : undefined
+                  }
+                  onClick={() => {
+                    void (async () => {
+                      setReleasingAllotments(true);
+                      try {
+                        const registrationIds = selectedDrafts
+                          .map((entry) => entry.registrationId || entry.id)
+                          .filter(Boolean);
+                        const result = await releaseAllotments(
+                          selectedConference.id,
+                          registrationIds
+                        );
+                        if (!result.ok) {
+                          toast.show(result.message, "error");
+                          return;
+                        }
+                        const templates =
+                          selectedConference.statusEmailTemplates ||
+                          buildDefaultStatusEmailTemplates(selectedConference.title);
+                        const allottedTemplate = templates.allotted;
+                        if (allottedTemplate?.subject?.trim() && allottedTemplate?.body?.trim()) {
+                          await Promise.all(
+                            selectedDrafts.map(async (applicant) => {
+                              const recipientEmail = applicant.userEmail;
+                              if (!recipientEmail) return;
+                              await fetch("/api/organizers/send-status-email", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                credentials: "include",
+                                body: JSON.stringify({
+                                  eventId: selectedConference.id,
+                                  to: recipientEmail,
+                                  templateKey: "allotted",
+                                  subjectTemplate: allottedTemplate.subject,
+                                  bodyTemplate: allottedTemplate.body,
+                                  context: {
+                                    applicantName: applicant.name ?? "Delegate",
+                                    conferenceTitle: selectedConference.title,
+                                    status: "Allotted",
+                                    assignedCommittee: applicant.assignedCommitteeName ?? "",
+                                    assignedPortfolio: applicant.assignedPortfolioName ?? "",
+                                  },
+                                }),
+                              }).catch(() => undefined);
+                            })
+                          );
+                        }
+                        toast.show(result.message, "success");
+                        setReleaseAllotmentsOpen(false);
+                      } finally {
+                        setReleasingAllotments(false);
+                      }
+                    })();
+                  }}
+                >
+                  {releasingAllotments
+                    ? "Releasing…"
+                    : `Confirm release (${selectedDrafts.length})`}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
       <ConfirmModal
         open={Boolean(pendingConfirm)}
         title={pendingConfirm?.title || ""}
         description={pendingConfirm?.description}
+        preview={pendingConfirm?.preview}
         requireTypedText={pendingConfirm?.requireTypedText}
         confirmLabel={pendingConfirm?.confirmLabel}
         danger={pendingConfirm?.danger !== false}
         onClose={() => setPendingConfirm(null)}
         onConfirm={async () => {
           const action = pendingConfirm?.onConfirm;
-          setPendingConfirm(null);
           if (action) await action();
         }}
       />

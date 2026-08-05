@@ -86,11 +86,23 @@ export async function PATCH(
         : undefined;
 
   const committeeName =
-    typeof validated.committeeName === "string" ? validated.committeeName.trim() || null : undefined;
+    validated.committeeName === null
+      ? null
+      : typeof validated.committeeName === "string"
+        ? validated.committeeName.trim() || null
+        : undefined;
   const portfolioName =
-    typeof validated.portfolioName === "string" ? validated.portfolioName.trim() || null : undefined;
+    validated.portfolioName === null
+      ? null
+      : typeof validated.portfolioName === "string"
+        ? validated.portfolioName.trim() || null
+        : undefined;
   const portfolioId =
-    typeof validated.portfolioId === "string" ? validated.portfolioId.trim() || null : undefined;
+    validated.portfolioId === null
+      ? null
+      : typeof validated.portfolioId === "string"
+        ? validated.portfolioId.trim() || null
+        : undefined;
 
   const allottedAtRaw = validated.allottedAt;
   const allottedAt =
@@ -123,7 +135,11 @@ export async function PATCH(
     // Every (re-)allotment starts as an unreleased draft — the delegate only learns of it once the
     // organizer explicitly releases the batch via /release-allotments. Moving an already-released
     // delegate to a new committee re-drafts it so the change is reviewed before being surfaced again.
-    ...(statusDb === RegistrationStatus.ALLOTTED ? { released: false, releasedAt: null } : {}),
+    ...(statusDb === RegistrationStatus.ALLOTTED
+      ? { released: false, releasedAt: null }
+      : statusDb === RegistrationStatus.PENDING || statusDb === RegistrationStatus.REJECTED
+        ? { released: false, releasedAt: null }
+        : {}),
   };
 
   try {
@@ -222,10 +238,14 @@ export async function PATCH(
 
   const updated = await prisma.registration.findUnique({
     where: { id: registrationId },
-    select: { paid: true, status: true },
+    select: { paid: true, status: true, released: true },
   });
 
-  if (updated?.paid && updated.status === RegistrationStatus.ALLOTTED) {
+  if (
+    updated?.paid &&
+    updated.status === RegistrationStatus.ALLOTTED &&
+    updated.released === true
+  ) {
     try {
       await issueDelegatePassForRegistration(registrationId, {
         releaseAt: resolveReleaseAt(registration.event.startDate),

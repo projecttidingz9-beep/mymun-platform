@@ -11,6 +11,10 @@ import { ensurePendingPaymentIntent } from "@/lib/server/payments";
 import { moneyNumber } from "@/lib/server/decimal-money";
 import { logger } from "@/lib/server/logger";
 import { prisma } from "@/lib/server/prisma";
+import {
+  issueDelegatePassForRegistration,
+  resolveReleaseAt,
+} from "@/lib/server/issue-delegate-pass";
 
 /**
  * Allotment-release workflow: organizers can draft committee/portfolio assignments (Allot / Auto-assign)
@@ -59,6 +63,7 @@ export async function POST(
     select: {
       title: true,
       currency: true,
+      startDate: true,
       organizerConfig: { select: { allocationMode: true, paymentDeadlineDays: true } },
     },
   });
@@ -157,6 +162,22 @@ export async function POST(
       };
     }),
   });
+
+  // Issue digital passes only after allotments are released (and only when already paid).
+  if (eventConfig?.startDate) {
+    const passReleaseAt = resolveReleaseAt(eventConfig.startDate);
+    for (const reg of pending) {
+      if (!reg.paid) continue;
+      try {
+        await issueDelegatePassForRegistration(reg.id, { releaseAt: passReleaseAt });
+      } catch (passError) {
+        logger.warn("release_allotments_pass_issue_failed", {
+          registrationId: reg.id,
+          error: passError instanceof Error ? passError.message : String(passError),
+        });
+      }
+    }
+  }
 
   return NextResponse.json({
     ok: true,
